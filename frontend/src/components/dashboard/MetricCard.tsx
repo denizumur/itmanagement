@@ -4,14 +4,22 @@ import {
   IconTicket,
   IconTool,
 } from "@tabler/icons-react";
-import { roleSurfaceClass } from "../../lib/urgency";
-import type { MetricCardDto } from "../../types/dashboard";
+import type { MetricCardDto, RoleColor } from "../../types/dashboard";
+import { DataCard } from "../ui/DataCard";
+import { StatusBadge } from "../ui/StatusBadge";
 
 const iconMap = {
   devices: IconDevices,
   "alert-triangle": IconAlertTriangle,
   ticket: IconTicket,
   tool: IconTool,
+};
+
+const metricClass: Record<RoleColor, string> = {
+  accent: "metric-card-accent",
+  danger: "metric-card-danger",
+  warning: "metric-card-warning",
+  success: "metric-card-success",
 };
 
 interface MetricCardProps {
@@ -22,14 +30,26 @@ export function MetricCard({ card }: MetricCardProps) {
   const Icon = iconMap[card.icon as keyof typeof iconMap] ?? IconDevices;
 
   return (
-    <div className={`rounded-panel p-lg ${roleSurfaceClass[card.role]}`}>
-      <Icon size={20} aria-hidden="true" />
-      <p className="mt-sm text-[24px] font-medium">{card.value}</p>
-      <p className="text-caption">{card.label}</p>
+    <DataCard className={`p-lg ${metricClass[card.role]}`}>
+      <div className="flex items-start justify-between gap-md">
+        <div>
+          <div className="mb-md flex h-11 w-11 items-center justify-center rounded-app bg-surface-1 text-text-primary shadow-panel">
+            <Icon size={21} aria-hidden={true} />
+          </div>
 
-      {card.module_ready === false && (
-        <p className="mt-sm text-caption opacity-80">Modül yakında</p>
-      )}
-    </div>
+          <p className="text-[30px] font-medium leading-none text-text-primary">
+            {card.value}
+          </p>
+
+          <p className="mt-sm text-caption text-text-secondary">
+            {card.label}
+          </p>
+        </div>
+
+        {card.module_ready === false && (
+          <StatusBadge variant="warning">Yakında</StatusBadge>
+        )}
+      </div>
+    </DataCard>
   );
 }

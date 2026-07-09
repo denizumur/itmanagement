@@ -1,5 +1,6 @@
-import { IconSearch } from "@tabler/icons-react";
+import { IconLogout, IconSearch } from "@tabler/icons-react";
 import { useAuth } from "../../auth/AuthContext";
+import { GlowButton } from "../ui/GlowButton";
 import { NotificationBell } from "./NotificationBell";
 
 interface TopbarProps {
@@ -10,8 +11,8 @@ export function Topbar({ reminderCount }: TopbarProps) {
   const { user, logout } = useAuth();
 
   return (
-    <header className="flex items-center justify-between border-b border-border bg-surface-1 px-lg py-md">
-      <div className="flex w-full max-w-xl items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm text-text-secondary">
+    <header className="topbar-glass sticky top-0 z-20 flex items-center justify-between px-lg py-md">
+      <div className="flex w-full max-w-xl items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm text-text-secondary shadow-panel">
         <IconSearch size={18} aria-hidden="true" />
         <span className="text-caption">Ara veya komut çalıştır... Ctrl+K</span>
       </div>
@@ -19,20 +20,20 @@ export function Topbar({ reminderCount }: TopbarProps) {
       <div className="ml-lg flex items-center gap-md">
         <NotificationBell count={reminderCount} />
 
-        <div className="hidden text-right sm:block">
+        <div className="hidden rounded-app border border-border bg-surface-1 px-md py-sm text-right shadow-panel sm:block">
           <p className="text-caption text-text-primary">{user?.username}</p>
           <p className="text-caption text-text-secondary">
             {user?.role ?? "role yok"}
           </p>
         </div>
 
-        <button
-          type="button"
+        <GlowButton
+          variant="ghost"
           onClick={() => logout()}
-          className="rounded-app border border-border px-md py-sm text-caption text-text-secondary hover:bg-surface-2"
+          icon={<IconLogout size={16} aria-hidden="true" />}
         >
           Çıkış
-        </button>
+        </GlowButton>
       </div>
     </header>
   );

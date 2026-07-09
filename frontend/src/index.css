@@ -272,3 +272,170 @@
     animation: none;
   }
 }
+.app-bg {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 14%, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent 28%),
+    radial-gradient(circle at 86% 18%, color-mix(in srgb, var(--color-warning) 18%, transparent), transparent 26%),
+    radial-gradient(circle at 74% 92%, color-mix(in srgb, var(--color-danger) 13%, transparent), transparent 30%),
+    var(--surface-0);
+}
+
+.app-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--text-primary) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 5%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+
+.app-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.glass-panel {
+  border: 1px solid color-mix(in srgb, var(--surface-1) 56%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--surface-1) 82%, transparent),
+      color-mix(in srgb, var(--surface-2) 66%, transparent)
+    );
+  box-shadow: 0 22px 70px color-mix(in srgb, black 9%, transparent);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.glass-panel-hover {
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.glass-panel-hover:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--color-accent) 42%, transparent);
+  box-shadow: 0 28px 90px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.topbar-glass {
+  border-bottom: 1px solid color-mix(in srgb, var(--surface-1) 52%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 72%, transparent);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.sidebar-glass {
+  border-right: 1px solid color-mix(in srgb, var(--surface-1) 52%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-1) 78%, transparent),
+      color-mix(in srgb, var(--surface-2) 62%, transparent)
+    );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.sidebar-link {
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar-link::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent) 18%, transparent),
+    color-mix(in srgb, var(--surface-1) 16%, transparent)
+  );
+  transition: opacity 180ms ease;
+}
+
+.sidebar-link:hover::before,
+.sidebar-link-active::before {
+  opacity: 1;
+}
+
+.glow-button {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease;
+}
+
+.glow-button-primary {
+  background:
+    linear-gradient(
+      135deg,
+      var(--color-accent),
+      color-mix(in srgb, var(--color-accent) 58%, var(--color-warning))
+    );
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+.glow-button-primary:hover {
+  filter: saturate(1.08);
+  box-shadow: 0 20px 52px color-mix(in srgb, var(--color-accent) 38%, transparent);
+}
+
+.glow-button-ghost {
+  border: 1px solid color-mix(in srgb, var(--surface-1) 58%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 42%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.glow-button-danger {
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  background: var(--bg-danger);
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--color-danger) 20%, transparent);
+}
+
+.glow-ripple {
+  position: absolute;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--surface-1) 72%, transparent);
+  pointer-events: none;
+}
+
+.metric-card-accent {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-accent) 28%, transparent), transparent 45%),
+    color-mix(in srgb, var(--surface-1) 78%, transparent);
+}
+
+.metric-card-danger {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-danger) 26%, transparent), transparent 45%),
+    color-mix(in srgb, var(--surface-1) 78%, transparent);
+}
+
+.metric-card-warning {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-warning) 27%, transparent), transparent 45%),
+    color-mix(in srgb, var(--surface-1) 78%, transparent);
+}
+
+.metric-card-success {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-success) 27%, transparent), transparent 45%),
+    color-mix(in srgb, var(--surface-1) 78%, transparent);
+}

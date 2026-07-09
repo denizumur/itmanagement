@@ -4,6 +4,7 @@ import {
   IconDashboard,
   IconDevices,
   IconLicense,
+  IconSparkles,
   IconTool,
   IconUsers,
 } from "@tabler/icons-react";
@@ -22,10 +23,18 @@ const items = [
 
 export function Sidebar() {
   return (
-    <aside className="hidden min-h-screen w-[190px] border-r border-border bg-surface-1 p-md md:block">
-      <div className="mb-xl">
-        <p className="text-h3">IT Yönetim</p>
-        <p className="text-caption text-text-secondary">Envanter platformu</p>
+    <aside className="sidebar-glass hidden min-h-screen w-[230px] p-md md:block">
+      <div className="mb-xl rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+        <div className="flex items-center gap-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-app bg-accent-bg text-accent">
+            <IconSparkles size={20} aria-hidden="true" />
+          </div>
+
+          <div>
+            <p className="text-h3 text-text-primary">IT Yönetim</p>
+            <p className="text-caption text-text-secondary">Control cockpit</p>
+          </div>
+        </div>
       </div>
 
       <nav className="space-y-sm">
@@ -38,15 +47,15 @@ export function Sidebar() {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-sm rounded-app px-md py-sm text-body transition",
+                  "sidebar-link flex items-center gap-sm rounded-app px-md py-sm text-body transition",
                   isActive
-                    ? "bg-accent-bg text-accent"
-                    : "text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+                    ? "sidebar-link-active text-accent"
+                    : "text-text-secondary hover:text-text-primary"
                 )
               }
             >
-              <Icon size={18} aria-hidden="true" />
-              <span>{item.label}</span>
+              <Icon className="relative z-10" size={18} aria-hidden="true" />
+              <span className="relative z-10">{item.label}</span>
             </NavLink>
           );
         })}

@@ -1,6 +1,7 @@
 import { EmptyState } from "../common/EmptyState";
 import { badgeClass, daysLabel } from "../../lib/urgency";
 import type { UpcomingLicenseDto } from "../../types/dashboard";
+import { DataCard } from "../ui/DataCard";
 
 interface UpcomingLicensesPanelProps {
   licenses: UpcomingLicenseDto[];
@@ -10,9 +11,11 @@ export function UpcomingLicensesPanel({
   licenses,
 }: UpcomingLicensesPanelProps) {
   return (
-    <div className="panel">
-      <p className="mb-md text-h3">Yaklaşan lisanslar</p>
-
+    <DataCard
+      title="Yaklaşan lisanslar"
+      description="30 gün içinde yenilenmesi gereken abonelikler."
+      className="p-lg"
+    >
       {!licenses.length ? (
         <EmptyState message="30 gün içinde bitecek lisans yok." />
       ) : (
@@ -20,7 +23,7 @@ export function UpcomingLicensesPanel({
           {licenses.map((license) => (
             <div
               key={license.id}
-              className="flex items-center justify-between gap-md rounded-app border border-border bg-surface-1 p-md"
+              className="flex items-center justify-between gap-md rounded-app border border-border bg-surface-1 p-md shadow-panel transition hover:-translate-y-0.5"
             >
               <div className="min-w-0">
                 <p className="truncate text-body text-text-primary">
@@ -38,6 +41,6 @@ export function UpcomingLicensesPanel({
           ))}
         </div>
       )}
-    </div>
+    </DataCard>
   );
 }

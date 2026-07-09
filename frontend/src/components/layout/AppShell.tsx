@@ -9,8 +9,8 @@ interface AppShellProps {
 
 export function AppShell({ children, reminderCount = 0 }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-surface-0 text-text-primary">
-      <div className="flex">
+    <div className="app-bg min-h-screen text-text-primary">
+      <div className="flex min-h-screen">
         <Sidebar />
 
         <div className="min-w-0 flex-1">

@@ -1,6 +1,8 @@
 import { ArcElement, Chart as ChartJS, Legend, Tooltip } from "chart.js";
+import type { ChartOptions } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 import { EmptyState } from "../common/EmptyState";
+import { DataCard } from "../ui/DataCard";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -10,13 +12,8 @@ interface CategoryDoughnutChartProps {
 }
 
 function cssVar(name: string) {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
+  if (typeof window === "undefined") return "";
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 export function CategoryDoughnutChart({
@@ -24,7 +21,11 @@ export function CategoryDoughnutChart({
   counts,
 }: CategoryDoughnutChartProps) {
   if (!labels.length || !counts.length) {
-    return <EmptyState message="Kategori dağılımı için kayıt yok." />;
+    return (
+      <DataCard title="Kategori dağılımı">
+        <EmptyState message="Kategori dağılımı için kayıt yok." />
+      </DataCard>
+    );
   }
 
   const palette = [
@@ -36,10 +37,26 @@ export function CategoryDoughnutChart({
     cssVar("--surface-0"),
   ];
 
-  return (
-    <div className="panel">
-      <p className="mb-md text-h3">Kategoriye göre varlık dağılımı</p>
+  const options: ChartOptions<"doughnut"> = {
+    cutout: "65%",
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: {
+          color: cssVar("--text-secondary"),
+          boxWidth: 10,
+          boxHeight: 10,
+        },
+      },
+    },
+  };
 
+  return (
+    <DataCard
+      title="Kategoriye göre varlık dağılımı"
+      description="Backend tarafından agregasyonlu gelen kategori kırılımı."
+      className="p-lg"
+    >
       <div className="mx-auto max-h-[320px] max-w-[420px]">
         <Doughnut
           data={{
@@ -54,21 +71,9 @@ export function CategoryDoughnutChart({
               },
             ],
           }}
-          options={{
-            cutout: "65%",
-            plugins: {
-              legend: {
-                position: "bottom",
-                labels: {
-                  color: cssVar("--text-secondary"),
-                  boxWidth: 10,
-                  boxHeight: 10,
-                },
-              },
-            },
-          }}
+          options={options}
         />
       </div>
-    </div>
+    </DataCard>
   );
 }

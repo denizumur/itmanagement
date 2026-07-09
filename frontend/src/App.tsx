@@ -4,6 +4,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
+import { AssetsPage } from "./pages/AssetsPage";
 
 export default function App() {
   return (
@@ -14,15 +15,7 @@ export default function App() {
         <Route path="/" element={<OverviewPage />} />
         <Route path="/workspace" element={<WorkspacePage />} />
 
-        <Route
-          path="/assets"
-          element={
-            <PlaceholderPage
-              title="Envanter"
-              description="Varlık listesi, kategori filtreleri, detay ekranı ve Excel import akışı burada geliştirilecek."
-            />
-          }
-        />
+        <Route path="/assets" element={<AssetsPage />} />
 
         <Route
           path="/assignments"
