@@ -1,0 +1,15 @@
+# Backend (Django / Python)
+venv/
+__pycache__/
+*.sqlite3
+*.pyc
+.env
+
+# Frontend (React / Vite / Node)
+frontend/node_modules/
+frontend/dist/
+.env.local
+
+# İşletim Sistemi ve Editör
+.DS_Store
+.vscode/

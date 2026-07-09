@@ -1,0 +1,274 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root 
+{
+  --color-accent: #1D9E75;
+  --color-danger: #E24B4A;
+  --color-warning: #BA7517;
+  --color-success: #639922;
+
+  --bg-accent: color-mix(in srgb, var(--color-accent) 14%, white);
+  --bg-danger: color-mix(in srgb, var(--color-danger) 14%, white);
+  --bg-warning: color-mix(in srgb, var(--color-warning) 16%, white);
+  --bg-success: color-mix(in srgb, var(--color-success) 14%, white);
+
+  --surface-0: #F1EFE8;
+  --surface-1: #FFFFFF;
+  --surface-2: #FFFFFF;
+  --border: color-mix(in srgb, var(--text-primary) 12%, transparent);
+
+  --text-primary: #1A1A18;
+  --text-secondary: #5F5E5A;
+
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --gap-lg: 20px;
+  --gap-xl: 32px;
+
+  --radius: 10px;
+  --radius-panel: 12px;
+
+  --font-display: 28px;
+  --font-h2: 20px;
+  --font-h3: 16px;
+  --font-body: 14px;
+  --font-caption: 12px;
+
+  --shadow-panel: 0 12px 30px rgba(0, 0, 0, 0.06);
+}
+
+.dark {
+  --color-accent: #5DCAA5;
+  --color-danger: #F09595;
+  --color-warning: #EF9F27;
+  --color-success: #97C459;
+
+  --bg-accent: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  --bg-danger: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  --bg-warning: color-mix(in srgb, var(--color-warning) 20%, transparent);
+  --bg-success: color-mix(in srgb, var(--color-success) 18%, transparent);
+
+  --surface-0: #2C2C2A;
+  --surface-1: #383836;
+  --surface-2: #444441;
+  --border: color-mix(in srgb, var(--text-primary) 14%, transparent);
+
+  --text-primary: #F1EFE8;
+  --text-secondary: #B4B2A9;
+
+  --shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.22);
+}
+
+@layer base {
+  html {
+    min-height: 100%;
+  }
+
+  body {
+    min-height: 100%;
+    margin: 0;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: var(--font-body);
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-panel border border-border bg-surface-2 p-lg shadow-panel;
+  }
+
+  .badge {
+    @apply rounded-app px-sm py-xs text-caption;
+  }
+}
+
+:root {
+  --login-card-max-width: 430px;
+  --login-hero-max-width: 560px;
+
+  --login-glass-bg: color-mix(in srgb, var(--surface-1) 22%, transparent);
+  --login-glass-bg-strong: color-mix(in srgb, var(--surface-1) 32%, transparent);
+  --login-glass-border: color-mix(in srgb, var(--surface-1) 42%, transparent);
+  --login-glass-shadow: 0 28px 90px color-mix(in srgb, var(--color-accent) 26%, transparent);
+  --login-glass-shadow-hover: 0 34px 110px color-mix(in srgb, var(--color-accent) 38%, transparent);
+
+  --login-blob-lg: 360px;
+  --login-blob-md: 260px;
+  --login-blob-sm: 180px;
+}
+
+.login-page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.login-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -4;
+  background-image:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-accent) 35%, transparent),
+      color-mix(in srgb, var(--surface-0) 70%, transparent)
+    ),
+    url("/login-bg.jpg");
+  background-position: center;
+  background-size: cover;
+  transform: scale(1.03);
+}
+
+.login-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--color-accent) 28%, transparent), transparent 32%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--color-warning) 24%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, black 68%, transparent), color-mix(in srgb, black 42%, transparent));
+}
+
+.login-glass-card {
+  width: min(100%, var(--login-card-max-width));
+  border: 1px solid var(--login-glass-border);
+  background:
+    linear-gradient(145deg, var(--login-glass-bg-strong), var(--login-glass-bg));
+  box-shadow: var(--login-glass-shadow);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+  transition:
+    box-shadow 280ms ease,
+    border-color 280ms ease;
+}
+
+.login-glass-card:hover {
+  box-shadow: var(--login-glass-shadow-hover);
+  border-color: color-mix(in srgb, var(--color-accent) 58%, transparent);
+}
+
+.login-input-shell {
+  border: 1px solid color-mix(in srgb, var(--surface-1) 34%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 18%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition:
+    border-color 220ms ease,
+    background 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.login-input-shell:focus-within {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--surface-1) 26%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.login-primary-button {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      135deg,
+      var(--color-accent),
+      color-mix(in srgb, var(--color-accent) 54%, var(--color-warning)),
+      var(--color-warning)
+    );
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--color-accent) 32%, transparent);
+  transition:
+    box-shadow 220ms ease,
+    filter 220ms ease;
+}
+
+.login-primary-button:hover {
+  box-shadow: 0 22px 56px color-mix(in srgb, var(--color-accent) 42%, transparent);
+  filter: saturate(1.1);
+}
+
+.login-button-ripple {
+  position: absolute;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--surface-1) 70%, transparent);
+  pointer-events: none;
+}
+
+.login-blob {
+  position: absolute;
+  z-index: -2;
+  border-radius: 9999px;
+  filter: blur(18px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+}
+
+.login-blob-a {
+  width: var(--login-blob-lg);
+  height: var(--login-blob-lg);
+  top: -10%;
+  left: -8%;
+  background: color-mix(in srgb, var(--color-accent) 72%, transparent);
+}
+
+.login-blob-b {
+  width: var(--login-blob-md);
+  height: var(--login-blob-md);
+  right: 8%;
+  bottom: 8%;
+  background: color-mix(in srgb, var(--color-warning) 70%, transparent);
+}
+
+.login-blob-c {
+  width: var(--login-blob-sm);
+  height: var(--login-blob-sm);
+  right: 32%;
+  top: 12%;
+  background: color-mix(in srgb, var(--color-danger) 52%, transparent);
+}
+
+.login-particle {
+  position: absolute;
+  z-index: -1;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--surface-1) 62%, transparent);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--surface-1) 60%, transparent);
+  animation: login-particle-float 9s ease-in-out infinite;
+}
+
+@keyframes login-particle-float {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.35;
+  }
+
+  50% {
+    transform: translate3d(18px, -28px, 0);
+    opacity: 0.8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-particle {
+    animation: none;
+  }
+}

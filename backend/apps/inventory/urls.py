@@ -1,0 +1,9 @@
+from rest_framework.routers import DefaultRouter
+
+from apps.inventory.views import AssetCategoryViewSet, AssetViewSet
+
+router = DefaultRouter()
+router.register("categories", AssetCategoryViewSet, basename="inventory-category")
+router.register("assets", AssetViewSet, basename="inventory-asset")
+
+urlpatterns = router.urls

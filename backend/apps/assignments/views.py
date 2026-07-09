@@ -1,0 +1,136 @@
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
+from apps.assignments.models import Assignment
+from apps.assignments.serializers import AssignmentSerializer
+from apps.inventory.models import Asset
+
+
+class AssignmentViewSet(viewsets.ModelViewSet):
+    serializer_class = AssignmentSerializer
+    permission_classes = [ReadOnlyForViewerWriteForTechnician]
+
+    def get_queryset(self):
+        queryset = Assignment.objects.select_related(
+            "asset",
+            "asset__category",
+            "employee",
+            "employee__department",
+            "employee__job_title",
+            "assigned_by",
+            "returned_by",
+        ).order_by("-assigned_at")
+
+        active = self.request.query_params.get("active")
+        asset_id = self.request.query_params.get("asset")
+        employee_id = self.request.query_params.get("employee")
+        search = self.request.query_params.get("search")
+
+        if active == "true":
+            queryset = queryset.filter(returned_at__isnull=True)
+        elif active == "false":
+            queryset = queryset.filter(returned_at__isnull=False)
+
+        if asset_id:
+            queryset = queryset.filter(asset_id=asset_id)
+
+        if employee_id:
+            queryset = queryset.filter(employee_id=employee_id)
+
+        if search:
+            queryset = queryset.filter(
+                Q(asset__name__icontains=search)
+                | Q(asset__inventory_code__icontains=search)
+                | Q(asset__serial_number__icontains=search)
+                | Q(employee__full_name__icontains=search)
+                | Q(employee__employee_code__icontains=search)
+                | Q(notes__icontains=search)
+                | Q(return_notes__icontains=search)
+            )
+
+        return queryset
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        assignment = serializer.save(assigned_by=self.request.user)
+
+        asset = assignment.asset
+        asset.status = Asset.Status.ASSIGNED
+        asset.updated_by = self.request.user
+        asset.save(update_fields=["status", "updated_by", "updated_at"])
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {
+                "detail": (
+                    "Zimmet geçmişi silinemez. "
+                    "Aktif zimmeti kapatmak için return endpointini kullan."
+                )
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    @action(detail=False, methods=["get"])
+    def active(self, request):
+        queryset = self.get_queryset().filter(returned_at__isnull=True)
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response(serializer.data)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="by-asset/(?P<asset_id>[^/.]+)",
+    )
+    def by_asset(self, request, asset_id=None):
+        queryset = self.get_queryset().filter(asset_id=asset_id)
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response(serializer.data)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="by-employee/(?P<employee_id>[^/.]+)",
+    )
+    def by_employee(self, request, employee_id=None):
+        queryset = self.get_queryset().filter(employee_id=employee_id)
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response(serializer.data)
+
+    @transaction.atomic
+    @action(detail=True, methods=["post"], url_path="return")
+    def return_asset(self, request, pk=None):
+        assignment = self.get_object()
+
+        if assignment.returned_at:
+            return Response(
+                {"detail": "Bu zimmet zaten iade edilmiş."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return_notes = request.data.get("return_notes", "")
+
+        assignment.returned_at = timezone.now()
+        assignment.returned_by = request.user
+        assignment.return_notes = return_notes
+        assignment.save()
+
+        asset = assignment.asset
+        asset.status = Asset.Status.IN_STOCK
+        asset.updated_by = request.user
+        asset.save(update_fields=["status", "updated_by", "updated_at"])
+
+        serializer = self.get_serializer(assignment)
+
+        return Response(serializer.data)
