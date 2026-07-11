@@ -8,9 +8,11 @@ import {
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { AssetForm } from "../components/assets/AssetForm";
 import { ErrorState } from "../components/common/ErrorState";
 import { Skeleton } from "../components/common/Skeleton";
 import { AppShell } from "../components/layout/AppShell";
+import { AppToast } from "../components/ui/AppToast";
 import { DataCard } from "../components/ui/DataCard";
 import { DataTable } from "../components/ui/DataTable";
 import { GlowButton } from "../components/ui/GlowButton";
@@ -23,6 +25,8 @@ import {
   useAssetCategories,
   useAssets,
   useAssetSummary,
+  useCreateAsset,
+  useUpdateAsset,
 } from "../hooks/useInventory";
 import {
   buildActiveAssignmentMap,
@@ -39,7 +43,17 @@ import {
   getSummaryTotal,
 } from "../lib/inventory";
 import { canManage } from "../lib/rbac";
-import type { Asset, AssetFilters } from "../types/inventory";
+import type {
+  Asset,
+  AssetFilters,
+  AssetFormPayload,
+} from "../types/inventory";
+
+type AssetFormMode = "create" | "edit";
+type ToastState = {
+  type: "success" | "error";
+  message: string;
+};
 
 const statusOptions = [
   { value: "", label: "Tüm durumlar" },
@@ -98,12 +112,66 @@ function getOperationalStatusLabel(status: string) {
   return getAssetStatusLabel(status);
 }
 
-function getOperationalStatusVariant(status: string) {
+function getOperationalStatusVariant(
+  status: string
+): "accent" | "success" | "warning" | "danger" | "neutral" {
   if (status === "assigned") {
     return "success";
   }
 
   return getAssetStatusVariant(status);
+}
+
+function getMutationErrorMessage(error: unknown) {
+  const fallback = "İşlem tamamlanamadı. Lütfen alanları kontrol edip tekrar dene.";
+
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return fallback;
+  }
+
+  const response = (
+    error as {
+      response?: {
+        data?: unknown;
+      };
+    }
+  ).response;
+
+  const data = response?.data;
+
+  if (!data) {
+    return fallback;
+  }
+
+  if (typeof data === "string") {
+    return data;
+  }
+
+  if (typeof data === "object" && "detail" in data) {
+    const detail = (data as { detail?: unknown }).detail;
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+  }
+
+  if (typeof data === "object") {
+    const firstEntry = Object.entries(data as Record<string, unknown>)[0];
+
+    if (firstEntry) {
+      const [field, value] = firstEntry;
+
+      if (Array.isArray(value)) {
+        return `${field}: ${value.join(", ")}`;
+      }
+
+      if (typeof value === "string") {
+        return `${field}: ${value}`;
+      }
+    }
+  }
+
+  return fallback;
 }
 
 function DetailRow({
@@ -140,6 +208,11 @@ export function AssetsPage() {
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [assetFormMode, setAssetFormMode] = useState<AssetFormMode | null>(
+    null
+  );
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const filters: AssetFilters = useMemo(
     () => ({
@@ -154,6 +227,8 @@ export function AssetsPage() {
   const summaryQuery = useAssetSummary();
   const categoriesQuery = useAssetCategories();
   const activeAssignmentsQuery = useActiveAssignments();
+  const createAssetMutation = useCreateAsset();
+  const updateAssetMutation = useUpdateAsset();
 
   const assets = assetsQuery.data ?? [];
   const summary = summaryQuery.data;
@@ -164,6 +239,9 @@ export function AssetsPage() {
     () => buildActiveAssignmentMap(activeAssignments),
     [activeAssignments]
   );
+
+  const isAssetFormSubmitting =
+    createAssetMutation.isPending || updateAssetMutation.isPending;
 
   const totalAssets = getSummaryTotal(summary, assets.length);
 
@@ -204,11 +282,72 @@ export function AssetsPage() {
     categoriesQuery.isError ||
     activeAssignmentsQuery.isError;
 
+  const selectedAssetAssignment = selectedAsset
+    ? activeAssignmentMap.get(selectedAsset.id)
+    : null;
+
   function refetchAll() {
     assetsQuery.refetch();
     summaryQuery.refetch();
     categoriesQuery.refetch();
     activeAssignmentsQuery.refetch();
+  }
+
+  function openCreateForm() {
+    setSelectedAsset(null);
+    setEditingAsset(null);
+    setAssetFormMode("create");
+  }
+
+  function openEditForm(asset: Asset) {
+    setSelectedAsset(null);
+    setEditingAsset(asset);
+    setAssetFormMode("edit");
+  }
+
+  function closeAssetForm() {
+    if (isAssetFormSubmitting) {
+      return;
+    }
+
+    setAssetFormMode(null);
+    setEditingAsset(null);
+  }
+
+  async function handleAssetFormSubmit(payload: AssetFormPayload) {
+    if (!assetFormMode) {
+      return;
+    }
+
+    try {
+      if (assetFormMode === "create") {
+        await createAssetMutation.mutateAsync(payload);
+
+        setToast({
+          type: "success",
+          message: "Varlık başarıyla oluşturuldu.",
+        });
+      } else if (editingAsset) {
+        await updateAssetMutation.mutateAsync({
+          id: editingAsset.id,
+          payload,
+        });
+
+        setToast({
+          type: "success",
+          message: "Varlık başarıyla güncellendi.",
+        });
+      }
+
+      setAssetFormMode(null);
+      setEditingAsset(null);
+      refetchAll();
+    } catch (error) {
+      setToast({
+        type: "error",
+        message: getMutationErrorMessage(error),
+      });
+    }
   }
 
   if (isInitialLoading) {
@@ -236,10 +375,6 @@ export function AssetsPage() {
     );
   }
 
-  const selectedAssetAssignment = selectedAsset
-    ? activeAssignmentMap.get(selectedAsset.id)
-    : null;
-
   return (
     <AppShell>
       <PageTransition>
@@ -252,7 +387,11 @@ export function AssetsPage() {
               <GlowButton
                 variant="ghost"
                 onClick={refetchAll}
-                disabled={assetsQuery.isFetching || activeAssignmentsQuery.isFetching}
+                disabled={
+                  assetsQuery.isFetching ||
+                  activeAssignmentsQuery.isFetching ||
+                  isAssetFormSubmitting
+                }
                 icon={<IconRefresh size={16} aria-hidden={true} />}
               >
                 {assetsQuery.isFetching || activeAssignmentsQuery.isFetching
@@ -263,9 +402,7 @@ export function AssetsPage() {
               {userCanManage && (
                 <GlowButton
                   icon={<IconPlus size={16} aria-hidden={true} />}
-                  onClick={() => {
-                    alert("Yeni Varlık formu sonraki fazda bağlanacak.");
-                  }}
+                  onClick={openCreateForm}
                 >
                   Yeni Varlık
                 </GlowButton>
@@ -429,8 +566,9 @@ export function AssetsPage() {
                         </td>
 
                         <td className="border-b border-border px-md py-md text-text-secondary">
-                          {[asset.brand, asset.model].filter(Boolean).join(" / ") ||
-                            "-"}
+                          {[asset.brand, asset.model]
+                            .filter(Boolean)
+                            .join(" / ") || "-"}
                         </td>
 
                         <td className="border-b border-border px-md py-md">
@@ -479,11 +617,7 @@ export function AssetsPage() {
                             {userCanManage && (
                               <GlowButton
                                 variant="ghost"
-                                onClick={() => {
-                                  alert(
-                                    "Düzenleme formu sonraki fazda bağlanacak."
-                                  );
-                                }}
+                                onClick={() => openEditForm(asset)}
                                 icon={<IconEdit size={16} aria-hidden={true} />}
                               >
                                 Düzenle
@@ -525,11 +659,7 @@ export function AssetsPage() {
                   <GlowButton
                     variant="ghost"
                     icon={<IconEdit size={16} aria-hidden={true} />}
-                    onClick={() => {
-                      alert(
-                        "Detay panelinden düzenleme sonraki fazda bağlanacak."
-                      );
-                    }}
+                    onClick={() => openEditForm(selectedAsset)}
                   >
                     Düzenle
                   </GlowButton>
@@ -609,6 +739,38 @@ export function AssetsPage() {
             </div>
           )}
         </SlideOverPanel>
+
+        <SlideOverPanel
+          open={Boolean(assetFormMode)}
+          title={assetFormMode === "create" ? "Yeni Varlık" : "Varlık Düzenle"}
+          description={
+            assetFormMode === "create"
+              ? "Yeni bir cihaz veya ekipmanı envantere ekle."
+              : editingAsset
+                ? `${editingAsset.name} kaydını güncelle.`
+                : "Varlık kaydını güncelle."
+          }
+          onClose={closeAssetForm}
+        >
+          {assetFormMode && (
+            <AssetForm
+              mode={assetFormMode}
+              asset={assetFormMode === "edit" ? editingAsset : null}
+              categories={categories}
+              isSubmitting={isAssetFormSubmitting}
+              onCancel={closeAssetForm}
+              onSubmit={handleAssetFormSubmit}
+            />
+          )}
+        </SlideOverPanel>
+
+        {toast && (
+          <AppToast
+            type={toast.type}
+            message={toast.message}
+            onClose={() => setToast(null)}
+          />
+        )}
       </PageTransition>
     </AppShell>
   );

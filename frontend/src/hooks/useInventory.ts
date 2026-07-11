@@ -5,6 +5,11 @@ import {
   getAssetSummary,
 } from "../api/inventory";
 import type { AssetFilters } from "../types/inventory";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createAsset, updateAsset } from "../api/inventory";
+import type { AssetFormPayload } from "../types/inventory";
+
+
 
 export function useAssets(filters: AssetFilters) {
   return useQuery({
@@ -27,5 +32,33 @@ export function useAssetCategories() {
     queryKey: ["inventory", "categories"],
     queryFn: getAssetCategories,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useCreateAsset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createAsset,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+    },
+  });
+}
+
+export function useUpdateAsset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: AssetFormPayload;
+    }) => updateAsset(id, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+    },
   });
 }
