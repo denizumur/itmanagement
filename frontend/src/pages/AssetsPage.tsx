@@ -50,6 +50,7 @@ import type {
 } from "../types/inventory";
 
 type AssetFormMode = "create" | "edit";
+
 type ToastState = {
   type: "success" | "error";
   message: string;
@@ -123,7 +124,8 @@ function getOperationalStatusVariant(
 }
 
 function getMutationErrorMessage(error: unknown) {
-  const fallback = "İşlem tamamlanamadı. Lütfen alanları kontrol edip tekrar dene.";
+  const fallback =
+    "İşlem tamamlanamadı. Lütfen alanları kontrol edip tekrar dene.";
 
   if (!error || typeof error !== "object" || !("response" in error)) {
     return fallback;

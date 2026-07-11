@@ -16,6 +16,22 @@ function getNestedDepartmentName(employee: AssignmentEmployee) {
   return null;
 }
 
+function getNestedJobTitleName(employee: AssignmentEmployee) {
+  if (typeof employee.job_title === "string") {
+    return employee.job_title;
+  }
+
+  if (
+    employee.job_title &&
+    typeof employee.job_title === "object" &&
+    "name" in employee.job_title
+  ) {
+    return employee.job_title.name ?? null;
+  }
+
+  return null;
+}
+
 export function getAssignmentAssetId(assignment: Assignment) {
   if (typeof assignment.asset_id === "number") {
     return assignment.asset_id;
@@ -38,6 +54,42 @@ export function getAssignmentAssetId(assignment: Assignment) {
     typeof assignment.asset_detail.id === "number"
   ) {
     return assignment.asset_detail.id;
+  }
+
+  return null;
+}
+
+export function getAssignmentAssetName(assignment: Assignment) {
+  if (assignment.asset_name) {
+    return assignment.asset_name;
+  }
+
+  if (assignment.asset && typeof assignment.asset === "object") {
+    return assignment.asset.name || "Varlık";
+  }
+
+  if (assignment.asset_detail?.name) {
+    return assignment.asset_detail.name;
+  }
+
+  return "Varlık";
+}
+
+export function getAssignmentAssetCode(assignment: Assignment) {
+  if (assignment.asset_inventory_code) {
+    return assignment.asset_inventory_code;
+  }
+
+  if (assignment.asset && typeof assignment.asset === "object") {
+    return assignment.asset.inventory_code || assignment.asset.serial_number || null;
+  }
+
+  if (assignment.asset_detail) {
+    return (
+      assignment.asset_detail.inventory_code ||
+      assignment.asset_detail.serial_number ||
+      null
+    );
   }
 
   return null;
@@ -94,7 +146,21 @@ export function getAssignmentEmployeeName(assignment: Assignment) {
 
 export function getAssignmentDepartmentName(assignment: Assignment) {
   if (assignment.employee && typeof assignment.employee === "object") {
-    return assignment.employee.department_name || getNestedDepartmentName(assignment.employee);
+    return (
+      assignment.employee.department_name ||
+      getNestedDepartmentName(assignment.employee)
+    );
+  }
+
+  return null;
+}
+
+export function getAssignmentJobTitleName(assignment: Assignment) {
+  if (assignment.employee && typeof assignment.employee === "object") {
+    return (
+      assignment.employee.job_title_name ||
+      getNestedJobTitleName(assignment.employee)
+    );
   }
 
   return null;

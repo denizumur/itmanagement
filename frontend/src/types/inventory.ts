@@ -106,3 +106,17 @@ export interface AssetFormPayload {
   location?: string | null;
   notes?: string | null;
 }
+export interface AssetFormPayload {
+  name: string;
+  inventory_code?: string | null;
+  serial_number?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  category?: number | null;
+  status?: string;
+  purchase_date?: string | null;
+  warranty_end_date?: string | null;
+  next_maintenance_due_date?: string | null;
+  location?: string | null;
+  notes?: string | null;
+}

@@ -1,10 +1,11 @@
 import { Route, Routes } from "react-router";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
+import { AssetsPage } from "./pages/AssetsPage";
+import { AssignmentsPage } from "./pages/AssignmentsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
-import { AssetsPage } from "./pages/AssetsPage";
 
 export default function App() {
   return (
@@ -14,18 +15,8 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<OverviewPage />} />
         <Route path="/workspace" element={<WorkspacePage />} />
-
         <Route path="/assets" element={<AssetsPage />} />
-
-        <Route
-          path="/assignments"
-          element={
-            <PlaceholderPage
-              title="Zimmet"
-              description="Personel bazlı zimmet listesi, aktif zimmetler ve iade işlemleri burada geliştirilecek."
-            />
-          }
-        />
+        <Route path="/assignments" element={<AssignmentsPage />} />
 
         <Route
           path="/licenses"

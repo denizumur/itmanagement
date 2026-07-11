@@ -28,6 +28,7 @@ urlpatterns = [
     path("api/licensing/", include("apps.licensing.urls")),
     path("api/reminders/", include("apps.reminders.urls")),
     path("api/dashboard/", include("apps.dashboard.urls")),
+    path("api/employees/", include("apps.employees.urls")),
     path(
         "api/docs/",
         SpectacularSwaggerView.as_view(url_name="schema"),

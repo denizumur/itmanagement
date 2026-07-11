@@ -27,7 +27,7 @@ export function Sidebar() {
       <div className="mb-xl rounded-panel border border-border bg-surface-1 p-md shadow-panel">
         <div className="flex items-center gap-sm">
           <div className="flex h-10 w-10 items-center justify-center rounded-app bg-accent-bg text-accent">
-            <IconSparkles size={20} aria-hidden="true" />
+            <IconSparkles size={20} aria-hidden={true} />
           </div>
 
           <div>
@@ -54,7 +54,7 @@ export function Sidebar() {
                 )
               }
             >
-              <Icon className="relative z-10" size={18} aria-hidden="true" />
+              <Icon className="relative z-10" size={18} aria-hidden={true} />
               <span className="relative z-10">{item.label}</span>
             </NavLink>
           );

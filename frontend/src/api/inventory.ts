@@ -78,3 +78,5 @@ export async function updateAsset(id: number, payload: AssetFormPayload) {
 
   return response.data;
 }
+
+
