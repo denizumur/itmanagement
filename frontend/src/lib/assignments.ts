@@ -145,6 +145,10 @@ export function getAssignmentEmployeeName(assignment: Assignment) {
 }
 
 export function getAssignmentDepartmentName(assignment: Assignment) {
+  if (assignment.employee_department_name) {
+    return assignment.employee_department_name;
+  }
+
   if (assignment.employee && typeof assignment.employee === "object") {
     return (
       assignment.employee.department_name ||
@@ -156,6 +160,10 @@ export function getAssignmentDepartmentName(assignment: Assignment) {
 }
 
 export function getAssignmentJobTitleName(assignment: Assignment) {
+  if (assignment.employee_job_title_name) {
+    return assignment.employee_job_title_name;
+  }
+
   if (assignment.employee && typeof assignment.employee === "object") {
     return (
       assignment.employee.job_title_name ||

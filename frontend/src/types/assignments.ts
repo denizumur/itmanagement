@@ -36,7 +36,8 @@ export interface Assignment {
   employee_full_name?: string | null;
   assigned_employee_name?: string | null;
   assigned_to_name?: string | null;
-
+  employee_department_name?: string | null;
+  employee_job_title_name?: string | null;
   assigned_at?: string | null;
   returned_at?: string | null;
   return_date?: string | null;

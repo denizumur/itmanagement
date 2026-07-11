@@ -27,6 +27,17 @@ class AssignmentSerializer(serializers.ModelSerializer):
         source="employee.job_title.name",
         read_only=True,
     )
+    employee_department_name = serializers.CharField(
+    source="employee.department.name",
+    read_only=True,
+    allow_null=True,
+    )
+    
+    employee_job_title_name = serializers.CharField(
+    source="employee.job_title.name",
+    read_only=True,
+    allow_null=True,
+    )
 
     assigned_by_username = serializers.CharField(
         source="assigned_by.username",
@@ -52,6 +63,8 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "employee_full_name",
             "employee_department",
             "employee_job_title",
+            "employee_department_name",
+            "employee_job_title_name",
             "assigned_at",
             "returned_at",
             "is_active",
@@ -70,6 +83,8 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "assigned_by",
             "assigned_by_username",
             "returned_by",
+            "employee_department_name",
+            "employee_job_title_name",
             "returned_by_username",
             "is_active",
             "created_at",
