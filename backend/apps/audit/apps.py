@@ -2,4 +2,7 @@ from django.apps import AppConfig
 
 
 class AuditConfig(AppConfig):
-    name = 'apps.audit'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.audit"
+    label = "audit"
+    verbose_name = "Audit Log"

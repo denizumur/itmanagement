@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     "apps.reminders.apps.RemindersConfig",
     "apps.tickets",
     "apps.imports",
-    "apps.audit",
+    "apps.audit.apps.AuditConfig",
     "apps.dashboard.apps.DashboardConfig",
 ]
 CORS_ALLOW_CREDENTIALS = True

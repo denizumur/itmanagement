@@ -9,3 +9,4 @@ Terminal 2:
 
 cd C:\Users\deniz\it-inventory-platform\frontend
 npm run dev -- --port 5173
+
