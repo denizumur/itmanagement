@@ -6,6 +6,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
+import { MaintenancePage } from "./pages/MaintenancePage";
 
 export default function App() {
   return (
@@ -28,15 +29,7 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/maintenance"
-          element={
-            <PlaceholderPage
-              title="Bakım"
-              description="Bakım takvimi, onarım kayıtları, gecikmiş bakım listesi ve imha geçmişi burada geliştirilecek."
-            />
-          }
-        />
+        <Route path="/maintenance" element={<MaintenancePage />} />
 
         <Route
           path="/reminders"
