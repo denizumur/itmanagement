@@ -5,7 +5,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView as SimpleJWTTokenRefreshView
-
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts.serializers import (
     CustomTokenObtainPairSerializer,
     CurrentUserSerializer,
@@ -107,6 +108,17 @@ class LogoutView(APIView):
 
     def post(self, request):
         response = Response({"detail": "Çıkış yapıldı."})
-        clear_refresh_cookie(response)
 
+        refresh_token = (
+            request.COOKIES.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+            or request.data.get("refresh")
+        )
+
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                pass
+
+        clear_refresh_cookie(response)
         return response
