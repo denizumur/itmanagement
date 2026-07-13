@@ -1,15 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  createAsset,
+  createAssetWithAssignment,
   getAssetCategories,
   getAssets,
   getAssetSummary,
+  updateAsset,
 } from "../api/inventory";
 import type { AssetFilters } from "../types/inventory";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createAsset, updateAsset } from "../api/inventory";
 import type { AssetFormPayload } from "../types/inventory";
 
 
+export function useCreateAssetWithAssignment() {
+  return useMutation({
+    mutationFn: createAssetWithAssignment,
+  });
+}
 
 export function useAssets(filters: AssetFilters) {
   return useQuery({

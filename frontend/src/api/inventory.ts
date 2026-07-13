@@ -3,10 +3,10 @@ import type {
   Asset,
   AssetCategory,
   AssetFilters,
+  AssetFormPayload,
   AssetSummary,
   PaginatedResponse,
 } from "../types/inventory";
-import type { AssetFormPayload } from "../types/inventory";
 
 function extractResults<T>(responseData: T[] | PaginatedResponse<T>) {
   if (Array.isArray(responseData)) {
@@ -44,6 +44,19 @@ export async function getAssetCategories() {
   return extractResults(response.data);
 }
 
+export type CreateAssetWithAssignmentPayload = {
+  asset: AssetFormPayload;
+  assignment: {
+    employee: number;
+    assigned_at?: string | null;
+    notes?: string | null;
+  };
+};
+
+export type CreateAssetWithAssignmentResponse = {
+  asset: Asset;
+  assignment: unknown;
+};
 
 function cleanAssetPayload(payload: AssetFormPayload) {
   return {
@@ -78,5 +91,20 @@ export async function updateAsset(id: number, payload: AssetFormPayload) {
 
   return response.data;
 }
+export async function createAssetWithAssignment(
+  payload: CreateAssetWithAssignmentPayload
+) {
+  const response = await api.post<CreateAssetWithAssignmentResponse>(
+    "/api/inventory/assets/create-with-assignment/",
+    {
+      asset: cleanAssetPayload(payload.asset),
+      assignment: {
+        employee: payload.assignment.employee,
+        assigned_at: payload.assignment.assigned_at || undefined,
+        notes: payload.assignment.notes || "",
+      },
+    }
+  );
 
-
+  return response.data;
+}

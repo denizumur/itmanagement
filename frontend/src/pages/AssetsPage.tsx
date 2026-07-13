@@ -23,16 +23,14 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
 import { SlideOverPanel } from "../components/ui/SlideOverPanel";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import {
-  useActiveAssignments,
-  useCreateAssignment,
-} from "../hooks/useAssignments";
+import {useActiveAssignments} from "../hooks/useAssignments";
 import { useEmployees } from "../hooks/useEmployees";
 import {
   useAssetCategories,
   useAssets,
   useAssetSummary,
   useCreateAsset,
+  useCreateAssetWithAssignment,
   useUpdateAsset,
 } from "../hooks/useInventory";
 import {
@@ -234,8 +232,8 @@ export function AssetsPage() {
   const activeAssignmentsQuery = useActiveAssignments();
   const employeesQuery = useEmployees();
   const createAssetMutation = useCreateAsset();
+  const createAssetWithAssignmentMutation = useCreateAssetWithAssignment();
   const updateAssetMutation = useUpdateAsset();
-  const createAssignmentMutation = useCreateAssignment();
 
   const assets = assetsQuery.data ?? [];
   const summary = summaryQuery.data;
@@ -250,8 +248,8 @@ export function AssetsPage() {
 
   const isAssetFormSubmitting =
     createAssetMutation.isPending ||
-    updateAssetMutation.isPending ||
-    createAssignmentMutation.isPending;
+    createAssetWithAssignmentMutation.isPending ||
+    updateAssetMutation.isPending;
 
   const totalAssets = getSummaryTotal(summary, assets.length);
 
@@ -332,35 +330,23 @@ export function AssetsPage() {
 
     try {
       if (assetFormMode === "create") {
-        const createdAsset = await createAssetMutation.mutateAsync(
-          payload.asset
-        );
-
         if (payload.assignment) {
-          try {
-            await createAssignmentMutation.mutateAsync({
-              asset: createdAsset.id,
+          await createAssetWithAssignmentMutation.mutateAsync({
+            asset: payload.asset,
+            assignment: {
               employee: payload.assignment.employee,
               assigned_at: payload.assignment.assigned_at,
               notes: payload.assignment.notes,
-            });
+            },
+          });
 
-            setToast({
-              type: "success",
-              message: "Varlık oluşturuldu ve personele zimmetlendi.",
-            });
-          } catch (assignmentError) {
-            setToast({
-              type: "error",
-              message: `Varlık oluşturuldu fakat zimmet oluşturulamadı. ${getMutationErrorMessage(
-                assignmentError
-              )}`,
-            });
-
-            refetchAll();
-            return;
-          }
+          setToast({
+            type: "success",
+            message: "Varlık oluşturuldu ve personele zimmetlendi.",
+          });
         } else {
+          await createAssetMutation.mutateAsync(payload.asset);
+
           setToast({
             type: "success",
             message: "Varlık başarıyla oluşturuldu.",
