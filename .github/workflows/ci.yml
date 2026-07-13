@@ -73,17 +73,17 @@ jobs:
 
       - name: Apply migrations
         run: python manage.py migrate --noinput
-        
-    - name: Run backend tests
-      shell: bash
-      run: |
-      set -o pipefail
-      python manage.py test --verbosity 2 2>&1 | tee test-output.log
-      
-      if grep -q "Found 0 test" test-output.log || grep -q "Ran 0 tests" test-output.log || grep -q "NO TESTS RAN" test-output.log; then
-       echo "::error::Django test runner did not discover any tests. CI cannot pass with 0 tests."
-       exit 1
-    fi 
+
+      - name: Run backend tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python manage.py test --verbosity 2 2>&1 | tee test-output.log
+
+          if grep -q "Found 0 test" test-output.log || grep -q "Ran 0 tests" test-output.log || grep -q "NO TESTS RAN" test-output.log; then
+            echo "::error::Django test runner did not discover any tests. CI cannot pass with 0 tests."
+            exit 1
+          fi
 
   frontend:
     name: Frontend build
