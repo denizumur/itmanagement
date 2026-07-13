@@ -13,8 +13,12 @@ env_file = BASE_DIR.parent / ".env"
 if env_file.exists():
     environ.Env.read_env(env_file)
 
-SECRET_KEY = env("DJANGO_SECRET_KEY", default="unsafe-local-secret-key")
+SECRET_KEY = env(
+    "DJANGO_SECRET_KEY",
+    default="unsafe-local-secret-key-change-this-before-demo-or-production",
+)
 
+JWT_SIGNING_KEY = env("JWT_SIGNING_KEY", default=SECRET_KEY)
 DEBUG = env("DJANGO_DEBUG")
 
 ALLOWED_HOSTS = env.list(
@@ -176,4 +180,5 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
+    "SIGNING_KEY": JWT_SIGNING_KEY,
 }
