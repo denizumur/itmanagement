@@ -110,32 +110,33 @@ def calculate_changes(
     before: Mapping[str, Any] | None,
     after: Mapping[str, Any] | None,
 ) -> dict[str, dict[str, Any]]:
-    before_data = normalize_json_value(before or {})
-    after_data = normalize_json_value(after or {})
+    raw_before = before or {}
+    raw_after = after or {}
 
-    if not isinstance(before_data, Mapping) or not isinstance(after_data, Mapping):
+    if not isinstance(raw_before, Mapping) or not isinstance(raw_after, Mapping):
         return {}
 
     changes: dict[str, dict[str, Any]] = {}
 
-    keys = set(before_data.keys()) | set(after_data.keys())
+    keys = set(raw_before.keys()) | set(raw_after.keys())
 
     for key in sorted(keys):
-        before_value = before_data.get(key)
-        after_value = after_data.get(key)
+        key_as_string = str(key)
+        before_value = raw_before.get(key)
+        after_value = raw_after.get(key)
 
         if before_value == after_value:
             continue
 
-        if is_sensitive_field(str(key)):
-            changes[str(key)] = {
+        if is_sensitive_field(key_as_string):
+            changes[key_as_string] = {
                 "before": "***REDACTED***",
                 "after": "***REDACTED***",
             }
         else:
-            changes[str(key)] = {
-                "before": before_value,
-                "after": after_value,
+            changes[key_as_string] = {
+                "before": normalize_json_value(before_value),
+                "after": normalize_json_value(after_value),
             }
 
     return changes
@@ -249,21 +250,25 @@ def create_audit_log(
     entity_repr: str | None = None,
     skip_if_no_changes: bool = False,
 ) -> AuditLog | None:
-    
-    before_data = normalize_json_value(before or {})
+
+    raw_before = before or {}
 
     if after is None and instance is not None:
-        after_data = serialize_instance(instance)
+        raw_after = serialize_instance(instance)
     else:
-        after_data = normalize_json_value(after or {})
+        raw_after = after or {}
+
+    before_data = normalize_json_value(raw_before)
+    after_data = normalize_json_value(raw_after)
 
     if changes is None:
-        changes_data = calculate_changes(before_data, after_data)
+        changes_data = calculate_changes(raw_before, raw_after)
     else:
         changes_data = normalize_json_value(changes)
 
     if skip_if_no_changes and not changes_data:
         return None
+
     created_log: AuditLog | None = None
 
     def write_log():

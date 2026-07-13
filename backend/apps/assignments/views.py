@@ -1,4 +1,5 @@
 from django.db import IntegrityError, transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -23,22 +24,41 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = AssignmentSerializer
     permission_classes = [ReadOnlyForViewerWriteForTechnician]
 
+    def _active_assignment_conflict_response(self):
+        return Response(
+            {
+                "asset": [
+                    "Bu varlık zaten aktif olarak zimmetli."
+                ]
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def _is_active_assignment_conflict(self, exc):
+        return "unique_active_assignment_per_asset" in str(exc)
+
     def create(self, request, *args, **kwargs):
         try:
             return super().create(request, *args, **kwargs)
         except IntegrityError as exc:
-            if "unique_active_assignment_per_asset" in str(exc):
+            if self._is_active_assignment_conflict(exc):
+                return self._active_assignment_conflict_response()
+
+            raise
+        except DjangoValidationError as exc:
+            if self._is_active_assignment_conflict(exc):
+                return self._active_assignment_conflict_response()
+
+            if hasattr(exc, "message_dict"):
                 return Response(
-                    {
-                        "asset": [
-                            "Bu varlık zaten aktif olarak zimmetli."
-                        ]
-                    },
+                    exc.message_dict,
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            raise
-    
+            return Response(
+                {"detail": getattr(exc, "messages", [str(exc)])},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
     def get_queryset(self):
         queryset = Assignment.objects.select_related(
             "asset",
@@ -91,24 +111,6 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         )
 
         serializer.instance = assignment
-        create_audit_log(
-            request=self.request,
-            action=AuditLog.Action.ASSIGN,
-            instance=assignment,
-            before={},
-            after=serialize_instance(
-                assignment,
-                exclude=ASSIGNMENT_AUDIT_EXCLUDE_FIELDS,
-            ),
-            metadata={
-                "module": "assignments",
-                "operation": "assignment_create",
-                "asset_id": assignment.asset_id,
-                "employee_id": assignment.employee_id,
-                "asset_status_before": asset_status_before,
-                "asset_status_after": asset.status,
-            },
-        )
 
     @transaction.atomic
     def perform_update(self, serializer):
