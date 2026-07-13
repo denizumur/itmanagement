@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -5,8 +6,16 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
+from apps.audit.models import AuditLog
+from apps.audit.services import create_audit_log, serialize_instance
 from apps.licensing.models import LicenseSubscription
 from apps.licensing.serializers import LicenseSubscriptionSerializer
+
+
+LICENSE_AUDIT_EXCLUDE_FIELDS = (
+    "created_at",
+    "updated_at",
+)
 
 
 class LicenseSubscriptionViewSet(viewsets.ModelViewSet):
@@ -58,7 +67,9 @@ class LicenseSubscriptionViewSet(viewsets.ModelViewSet):
         if expired == "true":
             queryset = queryset.filter(end_date__lt=today)
         elif expired == "false":
-            queryset = queryset.filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+            queryset = queryset.filter(
+                Q(end_date__isnull=True) | Q(end_date__gte=today)
+            )
 
         if upcoming == "true":
             queryset = queryset.filter(
@@ -68,21 +79,98 @@ class LicenseSubscriptionViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    @transaction.atomic
     def perform_create(self, serializer):
-        serializer.save(
+        subscription = serializer.save(
             created_by=self.request.user,
             updated_by=self.request.user,
         )
 
-    def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
+        create_audit_log(
+            request=self.request,
+            action=AuditLog.Action.CREATE,
+            instance=subscription,
+            before={},
+            after=serialize_instance(
+                subscription,
+                exclude=LICENSE_AUDIT_EXCLUDE_FIELDS,
+            ),
+            metadata={
+                "module": "licensing",
+                "operation": "license_subscription_create",
+                "license_id": subscription.id,
+                "license_type": subscription.type,
+                "assigned_asset_id": subscription.assigned_asset_id,
+            },
+        )
 
+    @transaction.atomic
+    def perform_update(self, serializer):
+        instance = self.get_object()
+
+        before = serialize_instance(
+            instance,
+            exclude=LICENSE_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        subscription = serializer.save(updated_by=self.request.user)
+
+        after = serialize_instance(
+            subscription,
+            exclude=LICENSE_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=self.request,
+            action=AuditLog.Action.UPDATE,
+            instance=subscription,
+            before=before,
+            after=after,
+            skip_if_no_changes=True,
+            metadata={
+                "module": "licensing",
+                "operation": "license_subscription_update",
+                "license_id": subscription.id,
+                "license_type": subscription.type,
+                "assigned_asset_id": subscription.assigned_asset_id,
+            },
+        )
+
+    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         subscription = self.get_object()
+
+        before = serialize_instance(
+            subscription,
+            exclude=LICENSE_AUDIT_EXCLUDE_FIELDS,
+        )
+
         subscription.soft_delete(user=request.user)
+        subscription.refresh_from_db()
+
+        after = serialize_instance(
+            subscription,
+            exclude=LICENSE_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=request,
+            action=AuditLog.Action.DELETE,
+            instance=subscription,
+            before=before,
+            after=after,
+            metadata={
+                "module": "licensing",
+                "operation": "license_subscription_soft_delete",
+                "license_id": subscription.id,
+                "license_type": subscription.type,
+                "assigned_asset_id": subscription.assigned_asset_id,
+            },
+        )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @transaction.atomic
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
         subscription = LicenseSubscription.all_objects.filter(pk=pk).first()
@@ -93,7 +181,33 @@ class LicenseSubscriptionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        before = serialize_instance(
+            subscription,
+            exclude=LICENSE_AUDIT_EXCLUDE_FIELDS,
+        )
+
         subscription.restore(user=request.user)
+        subscription.refresh_from_db()
+
+        after = serialize_instance(
+            subscription,
+            exclude=LICENSE_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=request,
+            action=AuditLog.Action.RESTORE,
+            instance=subscription,
+            before=before,
+            after=after,
+            metadata={
+                "module": "licensing",
+                "operation": "license_subscription_restore",
+                "license_id": subscription.id,
+                "license_type": subscription.type,
+                "assigned_asset_id": subscription.assigned_asset_id,
+            },
+        )
 
         serializer = self.get_serializer(subscription)
 
