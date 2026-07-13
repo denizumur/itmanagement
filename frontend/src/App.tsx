@@ -7,6 +7,7 @@ import { OverviewPage } from "./pages/OverviewPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
 import { MaintenancePage } from "./pages/MaintenancePage";
+import { LicensesPage } from "./pages/LicensesPage";
 
 export default function App() {
   return (
@@ -21,14 +22,9 @@ export default function App() {
 
         <Route
           path="/licenses"
-          element={
-            <PlaceholderPage
-              title="Lisanslar"
-              description="Lisans ve abonelik listesi, yaklaşan bitişler, yenileme maliyetleri ve detay ekranları burada geliştirilecek."
-            />
-          }
+          element={<LicensesPage />}
         />
-
+        
         <Route path="/maintenance" element={<MaintenancePage />} />
 
         <Route

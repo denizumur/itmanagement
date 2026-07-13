@@ -8,6 +8,8 @@ from django.utils import timezone
 from apps.common.models import SoftDeleteModel, TimeStampedModel
 from apps.inventory.models import Asset
 
+def has_masking_character(value):
+    return any(marker in value for marker in ["*", "X", "x", "•"])
 
 class LicenseSubscription(TimeStampedModel, SoftDeleteModel):
     class Type(models.TextChoices):
@@ -150,8 +152,8 @@ class LicenseSubscription(TimeStampedModel, SoftDeleteModel):
                 {"end_date": "Bitiş tarihi başlangıç tarihinden önce olamaz."}
             )
 
-        if self.license_key_masked and not any(
-            marker in self.license_key_masked for marker in ["*", "X", "x", "-"]
+        if self.license_key_masked and not has_masking_character(
+            self.license_key_masked
         ):
             raise ValidationError(
                 {

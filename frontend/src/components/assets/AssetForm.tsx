@@ -15,13 +15,34 @@ const operationalStatusOptions = [
   { value: "lost", label: "Kayıp" },
 ];
 
+interface AssetFormEmployee {
+  id: number;
+  full_name?: string | null;
+  name?: string | null;
+  employee_code?: string | null;
+  department_name?: string | null;
+  job_title_name?: string | null;
+  department?: string | { id?: number; name?: string | null } | null;
+  job_title?: string | { id?: number; name?: string | null } | null;
+}
+
+export interface AssetFormSubmitPayload {
+  asset: AssetFormPayload;
+  assignment?: {
+    employee: number;
+    assigned_at: string;
+    notes?: string | null;
+  } | null;
+}
+
 interface AssetFormProps {
   mode: "create" | "edit";
   asset?: Asset | null;
   categories: AssetCategory[];
+  employees?: AssetFormEmployee[];
   isSubmitting?: boolean;
   onCancel: () => void;
-  onSubmit: (payload: AssetFormPayload) => void;
+  onSubmit: (payload: AssetFormSubmitPayload) => void;
 }
 
 function normalizeEditStatus(status?: string | null) {
@@ -32,10 +53,45 @@ function normalizeEditStatus(status?: string | null) {
   return status || "in_stock";
 }
 
+function todayAsInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getEmployeeDisplayName(employee: AssetFormEmployee) {
+  return (
+    employee.full_name ||
+    employee.name ||
+    employee.employee_code ||
+    `Personel #${employee.id}`
+  );
+}
+
+function getEmployeeSubLabel(employee: AssetFormEmployee) {
+  const departmentName =
+    typeof employee.department === "object"
+      ? employee.department?.name
+      : employee.department;
+
+  const jobTitleName =
+    typeof employee.job_title === "object"
+      ? employee.job_title?.name
+      : employee.job_title;
+
+  return (
+    employee.department_name ||
+    employee.job_title_name ||
+    departmentName ||
+    jobTitleName ||
+    employee.employee_code ||
+    ""
+  );
+}
+
 export function AssetForm({
   mode,
   asset,
   categories,
+  employees = [],
   isSubmitting = false,
   onCancel,
   onSubmit,
@@ -63,10 +119,18 @@ export function AssetForm({
 
   const [form, setForm] = useState<AssetFormPayload>(initialState);
   const [error, setError] = useState("");
+  const [assignAfterCreate, setAssignAfterCreate] = useState(false);
+  const [assignmentEmployee, setAssignmentEmployee] = useState("");
+  const [assignedAt, setAssignedAt] = useState(todayAsInputValue());
+  const [assignmentNotes, setAssignmentNotes] = useState("");
 
   useEffect(() => {
     setForm(initialState);
     setError("");
+    setAssignAfterCreate(false);
+    setAssignmentEmployee("");
+    setAssignedAt(todayAsInputValue());
+    setAssignmentNotes("");
   }, [initialState]);
 
   function updateField<K extends keyof AssetFormPayload>(
@@ -92,9 +156,21 @@ export function AssetForm({
       return;
     }
 
+    if (mode === "create" && assignAfterCreate) {
+      if (!assignmentEmployee) {
+        setError("Kaydet ve zimmetle için personel seçimi zorunludur.");
+        return;
+      }
+
+      if (!assignedAt) {
+        setError("Zimmet tarihi zorunludur.");
+        return;
+      }
+    }
+
     setError("");
 
-    const payload: AssetFormPayload = {
+    const assetPayload: AssetFormPayload = {
       ...form,
       name: form.name.trim(),
       inventory_code: form.inventory_code?.trim() || null,
@@ -106,8 +182,20 @@ export function AssetForm({
       category: form.category ? Number(form.category) : null,
     };
 
-    onSubmit(payload);
+    onSubmit({
+      asset: assetPayload,
+      assignment:
+        mode === "create" && assignAfterCreate
+          ? {
+              employee: Number(assignmentEmployee),
+              assigned_at: assignedAt,
+              notes: assignmentNotes.trim() || null,
+            }
+          : null,
+    });
   }
+
+  const showAssignmentSection = mode === "create";
 
   return (
     <form className="space-y-md" onSubmit={handleSubmit}>
@@ -269,6 +357,88 @@ export function AssetForm({
             placeholder="Cihazla ilgili operasyonel notlar..."
           />
         </label>
+
+        {showAssignmentSection && (
+          <div className="space-y-md rounded-panel border border-border bg-surface-1 p-md sm:col-span-2">
+            <label className="flex items-start gap-sm">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-border"
+                checked={assignAfterCreate}
+                onChange={(event) => setAssignAfterCreate(event.target.checked)}
+              />
+
+              <span>
+                <span className="block text-body text-text-primary">
+                  Kaydettikten sonra zimmetle
+                </span>
+                <span className="mt-xs block text-caption text-text-secondary">
+                  Önce varlık oluşturulur, ardından seçilen personel için gerçek
+                  zimmet kaydı açılır.
+                </span>
+              </span>
+            </label>
+
+            {assignAfterCreate && (
+              <div className="grid gap-md sm:grid-cols-2">
+                <label className="space-y-xs">
+                  <span className="text-caption text-text-secondary">
+                    Personel *
+                  </span>
+                  <select
+                    className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+                    value={assignmentEmployee}
+                    onChange={(event) =>
+                      setAssignmentEmployee(event.target.value)
+                    }
+                  >
+                    <option value="">Personel seç</option>
+                    {employees.map((employee) => {
+                      const subLabel = getEmployeeSubLabel(employee);
+
+                      return (
+                        <option key={employee.id} value={String(employee.id)}>
+                          {getEmployeeDisplayName(employee)}
+                          {subLabel ? ` — ${subLabel}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {!employees.length && (
+                    <p className="text-caption text-warning">
+                      Personel listesi alınamadı veya kayıtlı personel yok.
+                    </p>
+                  )}
+                </label>
+
+                <label className="space-y-xs">
+                  <span className="text-caption text-text-secondary">
+                    Zimmet tarihi *
+                  </span>
+                  <input
+                    type="date"
+                    className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+                    value={assignedAt}
+                    onChange={(event) => setAssignedAt(event.target.value)}
+                  />
+                </label>
+
+                <label className="space-y-xs sm:col-span-2">
+                  <span className="text-caption text-text-secondary">
+                    Zimmet notu
+                  </span>
+                  <textarea
+                    className="min-h-24 w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+                    value={assignmentNotes}
+                    onChange={(event) => setAssignmentNotes(event.target.value)}
+                    placeholder="Teslim notu, ekipman durumu, aksesuar bilgisi..."
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end gap-sm border-t border-border pt-md">
@@ -279,9 +449,11 @@ export function AssetForm({
         <GlowButton type="submit" disabled={isSubmitting}>
           {isSubmitting
             ? "Kaydediliyor"
-            : mode === "create"
-              ? "Varlık oluştur"
-              : "Değişiklikleri kaydet"}
+            : mode === "create" && assignAfterCreate
+              ? "Varlık oluştur ve zimmetle"
+              : mode === "create"
+                ? "Varlık oluştur"
+                : "Değişiklikleri kaydet"}
         </GlowButton>
       </div>
     </form>

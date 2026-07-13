@@ -2,6 +2,8 @@ from rest_framework import serializers
 
 from apps.licensing.models import LicenseSubscription
 
+def has_masking_character(value):
+    return any(marker in value for marker in ["*", "X", "x", "•"])
 
 class LicenseSubscriptionSerializer(serializers.ModelSerializer):
     type_label = serializers.CharField(source="get_type_display", read_only=True)
@@ -94,7 +96,7 @@ class LicenseSubscriptionSerializer(serializers.ModelSerializer):
         return value
 
     def validate_license_key_masked(self, value):
-        if value and not any(marker in value for marker in ["*", "X", "x", "-"]):
+        if value and not has_masking_character(value):
             raise serializers.ValidationError(
                 "Tam lisans anahtarı saklama. Maskeli format kullan: XXXX-XXXX-1234."
             )

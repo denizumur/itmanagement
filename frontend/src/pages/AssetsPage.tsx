@@ -8,7 +8,10 @@ import {
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { AssetForm } from "../components/assets/AssetForm";
+import {
+  AssetForm,
+  type AssetFormSubmitPayload,
+} from "../components/assets/AssetForm";
 import { ErrorState } from "../components/common/ErrorState";
 import { Skeleton } from "../components/common/Skeleton";
 import { AppShell } from "../components/layout/AppShell";
@@ -20,7 +23,11 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
 import { SlideOverPanel } from "../components/ui/SlideOverPanel";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { useActiveAssignments } from "../hooks/useAssignments";
+import {
+  useActiveAssignments,
+  useCreateAssignment,
+} from "../hooks/useAssignments";
+import { useEmployees } from "../hooks/useEmployees";
 import {
   useAssetCategories,
   useAssets,
@@ -43,11 +50,7 @@ import {
   getSummaryTotal,
 } from "../lib/inventory";
 import { canManage } from "../lib/rbac";
-import type {
-  Asset,
-  AssetFilters,
-  AssetFormPayload,
-} from "../types/inventory";
+import type { Asset, AssetFilters } from "../types/inventory";
 
 type AssetFormMode = "create" | "edit";
 
@@ -229,13 +232,16 @@ export function AssetsPage() {
   const summaryQuery = useAssetSummary();
   const categoriesQuery = useAssetCategories();
   const activeAssignmentsQuery = useActiveAssignments();
+  const employeesQuery = useEmployees();
   const createAssetMutation = useCreateAsset();
   const updateAssetMutation = useUpdateAsset();
+  const createAssignmentMutation = useCreateAssignment();
 
   const assets = assetsQuery.data ?? [];
   const summary = summaryQuery.data;
   const categories = categoriesQuery.data ?? [];
   const activeAssignments = activeAssignmentsQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
 
   const activeAssignmentMap = useMemo(
     () => buildActiveAssignmentMap(activeAssignments),
@@ -243,7 +249,9 @@ export function AssetsPage() {
   );
 
   const isAssetFormSubmitting =
-    createAssetMutation.isPending || updateAssetMutation.isPending;
+    createAssetMutation.isPending ||
+    updateAssetMutation.isPending ||
+    createAssignmentMutation.isPending;
 
   const totalAssets = getSummaryTotal(summary, assets.length);
 
@@ -293,6 +301,7 @@ export function AssetsPage() {
     summaryQuery.refetch();
     categoriesQuery.refetch();
     activeAssignmentsQuery.refetch();
+    employeesQuery.refetch();
   }
 
   function openCreateForm() {
@@ -316,23 +325,51 @@ export function AssetsPage() {
     setEditingAsset(null);
   }
 
-  async function handleAssetFormSubmit(payload: AssetFormPayload) {
+  async function handleAssetFormSubmit(payload: AssetFormSubmitPayload) {
     if (!assetFormMode) {
       return;
     }
 
     try {
       if (assetFormMode === "create") {
-        await createAssetMutation.mutateAsync(payload);
+        const createdAsset = await createAssetMutation.mutateAsync(
+          payload.asset
+        );
 
-        setToast({
-          type: "success",
-          message: "Varlık başarıyla oluşturuldu.",
-        });
+        if (payload.assignment) {
+          try {
+            await createAssignmentMutation.mutateAsync({
+              asset: createdAsset.id,
+              employee: payload.assignment.employee,
+              assigned_at: payload.assignment.assigned_at,
+              notes: payload.assignment.notes,
+            });
+
+            setToast({
+              type: "success",
+              message: "Varlık oluşturuldu ve personele zimmetlendi.",
+            });
+          } catch (assignmentError) {
+            setToast({
+              type: "error",
+              message: `Varlık oluşturuldu fakat zimmet oluşturulamadı. ${getMutationErrorMessage(
+                assignmentError
+              )}`,
+            });
+
+            refetchAll();
+            return;
+          }
+        } else {
+          setToast({
+            type: "success",
+            message: "Varlık başarıyla oluşturuldu.",
+          });
+        }
       } else if (editingAsset) {
         await updateAssetMutation.mutateAsync({
           id: editingAsset.id,
-          payload,
+          payload: payload.asset,
         });
 
         setToast({
@@ -405,6 +442,7 @@ export function AssetsPage() {
                 <GlowButton
                   icon={<IconPlus size={16} aria-hidden={true} />}
                   onClick={openCreateForm}
+                  disabled={isAssetFormSubmitting}
                 >
                   Yeni Varlık
                 </GlowButton>
@@ -759,6 +797,7 @@ export function AssetsPage() {
               mode={assetFormMode}
               asset={assetFormMode === "edit" ? editingAsset : null}
               categories={categories}
+              employees={employees}
               isSubmitting={isAssetFormSubmitting}
               onCancel={closeAssetForm}
               onSubmit={handleAssetFormSubmit}

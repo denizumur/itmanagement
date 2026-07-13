@@ -6,9 +6,37 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
+from apps.audit.models import AuditLog
+from apps.audit.services import create_audit_log, serialize_instance
 from apps.inventory.models import Asset
 from apps.maintenance.models import MaintenanceRecord
 from apps.maintenance.serializers import MaintenanceRecordSerializer
+
+
+MAINTENANCE_AUDIT_EXCLUDE_FIELDS = (
+    "created_at",
+    "updated_at",
+)
+
+
+def get_maintenance_create_audit_action(record):
+    if record.type == MaintenanceRecord.Type.DISPOSAL:
+        return AuditLog.Action.DISPOSE
+
+    return AuditLog.Action.CREATE
+
+
+def get_maintenance_create_operation(record):
+    if record.type == MaintenanceRecord.Type.MAINTENANCE:
+        return "maintenance_record_create"
+
+    if record.type == MaintenanceRecord.Type.REPAIR:
+        return "maintenance_repair_create"
+
+    if record.type == MaintenanceRecord.Type.DISPOSAL:
+        return "maintenance_disposal_create"
+
+    return "maintenance_record_create"
 
 
 class MaintenanceRecordViewSet(viewsets.ModelViewSet):
@@ -59,20 +87,76 @@ class MaintenanceRecordViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def perform_create(self, serializer):
         asset = serializer.validated_data["asset"]
+        asset_status_before = asset.status
 
         record = serializer.save(
             created_by=self.request.user,
             updated_by=self.request.user,
-            asset_status_before=asset.status,
+            asset_status_before=asset_status_before,
         )
 
         self.apply_asset_effect(record)
 
+        record.refresh_from_db()
+        record.asset.refresh_from_db()
+
+        create_audit_log(
+            request=self.request,
+            action=get_maintenance_create_audit_action(record),
+            instance=record,
+            before={},
+            after=serialize_instance(
+                record,
+                exclude=MAINTENANCE_AUDIT_EXCLUDE_FIELDS,
+            ),
+            metadata={
+                "module": "maintenance",
+                "operation": get_maintenance_create_operation(record),
+                "record_type": record.type,
+                "asset_id": record.asset_id,
+                "asset_status_before": asset_status_before,
+                "asset_status_after": record.asset.status,
+            },
+        )
+
     @transaction.atomic
     def perform_update(self, serializer):
+        instance = self.get_object()
+
+        before = serialize_instance(
+            instance,
+            exclude=MAINTENANCE_AUDIT_EXCLUDE_FIELDS,
+        )
+
         record = serializer.save(updated_by=self.request.user)
+        asset_status_before = record.asset.status
 
         self.apply_asset_effect(record)
+
+        record.refresh_from_db()
+        record.asset.refresh_from_db()
+
+        after = serialize_instance(
+            record,
+            exclude=MAINTENANCE_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=self.request,
+            action=AuditLog.Action.UPDATE,
+            instance=record,
+            before=before,
+            after=after,
+            skip_if_no_changes=True,
+            metadata={
+                "module": "maintenance",
+                "operation": "maintenance_record_update",
+                "record_type": record.type,
+                "asset_id": record.asset_id,
+                "asset_status_before": asset_status_before,
+                "asset_status_after": record.asset.status,
+            },
+        )
 
     def destroy(self, request, *args, **kwargs):
         return Response(
