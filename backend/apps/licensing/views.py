@@ -23,11 +23,24 @@ class LicenseSubscriptionViewSet(viewsets.ModelViewSet):
     permission_classes = [ReadOnlyForViewerWriteForTechnician]
 
     def get_queryset(self):
-        queryset = LicenseSubscription.objects.select_related(
+        deleted = self.request.query_params.get("deleted")
+        include_deleted = self.request.query_params.get("include_deleted")
+
+        if deleted == "true" or include_deleted == "true":
+            manager = LicenseSubscription.all_objects
+        else:
+            manager = LicenseSubscription.objects
+
+        queryset = manager.select_related(
             "assigned_asset",
             "created_by",
             "updated_by",
         ).order_by("end_date", "name")
+
+        if deleted == "true":
+            queryset = queryset.filter(is_deleted=True)
+        elif deleted == "false":
+            queryset = queryset.filter(is_deleted=False)
 
         search = self.request.query_params.get("search")
         license_type = self.request.query_params.get("type")
@@ -180,7 +193,11 @@ class LicenseSubscriptionViewSet(viewsets.ModelViewSet):
                 {"detail": "Lisans/abonelik bulunamadı."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
+        if not subscription.is_deleted:
+            return Response(
+                {"detail": "Bu lisans/abonelik zaten aktif durumda."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         before = serialize_instance(
             subscription,
             exclude=LICENSE_AUDIT_EXCLUDE_FIELDS,

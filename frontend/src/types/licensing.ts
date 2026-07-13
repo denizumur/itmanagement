@@ -53,15 +53,17 @@ export interface LicenseSubscriptionSummary {
   }>;
 }
 
-export interface LicenseSubscriptionFilters {
+export type LicenseSubscriptionFilters = {
   search?: string;
   type?: string;
   vendor?: string;
-  assigned_asset?: string;
+  assigned_asset?: string | number;
+  is_active?: string;
   expired?: string;
   upcoming?: string;
-  is_active?: string;
-}
+  deleted?: string;
+  include_deleted?: string;
+};
 
 export interface LicenseSubscriptionPayload {
   name: string;

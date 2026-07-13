@@ -28,6 +28,7 @@ import {
   useDeleteLicenseSubscription,
   useLicenseSubscriptionSummary,
   useLicenseSubscriptions,
+  useRestoreLicenseSubscription,
   useUpdateLicenseSubscription,
 } from "../hooks/useLicensing";
 import { canManage } from "../lib/rbac";
@@ -159,6 +160,10 @@ function hasMaskingCharacter(value: string) {
 function getLicenseStatusVariant(
   license: LicenseSubscription
 ): "accent" | "success" | "warning" | "danger" | "neutral" {
+  if (license.is_deleted) {
+    return "neutral";
+  }
+
   if (!license.is_active) {
     return "neutral";
   }
@@ -175,6 +180,10 @@ function getLicenseStatusVariant(
 }
 
 function getLicenseStatusLabel(license: LicenseSubscription) {
+  if (license.is_deleted) {
+    return "Silinmiş";
+  }
+
   if (!license.is_active) {
     return "Pasif";
   }
@@ -550,6 +559,7 @@ export function LicensesPage() {
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showDeleted, setShowDeleted] = useState(false);
   const [selectedLicense, setSelectedLicense] =
     useState<LicenseSubscription | null>(null);
   const [formMode, setFormMode] = useState<LicenseFormMode | null>(null);
@@ -563,24 +573,28 @@ export function LicensesPage() {
       type,
     };
 
-    if (statusFilter === "active") {
+    if (showDeleted) {
+      nextFilters.deleted = "true";
+    }
+
+    if (!showDeleted && statusFilter === "active") {
       nextFilters.is_active = "true";
     }
 
-    if (statusFilter === "inactive") {
+    if (!showDeleted && statusFilter === "inactive") {
       nextFilters.is_active = "false";
     }
 
-    if (statusFilter === "expired") {
+    if (!showDeleted && statusFilter === "expired") {
       nextFilters.expired = "true";
     }
 
-    if (statusFilter === "upcoming") {
+    if (!showDeleted && statusFilter === "upcoming") {
       nextFilters.upcoming = "true";
     }
 
     return nextFilters;
-  }, [search, type, statusFilter]);
+  }, [search, type, statusFilter, showDeleted]);
 
   const licensesQuery = useLicenseSubscriptions(filters);
   const summaryQuery = useLicenseSubscriptionSummary();
@@ -589,6 +603,7 @@ export function LicensesPage() {
   const createMutation = useCreateLicenseSubscription();
   const updateMutation = useUpdateLicenseSubscription();
   const deleteMutation = useDeleteLicenseSubscription();
+  const restoreMutation = useRestoreLicenseSubscription();
 
   const licenses = licensesQuery.data ?? [];
   const summary = summaryQuery.data;
@@ -597,7 +612,8 @@ export function LicensesPage() {
   const isSubmitting =
     createMutation.isPending ||
     updateMutation.isPending ||
-    deleteMutation.isPending;
+    deleteMutation.isPending ||
+    restoreMutation.isPending;
 
   const isInitialLoading =
     licensesQuery.isLoading || summaryQuery.isLoading || assetsQuery.isLoading;
@@ -690,6 +706,36 @@ export function LicensesPage() {
     }
   }
 
+  async function handleRestore(license: LicenseSubscription) {
+    const confirmed = window.confirm(
+      `"${license.name}" kaydı geri yüklenecek. Devam edilsin mi?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await restoreMutation.mutateAsync(license.id);
+
+      setToast({
+        type: "success",
+        message: "Lisans/abonelik kaydı geri yüklendi.",
+      });
+
+      if (selectedLicense?.id === license.id) {
+        setSelectedLicense(null);
+      }
+
+      refetchAll();
+    } catch (error) {
+      setToast({
+        type: "error",
+        message: getMutationErrorMessage(error),
+      });
+    }
+  }
+
   if (isInitialLoading) {
     return (
       <AppShell>
@@ -733,7 +779,7 @@ export function LicensesPage() {
                 {licensesQuery.isFetching ? "Yenileniyor" : "Veriyi yenile"}
               </GlowButton>
 
-              {userCanManage && (
+              {userCanManage && !showDeleted && (
                 <GlowButton
                   icon={<IconPlus size={16} aria-hidden={true} />}
                   onClick={openCreateForm}
@@ -789,7 +835,7 @@ export function LicensesPage() {
         </section>
 
         <DataCard className="mt-lg p-lg">
-          <div className="grid gap-md xl:grid-cols-[1fr_220px_220px_260px]">
+          <div className="grid gap-md xl:grid-cols-[1fr_220px_220px_220px_260px]">
             <label className="flex items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm shadow-panel">
               <IconSearch
                 size={18}
@@ -817,10 +863,11 @@ export function LicensesPage() {
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none disabled:opacity-60"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
               aria-label="Durum filtresi"
+              disabled={showDeleted}
             >
               <option value="">Tüm durumlar</option>
               <option value="active">Aktif</option>
@@ -828,6 +875,21 @@ export function LicensesPage() {
               <option value="upcoming">30 gün içinde yenilenecek</option>
               <option value="expired">Süresi dolan</option>
             </select>
+
+            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel">
+              <input
+                type="checkbox"
+                checked={showDeleted}
+                onChange={(event) => {
+                  setShowDeleted(event.target.checked);
+
+                  if (event.target.checked) {
+                    setStatusFilter("");
+                  }
+                }}
+              />
+              <span>Silinenleri göster</span>
+            </label>
 
             <div className="rounded-app border border-border bg-surface-1 px-md py-sm text-caption text-text-secondary shadow-panel">
               30 gün yenileme maliyeti:
@@ -840,12 +902,18 @@ export function LicensesPage() {
 
         <section className="mt-lg">
           <DataTable
-            title="Lisans ve abonelik listesi"
+            title={
+              showDeleted
+                ? "Silinen lisans ve abonelikler"
+                : "Lisans ve abonelik listesi"
+            }
             description={`${licenses.length} kayıt görüntüleniyor.`}
           >
             {!licenses.length ? (
               <div className="rounded-app border border-border bg-surface-1 p-lg text-center text-text-secondary">
-                Filtrelere uygun lisans veya abonelik bulunamadı.
+                {showDeleted
+                  ? "Silinen lisans veya abonelik bulunamadı."
+                  : "Filtrelere uygun lisans veya abonelik bulunamadı."}
               </div>
             ) : (
               <table className="w-full min-w-[1360px] border-separate border-spacing-0 text-left text-body">
@@ -885,7 +953,9 @@ export function LicensesPage() {
                   {licenses.map((license) => (
                     <tr
                       key={license.id}
-                      className="transition hover:bg-surface-1"
+                      className={`transition hover:bg-surface-1 ${
+                        license.is_deleted ? "opacity-70" : ""
+                      }`}
                     >
                       <td className="border-b border-border px-md py-md">
                         <p className="text-text-primary">{license.name}</p>
@@ -948,24 +1018,47 @@ export function LicensesPage() {
 
                           {userCanManage && (
                             <>
-                              <GlowButton
-                                variant="ghost"
-                                onClick={() => openEditForm(license)}
-                                icon={<IconEdit size={16} aria-hidden={true} />}
-                              >
-                                Düzenle
-                              </GlowButton>
+                              {license.is_deleted ? (
+                                <GlowButton
+                                  variant="ghost"
+                                  onClick={() => handleRestore(license)}
+                                  disabled={isSubmitting}
+                                  icon={
+                                    <IconRefresh
+                                      size={16}
+                                      aria-hidden={true}
+                                    />
+                                  }
+                                >
+                                  Geri Yükle
+                                </GlowButton>
+                              ) : (
+                                <>
+                                  <GlowButton
+                                    variant="ghost"
+                                    onClick={() => openEditForm(license)}
+                                    icon={
+                                      <IconEdit size={16} aria-hidden={true} />
+                                    }
+                                  >
+                                    Düzenle
+                                  </GlowButton>
 
-                              <GlowButton
-                                variant="ghost"
-                                onClick={() => handleDelete(license)}
-                                disabled={isSubmitting}
-                                icon={
-                                  <IconTrash size={16} aria-hidden={true} />
-                                }
-                              >
-                                Sil
-                              </GlowButton>
+                                  <GlowButton
+                                    variant="ghost"
+                                    onClick={() => handleDelete(license)}
+                                    disabled={isSubmitting}
+                                    icon={
+                                      <IconTrash
+                                        size={16}
+                                        aria-hidden={true}
+                                      />
+                                    }
+                                  >
+                                    Sil
+                                  </GlowButton>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
@@ -996,15 +1089,25 @@ export function LicensesPage() {
                   </StatusBadge>
                 </div>
 
-                {userCanManage && (
-                  <GlowButton
-                    variant="ghost"
-                    icon={<IconEdit size={16} aria-hidden={true} />}
-                    onClick={() => openEditForm(selectedLicense)}
-                  >
-                    Düzenle
-                  </GlowButton>
-                )}
+                {userCanManage &&
+                  (selectedLicense.is_deleted ? (
+                    <GlowButton
+                      variant="ghost"
+                      icon={<IconRefresh size={16} aria-hidden={true} />}
+                      onClick={() => handleRestore(selectedLicense)}
+                      disabled={isSubmitting}
+                    >
+                      Geri Yükle
+                    </GlowButton>
+                  ) : (
+                    <GlowButton
+                      variant="ghost"
+                      icon={<IconEdit size={16} aria-hidden={true} />}
+                      onClick={() => openEditForm(selectedLicense)}
+                    >
+                      Düzenle
+                    </GlowButton>
+                  ))}
               </div>
 
               <div className="grid gap-md sm:grid-cols-2">
@@ -1069,6 +1172,14 @@ export function LicensesPage() {
                 <DetailRow
                   label="Otomatik yenileme"
                   value={selectedLicense.auto_renew ? "Evet" : "Hayır"}
+                />
+                <DetailRow
+                  label="Silinme tarihi"
+                  value={
+                    selectedLicense.is_deleted
+                      ? formatDate(selectedLicense.deleted_at)
+                      : null
+                  }
                 />
               </div>
 
