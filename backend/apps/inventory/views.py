@@ -4,8 +4,16 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
+from apps.audit.models import AuditLog
+from apps.audit.services import create_audit_log, serialize_instance
 from apps.inventory.models import Asset, AssetCategory
 from apps.inventory.serializers import AssetCategorySerializer, AssetSerializer
+
+
+ASSET_AUDIT_EXCLUDE_FIELDS = (
+    "created_at",
+    "updated_at",
+)
 
 
 class AssetCategoryViewSet(viewsets.ModelViewSet):
@@ -102,19 +110,81 @@ class AssetViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(
+        asset = serializer.save(
             created_by=self.request.user,
             updated_by=self.request.user,
         )
 
+        create_audit_log(
+            request=self.request,
+            action=AuditLog.Action.CREATE,
+            instance=asset,
+            before={},
+            after=serialize_instance(
+                asset,
+                exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+            ),
+            metadata={
+                "module": "inventory",
+                "operation": "asset_create",
+            },
+        )
+
     def perform_update(self, serializer):
-        serializer.save(
+        instance = self.get_object()
+
+        before = serialize_instance(
+            instance,
+            exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        asset = serializer.save(
             updated_by=self.request.user,
         )
 
+        after = serialize_instance(
+            asset,
+            exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=self.request,
+            action=AuditLog.Action.UPDATE,
+            instance=asset,
+            before=before,
+            after=after,
+            skip_if_no_changes=True,
+            metadata={
+                "module": "inventory",
+                "operation": "asset_update",
+            },
+        )
     def destroy(self, request, *args, **kwargs):
         asset = self.get_object()
+
+        before = serialize_instance(
+            asset,
+            exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+        )
+
         asset.soft_delete(user=request.user)
+
+        after = serialize_instance(
+            asset,
+            exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=request,
+            action=AuditLog.Action.DELETE,
+            instance=asset,
+            before=before,
+            after=after,
+            metadata={
+                "module": "inventory",
+                "operation": "asset_soft_delete",
+            },
+        )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -128,7 +198,29 @@ class AssetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        before = serialize_instance(
+            asset,
+            exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+        )
+
         asset.restore(user=request.user)
+
+        after = serialize_instance(
+            asset,
+            exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=request,
+            action=AuditLog.Action.RESTORE,
+            instance=asset,
+            before=before,
+            after=after,
+            metadata={
+                "module": "inventory",
+                "operation": "asset_restore",
+            },
+        )
 
         serializer = self.get_serializer(asset)
 
