@@ -8,7 +8,7 @@ import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
 import { MaintenancePage } from "./pages/MaintenancePage";
 import { LicensesPage } from "./pages/LicensesPage";
-
+import { RemindersPage } from "./pages/RemindersPage";
 export default function App() {
   return (
     <Routes>
@@ -27,15 +27,7 @@ export default function App() {
         
         <Route path="/maintenance" element={<MaintenancePage />} />
 
-        <Route
-          path="/reminders"
-          element={
-            <PlaceholderPage
-              title="Hatırlatıcılar"
-              description="Garanti, bakım ve lisans kaynaklı görünür hatırlatıcılar burada listelenecek."
-            />
-          }
-        />
+        <Route path="/reminders" element={<RemindersPage />} />
 
         <Route
           path="*"
