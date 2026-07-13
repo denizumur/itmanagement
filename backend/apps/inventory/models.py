@@ -173,13 +173,21 @@ class Asset(TimeStampedModel, SoftDeleteModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["serial_number"],
-                condition=Q(serial_number__isnull=False) & ~Q(serial_number=""),
-                name="unique_non_empty_asset_serial_number",
+                condition=(
+                    Q(is_deleted=False)
+                    & Q(serial_number__isnull=False)
+                    & ~Q(serial_number="")
+                ),
+                name="unique_active_asset_serial_number",
             ),
             models.UniqueConstraint(
                 fields=["inventory_code"],
-                condition=Q(inventory_code__isnull=False) & ~Q(inventory_code=""),
-                name="unique_non_empty_asset_inventory_code",
+                condition=(
+                    Q(is_deleted=False)
+                    & Q(inventory_code__isnull=False)
+                    & ~Q(inventory_code="")
+                ),
+                name="unique_active_asset_inventory_code",
             ),
         ]
 
@@ -210,11 +218,11 @@ class Asset(TimeStampedModel, SoftDeleteModel):
                 )
 
     def save(self, *args, **kwargs):
-        if self.serial_number == "":
-            self.serial_number = None
+        if isinstance(self.serial_number, str):
+            self.serial_number = self.serial_number.strip() or None
 
-        if self.inventory_code == "":
-            self.inventory_code = None
+        if isinstance(self.inventory_code, str):
+            self.inventory_code = self.inventory_code.strip() or None
 
         self.full_clean()
         super().save(*args, **kwargs)

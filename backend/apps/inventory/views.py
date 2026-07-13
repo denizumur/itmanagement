@@ -1,15 +1,16 @@
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
+from apps.assignments.serializers import AssignmentSerializer
+from apps.assignments.services import create_assignment_for_asset
 from apps.audit.models import AuditLog
 from apps.audit.services import create_audit_log, serialize_instance
 from apps.inventory.models import Asset, AssetCategory
 from apps.inventory.serializers import AssetCategorySerializer, AssetSerializer
-
-
 ASSET_AUDIT_EXCLUDE_FIELDS = (
     "created_at",
     "updated_at",
@@ -108,7 +109,22 @@ class AssetViewSet(viewsets.ModelViewSet):
             )
 
         return queryset
-
+    
+    def create_asset_audit_log(self, asset, operation="asset_create"):
+        create_audit_log(
+            request=self.request,
+            action=AuditLog.Action.CREATE,
+            instance=asset,
+            before={},
+            after=serialize_instance(
+                asset,
+                exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+            ),
+            metadata={
+                "module": "inventory",
+                "operation": operation,
+            },
+        )
     def perform_create(self, serializer):
         asset = serializer.save(
             created_by=self.request.user,
@@ -187,7 +203,76 @@ class AssetViewSet(viewsets.ModelViewSet):
         )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    @transaction.atomic
+    @action(detail=False, methods=["post"], url_path="create-with-assignment")
+    def create_with_assignment(self, request):
+        asset_payload = request.data.get("asset")
+        assignment_payload = request.data.get("assignment")
 
+        if not isinstance(asset_payload, dict):
+            return Response(
+                {"asset": "asset alanı zorunlu ve object tipinde olmalıdır."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(assignment_payload, dict):
+            return Response(
+                {
+                    "assignment": (
+                        "assignment alanı zorunlu ve object tipinde olmalıdır."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        asset_serializer = self.get_serializer(data=asset_payload)
+        asset_serializer.is_valid(raise_exception=True)
+
+        asset = asset_serializer.save(
+            created_by=request.user,
+            updated_by=request.user,
+        )
+
+        self.create_asset_audit_log(
+            asset,
+            operation="asset_create_with_assignment",
+        )
+
+        assignment_data = {
+            **assignment_payload,
+            "asset": asset.id,
+        }
+
+        assignment_serializer = AssignmentSerializer(
+            data=assignment_data,
+            context={"request": request},
+        )
+        assignment_serializer.is_valid(raise_exception=True)
+
+        assignment = create_assignment_for_asset(
+            asset=asset,
+            employee=assignment_serializer.validated_data["employee"],
+            assigned_at=assignment_serializer.validated_data.get("assigned_at"),
+            notes=assignment_serializer.validated_data.get("notes", ""),
+            assigned_by=request.user,
+            request=request,
+        )
+
+        asset_serializer = self.get_serializer(asset)
+        assignment_serializer = AssignmentSerializer(
+            assignment,
+            context={"request": request},
+        )
+
+        return Response(
+            {
+                "asset": asset_serializer.data,
+                "assignment": assignment_serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+    
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
         asset = Asset.all_objects.filter(pk=pk).first()
@@ -203,24 +288,42 @@ class AssetViewSet(viewsets.ModelViewSet):
             exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
         )
 
-        asset.restore(user=request.user)
+        try:
+            with transaction.atomic():
+                asset.restore(user=request.user)
 
-        after = serialize_instance(
-            asset,
-            exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
-        )
+                after = serialize_instance(
+                    asset,
+                    exclude=ASSET_AUDIT_EXCLUDE_FIELDS,
+                )
 
-        create_audit_log(
-            request=request,
-            action=AuditLog.Action.RESTORE,
-            instance=asset,
-            before=before,
-            after=after,
-            metadata={
-                "module": "inventory",
-                "operation": "asset_restore",
-            },
-        )
+                create_audit_log(
+                    request=request,
+                    action=AuditLog.Action.RESTORE,
+                    instance=asset,
+                    before=before,
+                    after=after,
+                    metadata={
+                        "module": "inventory",
+                        "operation": "asset_restore",
+                    },
+                )
+        except IntegrityError as exc:
+            if (
+                "unique_active_asset_serial_number" in str(exc)
+                or "unique_active_asset_inventory_code" in str(exc)
+            ):
+                return Response(
+                    {
+                        "detail": (
+                            "Bu seri numarası veya envanter kodu aktif başka "
+                            "bir varlıkta kullanılıyor. Geri yükleme yapılamadı."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            raise
 
         serializer = self.get_serializer(asset)
 

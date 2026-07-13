@@ -1,10 +1,10 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+from apps.assignments.services import create_assignment_for_asset
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
 from apps.assignments.models import Assignment
 from apps.assignments.serializers import AssignmentSerializer
@@ -23,6 +23,22 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = AssignmentSerializer
     permission_classes = [ReadOnlyForViewerWriteForTechnician]
 
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError as exc:
+            if "unique_active_assignment_per_asset" in str(exc):
+                return Response(
+                    {
+                        "asset": [
+                            "Bu varlık zaten aktif olarak zimmetli."
+                        ]
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            raise
+    
     def get_queryset(self):
         queryset = Assignment.objects.select_related(
             "asset",
@@ -65,15 +81,16 @@ class AssignmentViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
-        assignment = serializer.save(assigned_by=self.request.user)
+        assignment = create_assignment_for_asset(
+            asset=serializer.validated_data["asset"],
+            employee=serializer.validated_data["employee"],
+            assigned_at=serializer.validated_data.get("assigned_at"),
+            notes=serializer.validated_data.get("notes", ""),
+            assigned_by=self.request.user,
+            request=self.request,
+        )
 
-        asset = assignment.asset
-        asset_status_before = asset.status
-
-        asset.status = Asset.Status.ASSIGNED
-        asset.updated_by = self.request.user
-        asset.save(update_fields=["status", "updated_by", "updated_at"])
-
+        serializer.instance = assignment
         create_audit_log(
             request=self.request,
             action=AuditLog.Action.ASSIGN,
