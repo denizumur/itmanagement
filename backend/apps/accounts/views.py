@@ -3,10 +3,14 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView as SimpleJWTTokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView as SimpleJWTTokenRefreshView,
+)
+
 from apps.accounts.serializers import (
     CustomTokenObtainPairSerializer,
     CurrentUserSerializer,
@@ -49,6 +53,16 @@ def clear_refresh_cookie(response):
     )
 
 
+def invalid_refresh_response(message="Oturum süresi doldu. Lütfen tekrar giriş yap."):
+    response = Response(
+        {"detail": message},
+        status=status.HTTP_401_UNAUTHORIZED,
+    )
+    clear_refresh_cookie(response)
+
+    return response
+
+
 class CookieLoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -79,13 +93,14 @@ class CookieRefreshView(APIView):
         refresh_token = request.COOKIES.get(settings.REFRESH_TOKEN_COOKIE_NAME)
 
         if not refresh_token:
-            return Response(
-                {"detail": "Refresh token cookie bulunamadı."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            return invalid_refresh_response("Refresh token cookie bulunamadı.")
 
         serializer = TokenRefreshSerializer(data={"refresh": refresh_token})
-        serializer.is_valid(raise_exception=True)
+
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError:
+            return invalid_refresh_response()
 
         data = serializer.validated_data
 
@@ -121,4 +136,5 @@ class LogoutView(APIView):
                 pass
 
         clear_refresh_cookie(response)
+
         return response
