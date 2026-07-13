@@ -8,7 +8,15 @@ from rest_framework.response import Response
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
 from apps.assignments.models import Assignment
 from apps.assignments.serializers import AssignmentSerializer
+from apps.audit.models import AuditLog
+from apps.audit.services import create_audit_log, serialize_instance
 from apps.inventory.models import Asset
+
+
+ASSIGNMENT_AUDIT_EXCLUDE_FIELDS = (
+    "created_at",
+    "updated_at",
+)
 
 
 class AssignmentViewSet(viewsets.ModelViewSet):
@@ -60,13 +68,61 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignment = serializer.save(assigned_by=self.request.user)
 
         asset = assignment.asset
+        asset_status_before = asset.status
+
         asset.status = Asset.Status.ASSIGNED
         asset.updated_by = self.request.user
         asset.save(update_fields=["status", "updated_by", "updated_at"])
 
+        create_audit_log(
+            request=self.request,
+            action=AuditLog.Action.ASSIGN,
+            instance=assignment,
+            before={},
+            after=serialize_instance(
+                assignment,
+                exclude=ASSIGNMENT_AUDIT_EXCLUDE_FIELDS,
+            ),
+            metadata={
+                "module": "assignments",
+                "operation": "assignment_create",
+                "asset_id": assignment.asset_id,
+                "employee_id": assignment.employee_id,
+                "asset_status_before": asset_status_before,
+                "asset_status_after": asset.status,
+            },
+        )
+
     @transaction.atomic
     def perform_update(self, serializer):
-        serializer.save()
+        instance = self.get_object()
+
+        before = serialize_instance(
+            instance,
+            exclude=ASSIGNMENT_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        assignment = serializer.save()
+
+        after = serialize_instance(
+            assignment,
+            exclude=ASSIGNMENT_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=self.request,
+            action=AuditLog.Action.UPDATE,
+            instance=assignment,
+            before=before,
+            after=after,
+            skip_if_no_changes=True,
+            metadata={
+                "module": "assignments",
+                "operation": "assignment_update",
+                "asset_id": assignment.asset_id,
+                "employee_id": assignment.employee_id,
+            },
+        )
 
     def destroy(self, request, *args, **kwargs):
         return Response(
@@ -119,6 +175,11 @@ class AssignmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        before = serialize_instance(
+            assignment,
+            exclude=ASSIGNMENT_AUDIT_EXCLUDE_FIELDS,
+        )
+
         return_notes = request.data.get("return_notes", "")
 
         assignment.returned_at = timezone.now()
@@ -127,9 +188,32 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         assignment.save()
 
         asset = assignment.asset
+        asset_status_before = asset.status
+
         asset.status = Asset.Status.IN_STOCK
         asset.updated_by = request.user
         asset.save(update_fields=["status", "updated_by", "updated_at"])
+
+        after = serialize_instance(
+            assignment,
+            exclude=ASSIGNMENT_AUDIT_EXCLUDE_FIELDS,
+        )
+
+        create_audit_log(
+            request=request,
+            action=AuditLog.Action.RETURN,
+            instance=assignment,
+            before=before,
+            after=after,
+            metadata={
+                "module": "assignments",
+                "operation": "assignment_return",
+                "asset_id": assignment.asset_id,
+                "employee_id": assignment.employee_id,
+                "asset_status_before": asset_status_before,
+                "asset_status_after": asset.status,
+            },
+        )
 
         serializer = self.get_serializer(assignment)
 
