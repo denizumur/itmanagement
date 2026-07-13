@@ -11,14 +11,17 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView as SimpleJWTTokenRefreshView,
 )
 
+from apps.accounts.security import validate_auth_origin
 from apps.accounts.serializers import (
     CustomTokenObtainPairSerializer,
     CurrentUserSerializer,
 )
+from apps.accounts.throttles import LoginRateThrottle
 
 
 class LoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
 
 
 class RefreshTokenView(SimpleJWTTokenRefreshView):
@@ -65,8 +68,13 @@ def invalid_refresh_response(message="Oturum süresi doldu. Lütfen tekrar giri�
 
 class CookieLoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
+        origin_error = validate_auth_origin(request)
+        if origin_error:
+            return origin_error
+
         serializer = CustomTokenObtainPairSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -90,6 +98,10 @@ class CookieRefreshView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        origin_error = validate_auth_origin(request)
+        if origin_error:
+            return origin_error
+
         refresh_token = request.COOKIES.get(settings.REFRESH_TOKEN_COOKIE_NAME)
 
         if not refresh_token:
@@ -122,6 +134,10 @@ class LogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        origin_error = validate_auth_origin(request)
+        if origin_error:
+            return origin_error
+
         response = Response({"detail": "Çıkış yapıldı."})
 
         refresh_token = (

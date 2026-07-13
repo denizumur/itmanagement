@@ -143,7 +143,15 @@ CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
     default=["http://localhost:5173", "http://127.0.0.1:5173"],
 )
+AUTH_COOKIE_REQUIRE_ORIGIN = env.bool(
+    "AUTH_COOKIE_REQUIRE_ORIGIN",
+    default=not DEBUG,
+)
 
+AUTH_COOKIE_ALLOWED_ORIGINS = env.list(
+    "AUTH_COOKIE_ALLOWED_ORIGINS",
+    default=[],
+)
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -160,6 +168,9 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.MultiPartParser",
         "rest_framework.parsers.FormParser",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "login": env("LOGIN_THROTTLE_RATE", default="5/5m"),
+    },
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "IT Envanter & Yönetim Platformu API",
