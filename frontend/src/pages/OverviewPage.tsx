@@ -1,7 +1,6 @@
 import { IconRefresh } from "@tabler/icons-react";
 import { AttentionAssetsList } from "../components/dashboard/AttentionAssetsList";
 import { CategoryDoughnutChart } from "../components/dashboard/CategoryDoughnutChart";
-import { MetricCard } from "../components/dashboard/MetricCard";
 import { NotificationOverviewPanel } from "../components/dashboard/NotificationOverviewPanel";
 import { UpcomingLicensesPanel } from "../components/dashboard/UpcomingLicensesPanel";
 import { ErrorState } from "../components/common/ErrorState";
@@ -26,12 +25,7 @@ export function OverviewPage() {
   if (isLoading) {
     return (
       <AppShell>
-        <div className="grid gap-md md:grid-cols-4">
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-        </div>
+        <Skeleton className="h-48" />
 
         <div className="mt-lg grid gap-lg xl:grid-cols-[1.3fr_1fr]">
           <Skeleton className="h-80" />
@@ -58,7 +52,7 @@ export function OverviewPage() {
       <PageTransition>
         <PageHeader
           title="Genel bakış"
-          description="Bugün dikkat gerektiren envanter, lisans, bakım, ticket ve hatırlatıcı durumlarını tek ekranda izle."
+          description="Bugün dikkat gerektiren ticket, hatırlatıcı, lisans ve varlık risklerini tek ekranda izle."
           actions={
             <GlowButton
               variant="ghost"
@@ -73,12 +67,6 @@ export function OverviewPage() {
             </GlowButton>
           }
         />
-
-        <section className="grid gap-md md:grid-cols-2 xl:grid-cols-4">
-          {data.metric_cards.map((card) => (
-            <MetricCard key={card.key} card={card} />
-          ))}
-        </section>
 
         <section className="mt-lg">
           <NotificationOverviewPanel
