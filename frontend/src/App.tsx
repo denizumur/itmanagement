@@ -11,7 +11,7 @@ import { LicensesPage } from "./pages/LicensesPage";
 import { RemindersPage } from "./pages/RemindersPage";
 import { MyTicketsPage } from "./pages/MyTicketsPage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
-
+import { TicketsQueuePage } from "./pages/TicketsQueuePage";
 const operationalRoles = ["admin", "technician", "viewer"] as const;
 const requesterRoles = ["requester"] as const;
 const approverRoles = ["approver"] as const;
@@ -36,6 +36,7 @@ export default function App() {
         <Route path="/licenses" element={<LicensesPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/reminders" element={<RemindersPage />} />
+        <Route path="/tickets" element={<TicketsQueuePage />} />
       </Route>
 
       <Route

@@ -13,6 +13,7 @@ import { cn } from "../../lib/cn";
 
 const items = [
   { to: "/", label: "Genel bakış", icon: IconDashboard },
+  { to: "/tickets", label: "Ticketlar", icon: IconClipboardList },
   { to: "/workspace", label: "Çalışma alanı", icon: IconClipboardList },
   { to: "/assets", label: "Envanter", icon: IconDevices },
   { to: "/assignments", label: "Zimmet", icon: IconUsers },
