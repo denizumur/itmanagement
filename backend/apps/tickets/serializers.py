@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from apps.accounts.models import UserProfile
-from apps.tickets.models import Ticket, TicketComment
+from apps.tickets.models import Ticket, TicketApproval, TicketComment
 
 User = get_user_model()
 
@@ -14,6 +14,7 @@ class TicketSerializer(serializers.ModelSerializer):
 
     assigned_to_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    pending_approver_name = serializers.SerializerMethodField()
 
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     priority_label = serializers.CharField(source="get_priority_display", read_only=True)
@@ -42,6 +43,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "priority_label",
             "approval_status",
             "approval_status_label",
+            "pending_approver_name",
             "status",
             "status_label",
             "assigned_to",
@@ -58,6 +60,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "id",
             "employee",
             "approval_status",
+            "pending_approver_name",
             "status",
             "assigned_to",
             "created_by",
@@ -87,6 +90,21 @@ class TicketSerializer(serializers.ModelSerializer):
         full_name = obj.created_by.get_full_name()
         return full_name or obj.created_by.username
 
+    def get_pending_approver_name(self, obj):
+        approval = next(
+            (
+                item
+                for item in obj.approvals.all()
+                if item.status == TicketApproval.Status.PENDING
+            ),
+            None,
+        )
+
+        if not approval:
+            return None
+
+        return approval.approver.full_name
+
 
 class TicketCreateSerializer(serializers.Serializer):
     asset = serializers.IntegerField(required=False, allow_null=True)
@@ -113,9 +131,7 @@ class TicketCreateSerializer(serializers.Serializer):
         value = value.strip()
 
         if len(value) < 10:
-            raise serializers.ValidationError(
-                "Açıklama en az 10 karakter olmalı."
-            )
+            raise serializers.ValidationError("Açıklama en az 10 karakter olmalı.")
 
         return value
 
@@ -146,6 +162,51 @@ class TicketAssignSerializer(serializers.Serializer):
             )
 
         return user
+
+
+class TicketApprovalDecisionSerializer(serializers.Serializer):
+    decision_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+    )
+
+
+class TicketApprovalSerializer(serializers.ModelSerializer):
+    ticket = TicketSerializer(read_only=True)
+    approver_name = serializers.CharField(source="approver.full_name", read_only=True)
+    approver_username = serializers.CharField(
+        source="approver_user.username",
+        read_only=True,
+        allow_null=True,
+    )
+    requested_by_username = serializers.CharField(
+        source="requested_by.username",
+        read_only=True,
+        allow_null=True,
+    )
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = TicketApproval
+        fields = [
+            "id",
+            "ticket",
+            "approver",
+            "approver_name",
+            "approver_user",
+            "approver_username",
+            "requested_by",
+            "requested_by_username",
+            "status",
+            "status_label",
+            "decision_note",
+            "requested_at",
+            "decided_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
 
 
 class TicketCommentSerializer(serializers.ModelSerializer):

@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 from apps.employees.models import Employee
 from apps.inventory.models import Asset
@@ -125,6 +126,94 @@ class Ticket(models.Model):
 
     def __str__(self):
         return f"#{self.id} - {self.title}"
+
+
+class TicketApproval(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Onay bekliyor"
+        APPROVED = "approved", "Onaylandı"
+        REJECTED = "rejected", "Reddedildi"
+
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="approvals",
+    )
+    approver = models.ForeignKey(
+        Employee,
+        on_delete=models.PROTECT,
+        related_name="ticket_approvals",
+        help_text="Talebi onaylayacak yönetici/personel.",
+    )
+    approver_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="ticket_approvals_to_decide",
+        null=True,
+        blank=True,
+        help_text="Onayı verecek sistem kullanıcısı.",
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="ticket_approvals_requested",
+        null=True,
+        blank=True,
+    )
+
+    status = models.CharField(
+        max_length=30,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    decision_note = models.TextField(blank=True)
+
+    requested_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Ticket Onayı"
+        verbose_name_plural = "Ticket Onayları"
+        ordering = ["-requested_at"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["approver_user", "status"]),
+            models.Index(fields=["ticket", "status"]),
+            models.Index(fields=["requested_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ticket", "approver_user"],
+                condition=Q(status="pending"),
+                name="unique_pending_approval_per_ticket_approver",
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if self.approver and self.approver.user and self.approver_user:
+            if self.approver.user_id != self.approver_user_id:
+                raise ValidationError(
+                    {
+                        "approver_user": (
+                            "approver_user, approver personelinin bağlı olduğu user olmalıdır."
+                        )
+                    }
+                )
+
+    def save(self, *args, **kwargs):
+        if self.approver and self.approver.user and not self.approver_user:
+            self.approver_user = self.approver.user
+
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Ticket #{self.ticket_id} - {self.get_status_display()}"
 
 
 class TicketComment(models.Model):
