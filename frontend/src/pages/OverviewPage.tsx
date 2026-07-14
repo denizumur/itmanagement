@@ -2,6 +2,7 @@ import { IconRefresh } from "@tabler/icons-react";
 import { AttentionAssetsList } from "../components/dashboard/AttentionAssetsList";
 import { CategoryDoughnutChart } from "../components/dashboard/CategoryDoughnutChart";
 import { MetricCard } from "../components/dashboard/MetricCard";
+import { NotificationOverviewPanel } from "../components/dashboard/NotificationOverviewPanel";
 import { UpcomingLicensesPanel } from "../components/dashboard/UpcomingLicensesPanel";
 import { ErrorState } from "../components/common/ErrorState";
 import { Skeleton } from "../components/common/Skeleton";
@@ -10,10 +11,17 @@ import { GlowButton } from "../components/ui/GlowButton";
 import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
 import { useDashboardOverview } from "../hooks/useDashboardOverview";
+import { useNotificationCenter } from "../hooks/useNotificationCenter";
 
 export function OverviewPage() {
   const { data, isLoading, isError, refetch, isFetching } =
     useDashboardOverview();
+
+  const {
+    data: notifications,
+    isLoading: isNotificationsLoading,
+    refetch: refetchNotifications,
+  } = useNotificationCenter();
 
   if (isLoading) {
     return (
@@ -42,15 +50,22 @@ export function OverviewPage() {
   }
 
   return (
-    <AppShell reminderCount={data.metrics.visible_pending_reminders}>
+    <AppShell
+      reminderCount={
+        notifications?.counts.normal ?? data.metrics.visible_pending_reminders
+      }
+    >
       <PageTransition>
         <PageHeader
           title="Genel bakış"
-          description="Bugün dikkat gerektiren envanter, lisans, bakım ve hatırlatıcı durumlarını tek ekranda izle."
+          description="Bugün dikkat gerektiren envanter, lisans, bakım, ticket ve hatırlatıcı durumlarını tek ekranda izle."
           actions={
             <GlowButton
               variant="ghost"
-              onClick={() => refetch()}
+              onClick={() => {
+                refetch();
+                refetchNotifications();
+              }}
               disabled={isFetching}
               icon={<IconRefresh size={16} aria-hidden="true" />}
             >
@@ -63,6 +78,13 @@ export function OverviewPage() {
           {data.metric_cards.map((card) => (
             <MetricCard key={card.key} card={card} />
           ))}
+        </section>
+
+        <section className="mt-lg">
+          <NotificationOverviewPanel
+            overview={notifications?.overview}
+            isLoading={isNotificationsLoading}
+          />
         </section>
 
         <section className="mt-lg grid gap-lg xl:grid-cols-[1.3fr_1fr]">
