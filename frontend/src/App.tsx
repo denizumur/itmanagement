@@ -9,6 +9,8 @@ import { WorkspacePage } from "./pages/WorkspacePage";
 import { MaintenancePage } from "./pages/MaintenancePage";
 import { LicensesPage } from "./pages/LicensesPage";
 import { RemindersPage } from "./pages/RemindersPage";
+import { MyTicketsPage } from "./pages/MyTicketsPage";
+import { ApprovalsPage } from "./pages/ApprovalsPage";
 
 const operationalRoles = ["admin", "technician", "viewer"] as const;
 const requesterRoles = ["requester"] as const;
@@ -44,15 +46,7 @@ export default function App() {
           />
         }
       >
-        <Route
-          path="/my-tickets"
-          element={
-            <PlaceholderPage
-              title="Benim Ticketlarım"
-              description="Requester kullanıcıları için sade ticket ekranı N1/N2 fazında eklenecek."
-            />
-          }
-        />
+        <Route path="/my-tickets" element={<MyTicketsPage />} />
       </Route>
 
       <Route
@@ -63,15 +57,7 @@ export default function App() {
           />
         }
       >
-        <Route
-          path="/approvals"
-          element={
-            <PlaceholderPage
-              title="Onay Kuyruğum"
-              description="Approver kullanıcıları için onay kuyruğu N4 fazında eklenecek."
-            />
-          }
-        />
+        <Route path="/approvals" element={<ApprovalsPage />} />
       </Route>
 
       <Route
