@@ -1,6 +1,8 @@
 import { api } from "./http";
 import type {
   Ticket,
+  TicketApproval,
+  TicketApprovalDecisionPayload,
   TicketComment,
   TicketCommentCreatePayload,
   TicketCreatePayload,
@@ -19,6 +21,33 @@ export async function createTicket(payload: TicketCreatePayload) {
 
 export async function fetchTicketQueue() {
   const response = await api.get<Ticket[]>("/api/tickets/queue/");
+  return response.data;
+}
+
+export async function fetchTicketApprovals() {
+  const response = await api.get<TicketApproval[]>("/api/tickets/approvals/");
+  return response.data;
+}
+
+export async function approveTicket(
+  ticketId: number,
+  payload: TicketApprovalDecisionPayload
+) {
+  const response = await api.post<Ticket>(
+    `/api/tickets/${ticketId}/approve/`,
+    payload
+  );
+  return response.data;
+}
+
+export async function rejectTicket(
+  ticketId: number,
+  payload: TicketApprovalDecisionPayload
+) {
+  const response = await api.post<Ticket>(
+    `/api/tickets/${ticketId}/reject/`,
+    payload
+  );
   return response.data;
 }
 

@@ -1,12 +1,13 @@
 import axios from "axios";
-import {useEffect, useMemo, useState } from "react";
-import type { FormEvent } from 'react';
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { createTicket, fetchMyTickets } from "../api/tickets";
 import { SimplePortalShell } from "../components/layout/SimplePortalShell";
 import { DataTable } from "../components/ui/DataTable";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import type {
   Ticket,
+  TicketApprovalStatus,
   TicketCategory,
   TicketCreatePayload,
   TicketPriority,
@@ -37,6 +38,19 @@ const priorityMeta: Record<
   normal: { label: "Normal", variant: "accent" },
   high: { label: "Yüksek", variant: "warning" },
   urgent: { label: "Acil", variant: "danger" },
+};
+
+const approvalMeta: Record<
+  TicketApprovalStatus,
+  {
+    label: string;
+    variant: "accent" | "success" | "warning" | "danger" | "neutral";
+  }
+> = {
+  not_required: { label: "Onay gerekmiyor", variant: "neutral" },
+  pending: { label: "Onay bekliyor", variant: "warning" },
+  approved: { label: "Onaylandı", variant: "success" },
+  rejected: { label: "Reddedildi", variant: "danger" },
 };
 
 const categoryOptions: Array<{ value: TicketCategory; label: string }> = [
@@ -119,8 +133,9 @@ export function MyTicketsPage() {
   const summary = useMemo(() => {
     return {
       open: tickets.filter((ticket) => ticket.status === "open").length,
-      inProgress: tickets.filter((ticket) => ticket.status === "in_progress")
-        .length,
+      pendingApproval: tickets.filter(
+        (ticket) => ticket.approval_status === "pending"
+      ).length,
       completed: tickets.filter((ticket) =>
         ["resolved", "closed"].includes(ticket.status)
       ).length,
@@ -160,13 +175,14 @@ export function MyTicketsPage() {
     <SimplePortalShell
       badge="Requester Portalı"
       title="Benim Ticketlarım"
-      subtitle="IT taleplerini buradan oluşturabilir ve mevcut taleplerinin durumunu takip edebilirsin."
+      subtitle="IT taleplerini buradan oluşturabilir ve mevcut taleplerinin onay/çözüm durumunu takip edebilirsin."
     >
       <div className="grid gap-lg lg:grid-cols-[0.9fr_1.1fr]">
         <section className="panel">
           <h2 className="text-h3">Yeni Ticket Oluştur</h2>
           <p className="mt-sm text-body text-text-secondary">
-            Talebini kısa ve anlaşılır şekilde yaz. IT ekibi kuyruğunda görünecek.
+            Talebin departman yöneticisi onayı gerektiriyorsa önce onay kuyruğuna
+            düşer. Onaylanınca IT kuyruğuna aktarılır.
           </p>
 
           <form className="mt-lg space-y-md" onSubmit={handleSubmit}>
@@ -274,12 +290,12 @@ export function MyTicketsPage() {
             </div>
 
             <div className="rounded-2xl border border-border-subtle bg-surface-1 p-md">
-              <p className="text-caption text-text-secondary">İşlemde</p>
-              <p className="mt-xs text-h2">{summary.inProgress}</p>
+              <p className="text-caption text-text-secondary">Onay Bekleyen</p>
+              <p className="mt-xs text-h2">{summary.pendingApproval}</p>
             </div>
 
             <div className="rounded-2xl border border-border-subtle bg-surface-1 p-md">
-              <p className="text-caption text-text-secondary">Tamamlanan</p>
+              <p className="text-caption text-text-secondary">Tamamlanan/Kapanan</p>
               <p className="mt-xs text-h2">{summary.completed}</p>
             </div>
           </div>
@@ -311,6 +327,7 @@ export function MyTicketsPage() {
                   <thead className="text-caption text-text-secondary">
                     <tr>
                       <th className="px-sm py-sm">Başlık</th>
+                      <th className="px-sm py-sm">Onay</th>
                       <th className="px-sm py-sm">Durum</th>
                       <th className="px-sm py-sm">Öncelik</th>
                       <th className="px-sm py-sm">Kategori</th>
@@ -325,16 +342,33 @@ export function MyTicketsPage() {
                         className="border-t border-border-subtle"
                       >
                         <td className="px-sm py-md">
-                          <p className="font-semibold">{ticket.title}</p>
+                          <p className="font-semibold">#{ticket.id} {ticket.title}</p>
                           <p className="mt-xs max-w-md truncate text-caption text-text-secondary">
                             {ticket.description}
                           </p>
+
+                          {ticket.approval_status === "pending" &&
+                            ticket.pending_approver_name && (
+                              <p className="mt-xs text-caption text-text-secondary">
+                                Onaycı: {ticket.pending_approver_name}
+                              </p>
+                            )}
                         </td>
+
+                        <td className="px-sm py-md">
+                          <StatusBadge
+                            variant={approvalMeta[ticket.approval_status].variant}
+                          >
+                            {approvalMeta[ticket.approval_status].label}
+                          </StatusBadge>
+                        </td>
+
                         <td className="px-sm py-md">
                           <StatusBadge variant={statusMeta[ticket.status].variant}>
                             {statusMeta[ticket.status].label}
                           </StatusBadge>
                         </td>
+
                         <td className="px-sm py-md">
                           <StatusBadge
                             variant={priorityMeta[ticket.priority].variant}
@@ -342,9 +376,11 @@ export function MyTicketsPage() {
                             {priorityMeta[ticket.priority].label}
                           </StatusBadge>
                         </td>
+
                         <td className="px-sm py-md text-text-secondary">
                           {ticket.category_label}
                         </td>
+
                         <td className="px-sm py-md text-text-secondary">
                           {formatDate(ticket.created_at)}
                         </td>

@@ -30,6 +30,7 @@ export interface Ticket {
   priority_label: string;
   approval_status: TicketApprovalStatus;
   approval_status_label: string;
+  pending_approver_name: string | null;
   status: TicketStatus;
   status_label: string;
   assigned_to: number | null;
@@ -49,6 +50,28 @@ export interface TicketCreatePayload {
   category: TicketCategory;
   priority: TicketPriority;
   asset?: number | null;
+}
+
+export interface TicketApproval {
+  id: number;
+  ticket: Ticket;
+  approver: number;
+  approver_name: string;
+  approver_user: number | null;
+  approver_username: string | null;
+  requested_by: number | null;
+  requested_by_username: string | null;
+  status: "pending" | "approved" | "rejected";
+  status_label: string;
+  decision_note: string;
+  requested_at: string;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TicketApprovalDecisionPayload {
+  decision_note?: string;
 }
 
 export interface TicketComment {

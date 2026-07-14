@@ -1,6 +1,6 @@
 import axios from "axios";
-import {useEffect, useMemo, useState } from "react";
-import type { FormEvent } from 'react';
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import {
   createTicketComment,
   fetchTicketComments,
@@ -14,6 +14,7 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 import { canManage } from "../lib/rbac";
 import type {
   Ticket,
+  TicketApprovalStatus,
   TicketComment,
   TicketPriority,
   TicketStatus,
@@ -43,6 +44,19 @@ const priorityMeta: Record<
   normal: { label: "Normal", variant: "accent" },
   high: { label: "Yüksek", variant: "warning" },
   urgent: { label: "Acil", variant: "danger" },
+};
+
+const approvalMeta: Record<
+  TicketApprovalStatus,
+  {
+    label: string;
+    variant: "accent" | "success" | "warning" | "danger" | "neutral";
+  }
+> = {
+  not_required: { label: "Onay gerekmiyor", variant: "neutral" },
+  pending: { label: "Onay bekliyor", variant: "warning" },
+  approved: { label: "Onaylandı", variant: "success" },
+  rejected: { label: "Reddedildi", variant: "danger" },
 };
 
 const statusOptions: Array<{ value: TicketStatus; label: string }> = [
@@ -196,7 +210,7 @@ export function TicketsQueuePage() {
         <div>
           <h1 className="text-display">Ticket Kuyruğu</h1>
           <p className="mt-sm text-text-secondary">
-            Requester kullanıcılarından gelen IT taleplerini buradan takip et.
+            IT kuyruğu sadece onaylanmış veya onay gerektirmeyen ticketları gösterir.
           </p>
         </div>
 
@@ -235,7 +249,7 @@ export function TicketsQueuePage() {
       <div className="grid gap-lg xl:grid-cols-[1.2fr_0.8fr]">
         <DataTable
           title="IT Ticket Kuyruğu"
-          description="Onay akışı N4'te eklenecek. Bu fazda ticketlar doğrudan IT kuyruğuna düşer."
+          description="Pending/rejected approval ticketları backend tarafından bu kuyruktan hariç tutulur."
         >
           {isLoading ? (
             <div className="p-lg text-body text-text-secondary">
@@ -251,6 +265,7 @@ export function TicketsQueuePage() {
                 <tr>
                   <th className="px-sm py-sm">Ticket</th>
                   <th className="px-sm py-sm">Requester</th>
+                  <th className="px-sm py-sm">Onay</th>
                   <th className="px-sm py-sm">Durum</th>
                   <th className="px-sm py-sm">Öncelik</th>
                   <th className="px-sm py-sm">Tarih</th>
@@ -271,6 +286,14 @@ export function TicketsQueuePage() {
                     <td className="px-sm py-md text-text-secondary">
                       <p>{ticket.employee_name}</p>
                       <p className="text-caption">{ticket.employee_email}</p>
+                    </td>
+
+                    <td className="px-sm py-md">
+                      <StatusBadge
+                        variant={approvalMeta[ticket.approval_status].variant}
+                      >
+                        {approvalMeta[ticket.approval_status].label}
+                      </StatusBadge>
                     </td>
 
                     <td className="px-sm py-md">
@@ -340,6 +363,18 @@ export function TicketsQueuePage() {
                   <p className="mt-xs text-caption text-text-secondary">
                     {selectedTicket.employee_name} · {formatDate(selectedTicket.created_at)}
                   </p>
+
+                  <div className="mt-sm flex flex-wrap gap-sm">
+                    <StatusBadge
+                      variant={approvalMeta[selectedTicket.approval_status].variant}
+                    >
+                      {approvalMeta[selectedTicket.approval_status].label}
+                    </StatusBadge>
+
+                    <StatusBadge variant={priorityMeta[selectedTicket.priority].variant}>
+                      {priorityMeta[selectedTicket.priority].label}
+                    </StatusBadge>
+                  </div>
                 </div>
 
                 <StatusBadge variant={statusMeta[selectedTicket.status].variant}>
