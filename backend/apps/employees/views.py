@@ -11,7 +11,12 @@ class EmployeeListAPIView(ListAPIView):
 
     def get_queryset(self):
         return (
-            Employee.objects.select_related("department", "job_title")
+            Employee.objects.select_related(
+                "user",
+                "department",
+                "job_title",
+                "manager",
+            )
             .filter(is_active=True)
             .order_by("full_name")
         )

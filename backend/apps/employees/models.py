@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -38,6 +39,29 @@ class JobTitle(models.Model):
 
 
 class Employee(models.Model):
+    class SyncSource(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        EXCEL = "excel", "Excel"
+        HR_API = "hr_api", "HR API"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="employee_profile",
+        null=True,
+        blank=True,
+        help_text="Bu personelle eşleşen sistem kullanıcısı.",
+    )
+
+    manager = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="direct_reports",
+        null=True,
+        blank=True,
+        help_text="Personelin bağlı olduğu amir/yönetici.",
+    )
+
     full_name = models.CharField(max_length=180)
 
     employee_code = models.CharField(
@@ -67,6 +91,18 @@ class Employee(models.Model):
         blank=True,
     )
 
+    external_hr_id = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text="İleride HR sistemiyle eşleşme için harici personel ID.",
+    )
+    sync_source = models.CharField(
+        max_length=20,
+        choices=SyncSource.choices,
+        default=SyncSource.MANUAL,
+        help_text="Personel kaydının ana kaynağı.",
+    )
+
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
 
@@ -84,6 +120,8 @@ class Employee(models.Model):
             models.Index(fields=["full_name"]),
             models.Index(fields=["email"]),
             models.Index(fields=["is_active"]),
+            models.Index(fields=["external_hr_id"]),
+            models.Index(fields=["sync_source"]),
         ]
 
     def __str__(self):

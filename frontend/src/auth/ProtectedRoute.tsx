@@ -1,8 +1,17 @@
 import { Navigate, Outlet } from "react-router";
+import type { UserRole } from "../types/auth";
 import { useAuth } from "./AuthContext";
 
-export function ProtectedRoute() {
-  const { isAuthenticated, isBootstrapping } = useAuth();
+interface ProtectedRouteProps {
+  allowedRoles?: UserRole[];
+  fallbackPath?: string;
+}
+
+export function ProtectedRoute({
+  allowedRoles,
+  fallbackPath = "/login",
+}: ProtectedRouteProps) {
+  const { isAuthenticated, isBootstrapping, user } = useAuth();
 
   if (isBootstrapping) {
     return (
@@ -14,6 +23,20 @@ export function ProtectedRoute() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  const role = user?.role;
+
+  if (allowedRoles && (!role || !allowedRoles.includes(role))) {
+    if (role === "requester") {
+      return <Navigate to="/my-tickets" replace />;
+    }
+
+    if (role === "approver") {
+      return <Navigate to="/approvals" replace />;
+    }
+
+    return <Navigate to={fallbackPath} replace />;
   }
 
   return <Outlet />;

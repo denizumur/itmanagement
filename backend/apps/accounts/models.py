@@ -1,6 +1,3 @@
-from django.db import models
-
-# Create your models here.
 from django.conf import settings
 from django.db import models
 
@@ -10,6 +7,8 @@ class UserProfile(models.Model):
         ADMIN = "admin", "Admin"
         TECHNICIAN = "technician", "Technician"
         VIEWER = "viewer", "Viewer"
+        APPROVER = "approver", "Approver"
+        REQUESTER = "requester", "Requester"
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
