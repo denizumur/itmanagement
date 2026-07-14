@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "corsheaders",
     "drf_spectacular",
+    "django_filters",
     "rest_framework_simplejwt.token_blacklist",
     # Local apps
     "apps.common.apps.CommonConfig",
@@ -52,6 +53,7 @@ INSTALLED_APPS = [
     "apps.reminders.apps.RemindersConfig",
     "apps.tickets",
     "apps.imports",
+    "apps.notifications.apps.NotificationsConfig",
     "apps.audit.apps.AuditConfig",
     "apps.dashboard.apps.DashboardConfig",
 ]
