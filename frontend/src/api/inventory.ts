@@ -1,3 +1,6 @@
+import { buildTableApiParams } from "../lib/tableQuery";
+import type { PaginatedApiResponse } from "../types/api";
+import type { TableQueryState } from "../types/table";
 import { api } from "./http";
 import type {
   Asset,
@@ -29,6 +32,17 @@ export async function getAssets(filters: AssetFilters = {}) {
   );
 
   return extractResults(response.data);
+}
+
+export async function getAssetsTable(state: TableQueryState) {
+  const response = await api.get<PaginatedApiResponse<Asset>>(
+    "/api/inventory/assets/table/",
+    {
+      params: buildTableApiParams(state),
+    }
+  );
+
+  return response.data;
 }
 
 export async function getAssetSummary() {
@@ -91,6 +105,7 @@ export async function updateAsset(id: number, payload: AssetFormPayload) {
 
   return response.data;
 }
+
 export async function createAssetWithAssignment(
   payload: CreateAssetWithAssignmentPayload
 ) {

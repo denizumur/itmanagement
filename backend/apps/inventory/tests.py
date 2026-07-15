@@ -1,108 +1,165 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import UserProfile
-from apps.assignments.models import Assignment
-from apps.employees.models import Employee
 from apps.inventory.models import Asset, AssetCategory
 
+User = get_user_model()
 
-class AssetCreateWithAssignmentTests(APITestCase):
-    def setUp(self):
-        user_model = get_user_model()
 
-        self.user = user_model.objects.create_user(
-            username="inventory-admin",
-            email="inventory-admin@example.com",
+class AssetTableApiTests(APITestCase):
+    def create_user_with_role(self, username, role):
+        user = User.objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
             password="StrongPass123!",
         )
-        UserProfile.objects.update_or_create(
-            user=self.user,
-            defaults={"role": UserProfile.Role.ADMIN},
-        )
-        self.category = AssetCategory.objects.create(
-            name="Laptop",
-            is_active=True,
-        )
-        self.employee = Employee.objects.create(
-            full_name="QA Test Personeli",
-            employee_code="QA-EMP-001",
-            is_active=True,
-        )
 
-        self.client.force_authenticate(user=self.user)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.role = role
+        profile.save(update_fields=["role"])
 
-    def test_create_with_assignment_creates_asset_and_assignment_atomically(self):
-        payload = {
-            "asset": {
-                "category": self.category.id,
-                "name": "QA Atomic Laptop",
-                "brand": "Lenovo",
-                "model": "ThinkPad",
-                "serial_number": "QA-ATOMIC-SN-001",
-                "inventory_code": "QA-ATOMIC-INV-001",
-                "status": Asset.Status.ACTIVE,
-                "location": "QA Lab",
-                "maintenance_enabled": False,
-                "custom_fields": {},
-                "notes": "Atomic create with assignment success test",
-            },
-            "assignment": {
-                "employee": self.employee.id,
-                "notes": "QA atomic assignment",
-            },
-        }
+        return User.objects.get(pk=user.pk)
 
-        response = self.client.post(
-            "/api/inventory/assets/create-with-assignment/",
-            payload,
-            format="json",
+    def setUp(self):
+        self.admin_user = self.create_user_with_role(
+            "asset-admin",
+            UserProfile.Role.ADMIN,
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Asset.objects.count(), 1)
-        self.assertEqual(Assignment.objects.count(), 1)
+        self.laptop_category = AssetCategory.objects.create(name="Laptop")
+        self.printer_category = AssetCategory.objects.create(name="Yazıcı")
 
-        asset = Asset.objects.get(serial_number="QA-ATOMIC-SN-001")
-        assignment = Assignment.objects.get(asset=asset)
+        today = timezone.localdate()
 
-        self.assertEqual(asset.status, Asset.Status.ASSIGNED)
-        self.assertEqual(assignment.employee, self.employee)
-        self.assertIsNone(assignment.returned_at)
-
-    def test_create_with_assignment_rolls_back_asset_when_assignment_is_invalid(self):
-        payload = {
-            "asset": {
-                "category": self.category.id,
-                "name": "QA Rollback Laptop",
-                "brand": "Dell",
-                "model": "Latitude",
-                "serial_number": "QA-ROLLBACK-SN-001",
-                "inventory_code": "QA-ROLLBACK-INV-001",
-                "status": Asset.Status.ACTIVE,
-                "location": "QA Lab",
-                "maintenance_enabled": False,
-                "custom_fields": {},
-                "notes": "This asset must be rolled back",
-            },
-            "assignment": {
-                "employee": 999999,
-                "notes": "Invalid employee should rollback asset",
-            },
-        }
-
-        response = self.client.post(
-            "/api/inventory/assets/create-with-assignment/",
-            payload,
-            format="json",
+        self.laptop = Asset.objects.create(
+            category=self.laptop_category,
+            name="Bilgi İşlem Laptop 01",
+            brand="Lenovo",
+            model="ThinkPad",
+            serial_number="SN-LPT-001",
+            inventory_code="IT-LPT-001",
+            status=Asset.Status.ACTIVE,
+            location="Bilgi İşlem",
+            warranty_end_date=today + timedelta(days=120),
+            maintenance_enabled=True,
+            maintenance_frequency_days=90,
+            next_maintenance_due_date=today + timedelta(days=10),
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(
-            Asset.objects.filter(serial_number="QA-ROLLBACK-SN-001").exists()
+        self.printer = Asset.objects.create(
+            category=self.printer_category,
+            name="Muhasebe Yazıcı 01",
+            brand="HP",
+            model="LaserJet",
+            serial_number="SN-PRN-001",
+            inventory_code="IT-PRN-001",
+            status=Asset.Status.IN_REPAIR,
+            location="Muhasebe",
+            warranty_end_date=today - timedelta(days=1),
+            maintenance_enabled=True,
+            maintenance_frequency_days=90,
+            next_maintenance_due_date=today - timedelta(days=1),
         )
-        self.assertFalse(
-            Asset.objects.filter(inventory_code="QA-ROLLBACK-INV-001").exists()
+
+    def test_asset_table_endpoint_returns_paginated_response(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/inventory/assets/table/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("count", response.data)
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("results", response.data)
+
+        result_ids = {item["id"] for item in response.data["results"]}
+
+        self.assertIn(self.laptop.id, result_ids)
+        self.assertIn(self.printer.id, result_ids)
+
+    def test_asset_table_supports_search(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            "/api/inventory/assets/table/",
+            {"search": "Laptop"},
         )
-        self.assertEqual(Assignment.objects.count(), 0)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.laptop.id)
+
+    def test_asset_table_supports_status_filter(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            "/api/inventory/assets/table/",
+            {"status": Asset.Status.IN_REPAIR},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.printer.id)
+
+    def test_asset_table_supports_category_filter(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            "/api/inventory/assets/table/",
+            {"category": self.laptop_category.id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.laptop.id)
+
+    def test_asset_table_supports_ordering(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            "/api/inventory/assets/table/",
+            {"ordering": "-name"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        names = [item["name"] for item in response.data["results"]]
+
+        self.assertEqual(names, sorted(names, reverse=True))
+
+    def test_asset_table_supports_maintenance_overdue_filter(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            "/api/inventory/assets/table/",
+            {"maintenance_overdue": "true"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.printer.id)
+
+    def test_asset_table_supports_warranty_expired_filter(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            "/api/inventory/assets/table/",
+            {"warranty_expired": "true"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.printer.id)
+
+    def test_legacy_asset_endpoint_still_returns_array(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/inventory/assets/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)

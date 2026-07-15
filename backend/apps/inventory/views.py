@@ -3,7 +3,12 @@ from django.db.models import Count, Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import ListAPIView
 
+from apps.common.pagination import StandardResultsPagination
+from apps.inventory.filters import AssetFilterSet
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
 from apps.assignments.serializers import AssignmentSerializer
 from apps.assignments.services import create_assignment_for_asset
@@ -16,7 +21,12 @@ ASSET_AUDIT_EXCLUDE_FIELDS = (
     "updated_at",
 )
 
-
+def asset_base_queryset():
+    return Asset.objects.select_related(
+        "category",
+        "created_by",
+        "updated_by",
+    )
 class AssetCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = AssetCategorySerializer
     permission_classes = [ReadOnlyForViewerWriteForTechnician]
@@ -51,17 +61,52 @@ class AssetCategoryViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         serializer.save()
 
+class AssetTableListAPIView(ListAPIView):
+    serializer_class = AssetSerializer
+    permission_classes = [ReadOnlyForViewerWriteForTechnician]
+    pagination_class = StandardResultsPagination
+    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_class = AssetFilterSet
 
+    search_fields = [
+        "name",
+        "brand",
+        "model",
+        "serial_number",
+        "inventory_code",
+        "location",
+        "ip_address",
+        "mac_address",
+        "vendor_name",
+        "notes",
+        "category__name",
+    ]
+
+    ordering_fields = [
+        "name",
+        "brand",
+        "model",
+        "serial_number",
+        "inventory_code",
+        "status",
+        "location",
+        "warranty_end_date",
+        "next_maintenance_due_date",
+        "created_at",
+        "updated_at",
+        "category__name",
+    ]
+
+    ordering = ["name"]
+
+    def get_queryset(self):
+        return asset_base_queryset().order_by("name")
 class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
     permission_classes = [ReadOnlyForViewerWriteForTechnician]
 
     def get_queryset(self):
-        queryset = Asset.objects.select_related(
-            "category",
-            "created_by",
-            "updated_by",
-        ).order_by("name")
+        queryset = asset_base_queryset().order_by("name")
 
         search = self.request.query_params.get("search")
         category_id = self.request.query_params.get("category")

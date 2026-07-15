@@ -12,27 +12,29 @@ import {
   AssetForm,
   type AssetFormSubmitPayload,
 } from "../components/assets/AssetForm";
+import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
+import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { Skeleton } from "../components/common/Skeleton";
+import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
 import { AppToast } from "../components/ui/AppToast";
-import { DataCard } from "../components/ui/DataCard";
-import { DataTable } from "../components/ui/DataTable";
 import { GlowButton } from "../components/ui/GlowButton";
 import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
 import { SlideOverPanel } from "../components/ui/SlideOverPanel";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import {useActiveAssignments} from "../hooks/useAssignments";
+import { useActiveAssignments } from "../hooks/useAssignments";
 import { useEmployees } from "../hooks/useEmployees";
 import {
   useAssetCategories,
-  useAssets,
   useAssetSummary,
+  useAssetTable,
   useCreateAsset,
   useCreateAssetWithAssignment,
   useUpdateAsset,
 } from "../hooks/useInventory";
+import { useTableQueryState } from "../hooks/useTableQueryState";
 import {
   buildActiveAssignmentMap,
   getAssignmentDepartmentName,
@@ -45,10 +47,9 @@ import {
   getAssetStatusLabel,
   getAssetStatusVariant,
   getSummaryStatusCount,
-  getSummaryTotal,
 } from "../lib/inventory";
 import { canManage } from "../lib/rbac";
-import type { Asset, AssetFilters } from "../types/inventory";
+import type { Asset, AssetCategory } from "../types/inventory";
 
 type AssetFormMode = "create" | "edit";
 
@@ -64,6 +65,7 @@ const statusOptions = [
   { value: "in_stock", label: "Depoda" },
   { value: "in_repair", label: "Bakımda" },
   { value: "faulty", label: "Arızalı" },
+  { value: "retired", label: "Emekli" },
   { value: "disposed", label: "İmha edildi" },
   { value: "lost", label: "Kayıp" },
 ];
@@ -203,13 +205,157 @@ function DateCell({ value }: { value?: string | null }) {
   );
 }
 
+function BrandModelCell({ asset }: { asset: Asset }) {
+  const value = [asset.brand, asset.model].filter(Boolean).join(" / ");
+
+  return <span className="text-text-secondary">{value || "-"}</span>;
+}
+
+function buildAssetColumns({
+  categories,
+  activeAssignmentMap,
+  userCanManage,
+  onSelectAsset,
+  onEditAsset,
+}: {
+  categories: AssetCategory[];
+  activeAssignmentMap: ReturnType<typeof buildActiveAssignmentMap>;
+  userCanManage: boolean;
+  onSelectAsset: (asset: Asset) => void;
+  onEditAsset: (asset: Asset) => void;
+}): DataTableColumn<Asset>[] {
+  return [
+    {
+      key: "name",
+      label: "Varlık",
+      sortable: true,
+      sortKey: "name",
+      render: (asset) => (
+        <div>
+          <p className="text-text-primary">{asset.name}</p>
+          <p className="text-caption text-text-secondary">
+            {getAssetPrimaryCode(asset)}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "category_name",
+      label: "Kategori",
+      sortable: true,
+      sortKey: "category__name",
+      render: (asset) => getAssetCategoryName(asset, categories),
+    },
+    {
+      key: "brand",
+      label: "Marka / Model",
+      sortable: true,
+      sortKey: "brand",
+      render: (asset) => <BrandModelCell asset={asset} />,
+    },
+    {
+      key: "status",
+      label: "Durum",
+      sortable: true,
+      sortKey: "status",
+      render: (asset) => (
+        <StatusBadge variant={getOperationalStatusVariant(asset.status)}>
+          {getOperationalStatusLabel(asset.status)}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: "assigned_employee",
+      label: "Zimmetli Kişi",
+      render: (asset) => {
+        const activeAssignment = activeAssignmentMap.get(asset.id);
+        const employeeName = activeAssignment
+          ? getAssignmentEmployeeName(activeAssignment)
+          : "Boşta";
+        const departmentName = activeAssignment
+          ? getAssignmentDepartmentName(activeAssignment)
+          : null;
+
+        return (
+          <div>
+            <p className="text-body text-text-primary">{employeeName}</p>
+            {departmentName ? (
+              <p className="text-caption text-text-secondary">
+                {departmentName}
+              </p>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
+      key: "location",
+      label: "Konum",
+      sortable: true,
+      sortKey: "location",
+      render: (asset) => asset.location || "-",
+    },
+    {
+      key: "warranty_end_date",
+      label: "Garanti",
+      sortable: true,
+      sortKey: "warranty_end_date",
+      render: (asset) => <DateCell value={asset.warranty_end_date} />,
+    },
+    {
+      key: "next_maintenance_due_date",
+      label: "Sonraki Bakım",
+      sortable: true,
+      sortKey: "next_maintenance_due_date",
+      render: (asset) => <DateCell value={asset.next_maintenance_due_date} />,
+    },
+    {
+      key: "actions",
+      label: "İşlem",
+      className: "text-right",
+      render: (asset) => (
+        <div className="flex justify-end gap-sm">
+          <GlowButton
+            variant="ghost"
+            onClick={() => onSelectAsset(asset)}
+            icon={<IconEye size={16} aria-hidden={true} />}
+          >
+            Detay
+          </GlowButton>
+
+          {userCanManage ? (
+            <GlowButton
+              variant="ghost"
+              onClick={() => onEditAsset(asset)}
+              icon={<IconEdit size={16} aria-hidden={true} />}
+            >
+              Düzenle
+            </GlowButton>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
+}
+
 export function AssetsPage() {
   const { user } = useAuth();
   const userCanManage = canManage(user?.role);
 
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [category, setCategory] = useState("");
+  const {
+    state,
+    setSearch,
+    setSort,
+    setPage,
+    setPageSize,
+    setFilter,
+    resetFilters,
+  } = useTableQueryState({
+    page: 1,
+    pageSize: 25,
+    ordering: "name",
+  });
+
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [assetFormMode, setAssetFormMode] = useState<AssetFormMode | null>(
     null
@@ -217,16 +363,7 @@ export function AssetsPage() {
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const filters: AssetFilters = useMemo(
-    () => ({
-      search,
-      status,
-      category,
-    }),
-    [search, status, category]
-  );
-
-  const assetsQuery = useAssets(filters);
+  const assetsQuery = useAssetTable(state);
   const summaryQuery = useAssetSummary();
   const categoriesQuery = useAssetCategories();
   const activeAssignmentsQuery = useActiveAssignments();
@@ -235,64 +372,23 @@ export function AssetsPage() {
   const createAssetWithAssignmentMutation = useCreateAssetWithAssignment();
   const updateAssetMutation = useUpdateAsset();
 
-  const assets = assetsQuery.data ?? [];
+  const assetTableData = assetsQuery.data;
+  const assets = assetTableData?.results ?? [];
   const summary = summaryQuery.data;
   const categories = categoriesQuery.data ?? [];
   const activeAssignments = activeAssignmentsQuery.data ?? [];
   const employees = employeesQuery.data ?? [];
 
+  const selectedStatus =
+    typeof state.filters.status === "string" ? state.filters.status : "";
+
+  const selectedCategory =
+    typeof state.filters.category === "string" ? state.filters.category : "";
+
   const activeAssignmentMap = useMemo(
     () => buildActiveAssignmentMap(activeAssignments),
     [activeAssignments]
   );
-
-  const isAssetFormSubmitting =
-    createAssetMutation.isPending ||
-    createAssetWithAssignmentMutation.isPending ||
-    updateAssetMutation.isPending;
-
-  const totalAssets = getSummaryTotal(summary, assets.length);
-
-  const activeAssets =
-    getSummaryStatusCount(summary, "active") +
-      countAssetsByStatus(assets, ["assigned", "zimmetli"]) ||
-    countAssetsByStatus(assets, ["active", "aktif", "assigned", "zimmetli"]);
-
-  const assignedAssets =
-    activeAssignments.length ||
-    getSummaryStatusCount(summary, "assigned") ||
-    countAssetsByStatus(assets, ["assigned", "zimmetli"]);
-
-  const inRepairAssets =
-    getSummaryStatusCount(summary, "in_repair") ||
-    countAssetsByStatus(assets, [
-      "in_repair",
-      "repair",
-      "bakımda",
-      "bakimda",
-      "bakımda_onarımda",
-      "bakimda_onarimda",
-    ]);
-
-  const faultyAssets =
-    getSummaryStatusCount(summary, "faulty") ||
-    countAssetsByStatus(assets, ["faulty", "arızalı", "arizali"]);
-
-  const isInitialLoading =
-    assetsQuery.isLoading ||
-    summaryQuery.isLoading ||
-    categoriesQuery.isLoading ||
-    activeAssignmentsQuery.isLoading;
-
-  const hasError =
-    assetsQuery.isError ||
-    summaryQuery.isError ||
-    categoriesQuery.isError ||
-    activeAssignmentsQuery.isError;
-
-  const selectedAssetAssignment = selectedAsset
-    ? activeAssignmentMap.get(selectedAsset.id)
-    : null;
 
   function refetchAll() {
     assetsQuery.refetch();
@@ -322,6 +418,59 @@ export function AssetsPage() {
     setAssetFormMode(null);
     setEditingAsset(null);
   }
+
+  const assetColumns = useMemo(
+    () =>
+      buildAssetColumns({
+        categories,
+        activeAssignmentMap,
+        userCanManage,
+        onSelectAsset: setSelectedAsset,
+        onEditAsset: openEditForm,
+      }),
+    [categories, activeAssignmentMap, userCanManage]
+  );
+
+  const isAssetFormSubmitting =
+    createAssetMutation.isPending ||
+    createAssetWithAssignmentMutation.isPending ||
+    updateAssetMutation.isPending;
+
+  const totalAssets = assetTableData?.count ?? assets.length;
+
+  const activeAssets =
+    getSummaryStatusCount(summary, "active") +
+      getSummaryStatusCount(summary, "assigned") ||
+    countAssetsByStatus(assets, ["active", "aktif", "assigned", "zimmetli"]);
+
+  const assignedAssets =
+    activeAssignments.length ||
+    getSummaryStatusCount(summary, "assigned") ||
+    countAssetsByStatus(assets, ["assigned", "zimmetli"]);
+
+  const inRepairAssets =
+    getSummaryStatusCount(summary, "in_repair") ||
+    countAssetsByStatus(assets, ["in_repair", "repair", "bakımda", "bakimda"]);
+
+  const faultyAssets =
+    getSummaryStatusCount(summary, "faulty") ||
+    countAssetsByStatus(assets, ["faulty", "arızalı", "arizali"]);
+
+  const isInitialLoading =
+    assetsQuery.isLoading ||
+    summaryQuery.isLoading ||
+    categoriesQuery.isLoading ||
+    activeAssignmentsQuery.isLoading;
+
+  const hasError =
+    assetsQuery.isError ||
+    summaryQuery.isError ||
+    categoriesQuery.isError ||
+    activeAssignmentsQuery.isError;
+
+  const selectedAssetAssignment = selectedAsset
+    ? activeAssignmentMap.get(selectedAsset.id)
+    : null;
 
   async function handleAssetFormSubmit(payload: AssetFormSubmitPayload) {
     if (!assetFormMode) {
@@ -378,11 +527,11 @@ export function AssetsPage() {
   if (isInitialLoading) {
     return (
       <AppShell>
-        <div className="grid gap-md md:grid-cols-4">
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
+        <div className="flex flex-wrap gap-sm">
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-24 rounded-full" />
+          <Skeleton className="h-14 w-28 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
         </div>
 
         <div className="mt-lg">
@@ -437,47 +586,39 @@ export function AssetsPage() {
           }
         />
 
-        <section className="grid gap-md md:grid-cols-2 xl:grid-cols-4">
-          <DataCard className="metric-card-accent p-lg">
-            <IconDeviceDesktop size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {totalAssets}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Toplam varlık
-            </p>
-          </DataCard>
+        <section className="mt-lg flex flex-wrap gap-sm">
+          <MiniMetricCard
+            label="Varlık sayısı"
+            value={totalAssets}
+            icon={<IconDeviceDesktop size={15} aria-hidden={true} />}
+            tone="accent"
+          />
 
-          <DataCard className="metric-card-success p-lg">
-            <IconDeviceDesktop size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {activeAssets}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">Aktif</p>
-          </DataCard>
+          <MiniMetricCard
+            label="Aktif"
+            value={activeAssets}
+            icon={<IconDeviceDesktop size={15} aria-hidden={true} />}
+            tone="success"
+          />
 
-          <DataCard className="metric-card-warning p-lg">
-            <IconDeviceDesktop size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {assignedAssets}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">Zimmetli</p>
-          </DataCard>
+          <MiniMetricCard
+            label="Zimmetli"
+            value={assignedAssets}
+            icon={<IconDeviceDesktop size={15} aria-hidden={true} />}
+            tone="warning"
+          />
 
-          <DataCard className="metric-card-danger p-lg">
-            <IconDeviceDesktop size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {inRepairAssets + faultyAssets}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Bakım / arıza
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="Bakım / Arıza"
+            value={inRepairAssets + faultyAssets}
+            icon={<IconDeviceDesktop size={15} aria-hidden={true} />}
+            tone="danger"
+          />
         </section>
 
-        <DataCard className="mt-lg p-lg">
-          <div className="grid gap-md lg:grid-cols-[1fr_220px_220px]">
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm shadow-panel">
+        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+          <div className="grid gap-md lg:grid-cols-[1fr_220px_220px_auto]">
+            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
               <IconSearch
                 size={18}
                 className="text-text-secondary"
@@ -487,15 +628,15 @@ export function AssetsPage() {
               <input
                 className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
                 placeholder="Varlık adı, envanter kodu, seri no ara..."
-                value={search}
+                value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
               />
             </label>
 
             <select
-              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedStatus}
+              onChange={(event) => setFilter("status", event.target.value || null)}
               aria-label="Durum filtresi"
             >
               {statusOptions.map((option) => (
@@ -506,9 +647,11 @@ export function AssetsPage() {
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedCategory}
+              onChange={(event) =>
+                setFilter("category", event.target.value || null)
+              }
               aria-label="Kategori filtresi"
             >
               <option value="">Tüm kategoriler</option>
@@ -519,145 +662,37 @@ export function AssetsPage() {
                 </option>
               ))}
             </select>
+
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+            >
+              Temizle
+            </button>
           </div>
-        </DataCard>
+        </section>
 
-        <section className="mt-lg">
+        <section className="mt-lg flex flex-col gap-md">
           <DataTable
-            title="Varlık listesi"
-            description={`${assets.length} kayıt görüntüleniyor.`}
-          >
-            {!assets.length ? (
-              <div className="rounded-app border border-border bg-surface-1 p-lg text-center text-text-secondary">
-                Filtrelere uygun varlık bulunamadı.
-              </div>
-            ) : (
-              <table className="w-full min-w-[1360px] border-separate border-spacing-0 text-left text-body">
-                <thead>
-                  <tr className="text-caption text-text-secondary">
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Varlık
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Kategori
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Marka / Model
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Durum
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Zimmetli Kişi
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Konum
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Garanti
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Sonraki Bakım
-                    </th>
-                    <th className="border-b border-border px-md py-sm text-right font-normal">
-                      İşlem
-                    </th>
-                  </tr>
-                </thead>
+            columns={assetColumns}
+            data={assets}
+            getRowKey={(asset) => asset.id}
+            ordering={state.ordering}
+            onSortChange={setSort}
+            isLoading={assetsQuery.isLoading}
+            emptyMessage="Filtrelere uygun varlık bulunamadı."
+          />
 
-                <tbody>
-                  {assets.map((asset) => {
-                    const activeAssignment = activeAssignmentMap.get(asset.id);
-                    const employeeName = activeAssignment
-                      ? getAssignmentEmployeeName(activeAssignment)
-                      : "Boşta";
-                    const departmentName = activeAssignment
-                      ? getAssignmentDepartmentName(activeAssignment)
-                      : null;
-
-                    return (
-                      <tr
-                        key={asset.id}
-                        className="transition hover:bg-surface-1"
-                      >
-                        <td className="border-b border-border px-md py-md">
-                          <p className="text-text-primary">{asset.name}</p>
-                          <p className="text-caption text-text-secondary">
-                            {getAssetPrimaryCode(asset)}
-                          </p>
-                        </td>
-
-                        <td className="border-b border-border px-md py-md text-text-secondary">
-                          {getAssetCategoryName(asset, categories)}
-                        </td>
-
-                        <td className="border-b border-border px-md py-md text-text-secondary">
-                          {[asset.brand, asset.model]
-                            .filter(Boolean)
-                            .join(" / ") || "-"}
-                        </td>
-
-                        <td className="border-b border-border px-md py-md">
-                          <StatusBadge
-                            variant={getOperationalStatusVariant(asset.status)}
-                          >
-                            {getOperationalStatusLabel(asset.status)}
-                          </StatusBadge>
-                        </td>
-
-                        <td className="border-b border-border px-md py-md">
-                          <div>
-                            <p className="text-body text-text-primary">
-                              {employeeName}
-                            </p>
-                            {departmentName && (
-                              <p className="text-caption text-text-secondary">
-                                {departmentName}
-                              </p>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="border-b border-border px-md py-md text-text-secondary">
-                          {asset.location ?? "-"}
-                        </td>
-
-                        <td className="border-b border-border px-md py-md">
-                          <DateCell value={asset.warranty_end_date} />
-                        </td>
-
-                        <td className="border-b border-border px-md py-md">
-                          <DateCell value={asset.next_maintenance_due_date} />
-                        </td>
-
-                        <td className="border-b border-border px-md py-md">
-                          <div className="flex justify-end gap-sm">
-                            <GlowButton
-                              variant="ghost"
-                              onClick={() => setSelectedAsset(asset)}
-                              icon={<IconEye size={16} aria-hidden={true} />}
-                            >
-                              Detay
-                            </GlowButton>
-
-                            {userCanManage && (
-                              <GlowButton
-                                variant="ghost"
-                                onClick={() => openEditForm(asset)}
-                                icon={<IconEdit size={16} aria-hidden={true} />}
-                              >
-                                Düzenle
-                              </GlowButton>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </DataTable>
+          <TablePagination
+            page={state.page}
+            pageSize={state.pageSize}
+            totalCount={assetTableData?.count ?? 0}
+            hasNext={Boolean(assetTableData?.next)}
+            hasPrevious={Boolean(assetTableData?.previous)}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </section>
 
         <SlideOverPanel

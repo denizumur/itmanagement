@@ -1,9 +1,12 @@
+import type { PaginatedApiResponse } from "./api";
+
 export type AssetStatus =
   | "active"
   | "assigned"
   | "in_stock"
   | "in_repair"
   | "faulty"
+  | "retired"
   | "disposed"
   | "lost"
   | string;
@@ -19,6 +22,8 @@ export interface Asset {
   name: string;
   inventory_code?: string | null;
   serial_number?: string | null;
+  display_identifier?: string | null;
+
   brand?: string | null;
   model?: string | null;
 
@@ -30,14 +35,35 @@ export interface Asset {
 
   status: AssetStatus;
   status_display?: string | null;
+  status_label?: string | null;
+
+  location?: string | null;
+  ip_address?: string | null;
+  mac_address?: string | null;
 
   purchase_date?: string | null;
+  purchase_price?: string | null;
   warranty_end_date?: string | null;
+  is_warranty_expired?: boolean;
+
+  maintenance_enabled?: boolean;
+  maintenance_frequency_days?: number | null;
   next_maintenance_due_date?: string | null;
-  location?: string | null;
+  is_maintenance_overdue?: boolean;
+
+  vendor_name?: string | null;
   notes?: string | null;
+  custom_fields?: Record<string, unknown>;
+
+  created_by?: number | null;
+  created_by_username?: string | null;
+  updated_by?: number | null;
+  updated_by_username?: string | null;
+
   created_at?: string;
   updated_at?: string;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
 }
 
 export interface AssetSummary {
@@ -77,6 +103,11 @@ export interface AssetSummary {
 
   by_status?: Record<string, number>;
 
+  maintenance_overdue?: number;
+  maintenance_upcoming_30_days?: number;
+  warranty_expired?: number;
+  warranty_upcoming_30_days?: number;
+
   [key: string]: unknown;
 }
 
@@ -86,26 +117,8 @@ export interface AssetFilters {
   category?: string;
 }
 
-export interface PaginatedResponse<T> {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: T[];
-}
-export interface AssetFormPayload {
-  name: string;
-  inventory_code?: string | null;
-  serial_number?: string | null;
-  brand?: string | null;
-  model?: string | null;
-  category?: number | null;
-  status?: string;
-  purchase_date?: string | null;
-  warranty_end_date?: string | null;
-  next_maintenance_due_date?: string | null;
-  location?: string | null;
-  notes?: string | null;
-}
+export type PaginatedResponse<T> = PaginatedApiResponse<T>;
+
 export interface AssetFormPayload {
   name: string;
   inventory_code?: string | null;

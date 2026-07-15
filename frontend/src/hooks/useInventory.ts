@@ -1,16 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createAsset,
   createAssetWithAssignment,
   getAssetCategories,
   getAssets,
+  getAssetsTable,
   getAssetSummary,
   updateAsset,
 } from "../api/inventory";
-import type { AssetFilters } from "../types/inventory";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { AssetFormPayload } from "../types/inventory";
-
+import type { AssetFilters, AssetFormPayload } from "../types/inventory";
+import type { TableQueryState } from "../types/table";
 
 export function useCreateAssetWithAssignment() {
   return useMutation({
@@ -22,6 +21,15 @@ export function useAssets(filters: AssetFilters) {
   return useQuery({
     queryKey: ["inventory", "assets", filters],
     queryFn: () => getAssets(filters),
+    staleTime: 45_000,
+  });
+}
+
+export function useAssetTable(state: TableQueryState) {
+  return useQuery({
+    queryKey: ["inventory", "assets-table", state],
+    queryFn: () => getAssetsTable(state),
+    placeholderData: keepPreviousData,
     staleTime: 45_000,
   });
 }
