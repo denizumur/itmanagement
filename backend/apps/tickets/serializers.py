@@ -2,7 +2,17 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from apps.accounts.models import UserProfile
-from apps.tickets.models import Ticket, TicketApproval, TicketComment
+from apps.assignments.models import Assignment
+from apps.tickets.models import (
+    TICKET_ATTACHMENT_ALLOWED_MIME_TYPES,
+    TICKET_ATTACHMENT_MAX_FILE_SIZE_BYTES,
+    TICKET_ATTACHMENT_MAX_FILES_PER_TICKET,
+    Ticket,
+    TicketApproval,
+    TicketAttachment,
+    TicketComment,
+    validate_ticket_attachment_file,
+)
 
 User = get_user_model()
 
@@ -25,6 +35,10 @@ class TicketSerializer(serializers.ModelSerializer):
     )
 
     comments_count = serializers.IntegerField(source="comments.count", read_only=True)
+    attachments_count = serializers.IntegerField(
+        source="attachments.count",
+        read_only=True,
+    )
 
     class Meta:
         model = Ticket
@@ -51,6 +65,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "created_by",
             "created_by_name",
             "comments_count",
+            "attachments_count",
             "resolved_at",
             "closed_at",
             "created_at",
@@ -123,7 +138,7 @@ class TicketCreateSerializer(serializers.Serializer):
         value = value.strip()
 
         if len(value) < 3:
-            raise serializers.ValidationError("Ticket başlığı en az 3 karakter olmalı.")
+            raise serializers.ValidationError("Talep başlığı en az 3 karakter olmalı.")
 
         return value
 
@@ -231,9 +246,156 @@ class TicketCommentSerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
+    def validate_body(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("Yorum boş olamaz.")
+
+        return value
+
     def get_author_name(self, obj):
         if not obj.author:
             return None
 
         full_name = obj.author.get_full_name()
         return full_name or obj.author.username
+
+
+class TicketAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TicketAttachment
+        fields = [
+            "id",
+            "ticket",
+            "original_filename",
+            "mime_type",
+            "size_bytes",
+            "uploaded_by",
+            "uploaded_by_name",
+            "uploaded_at",
+            "download_url",
+        ]
+        read_only_fields = fields
+
+    def get_uploaded_by_name(self, obj):
+        if not obj.uploaded_by:
+            return None
+
+        full_name = obj.uploaded_by.get_full_name()
+        return full_name or obj.uploaded_by.username
+
+    def get_download_url(self, obj):
+        return f"/api/tickets/attachments/{obj.id}/download/"
+
+
+class TicketAttachmentCreateSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+    def validate_file(self, uploaded_file):
+        validate_ticket_attachment_file(uploaded_file)
+        return uploaded_file
+
+
+class RequesterContextSerializer(serializers.Serializer):
+    """
+    Swagger/OpenAPI görünürlüğü için response shape tanımı.
+    Runtime response views.py içinde hazırlanır.
+    """
+
+
+def serialize_assignment_for_requester_context(assignment):
+    asset = assignment.asset
+
+    return {
+        "id": assignment.id,
+        "asset_id": asset.id,
+        "asset_name": asset.name,
+        "asset_inventory_code": asset.inventory_code,
+        "asset_serial_number": asset.serial_number,
+        "asset_category": asset.category.name if asset.category_id else None,
+        "asset_status": asset.status,
+        "asset_status_label": asset.get_status_display(),
+        "asset_display_identifier": asset.display_identifier,
+        "assigned_at": assignment.assigned_at,
+    }
+
+
+def get_ticket_attachment_limits():
+    return {
+        "max_file_size_bytes": TICKET_ATTACHMENT_MAX_FILE_SIZE_BYTES,
+        "max_file_size_mb": int(TICKET_ATTACHMENT_MAX_FILE_SIZE_BYTES / 1024 / 1024),
+        "max_files_per_ticket": TICKET_ATTACHMENT_MAX_FILES_PER_TICKET,
+        "allowed_mime_types": sorted(TICKET_ATTACHMENT_ALLOWED_MIME_TYPES),
+    }
+
+
+def build_requester_context(employee):
+    manager = employee.manager
+    manager_user = manager.user if manager else None
+    manager_role = getattr(getattr(manager_user, "profile", None), "role", None)
+
+    requires_approval = manager_role in {
+        UserProfile.Role.ADMIN,
+        UserProfile.Role.APPROVER,
+    }
+
+    active_assignments = (
+        Assignment.objects.select_related(
+            "asset",
+            "asset__category",
+        )
+        .filter(
+            employee=employee,
+            returned_at__isnull=True,
+            asset__is_deleted=False,
+        )
+        .order_by("-assigned_at")
+    )
+
+    return {
+        "employee": {
+            "id": employee.id,
+            "full_name": employee.full_name,
+            "email": employee.email,
+            "department": (
+                {
+                    "id": employee.department_id,
+                    "name": employee.department.name,
+                }
+                if employee.department
+                else None
+            ),
+            "job_title": (
+                {
+                    "id": employee.job_title_id,
+                    "name": employee.job_title.name,
+                }
+                if employee.job_title
+                else None
+            ),
+            "manager": (
+                {
+                    "id": manager.id,
+                    "full_name": manager.full_name,
+                    "email": manager.email,
+                }
+                if manager
+                else None
+            ),
+        },
+        "active_assignments": [
+            serialize_assignment_for_requester_context(assignment)
+            for assignment in active_assignments
+        ],
+        "approval_preview": {
+            "requires_approval": requires_approval,
+            "approver_name": manager.full_name if requires_approval and manager else None,
+            "approver_email": manager.email if requires_approval and manager else None,
+            "approver_role": manager_role if requires_approval else None,
+        },
+        "limits": get_ticket_attachment_limits(),
+    }

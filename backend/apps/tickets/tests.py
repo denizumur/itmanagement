@@ -1,10 +1,19 @@
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import UserProfile
+from apps.assignments.models import Assignment
 from apps.employees.models import Employee
-from apps.tickets.models import Ticket, TicketApproval, TicketComment
+from apps.inventory.models import Asset, AssetCategory
+from apps.tickets.models import (
+    TICKET_ATTACHMENT_MAX_FILES_PER_TICKET,
+    Ticket,
+    TicketApproval,
+    TicketAttachment,
+    TicketComment,
+)
 
 User = get_user_model()
 
@@ -21,7 +30,6 @@ class TicketApiTests(APITestCase):
         profile.role = role
         profile.save(update_fields=["role"])
 
-        # Reverse OneToOne cache yüzünden testlerde eski default role okunmasın.
         return User.objects.get(pk=user.pk)
 
     def setUp(self):
@@ -58,6 +66,31 @@ class TicketApiTests(APITestCase):
             full_name="Requester Personel",
             email="requester@example.com",
             is_active=True,
+        )
+
+        self.asset_category = AssetCategory.objects.create(name="Laptop")
+
+    def create_asset(self, name="Demo Laptop", inventory_code="IT-LPT-001"):
+        return Asset.objects.create(
+            category=self.asset_category,
+            name=name,
+            inventory_code=inventory_code,
+            serial_number=f"SN-{inventory_code}",
+            status=Asset.Status.ACTIVE,
+        )
+
+    def create_png_file(self, name="screen.png", content=b"fake-png-content"):
+        return SimpleUploadedFile(
+            name,
+            content,
+            content_type="image/png",
+        )
+
+    def create_pdf_file(self, name="document.pdf", content=b"%PDF-1.4 fake"):
+        return SimpleUploadedFile(
+            name,
+            content,
+            content_type="application/pdf",
         )
 
     def test_requester_can_create_ticket_for_own_employee_profile_without_manager(self):
@@ -191,6 +224,82 @@ class TicketApiTests(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["id"], public_comment.id)
         self.assertFalse(response.data[0]["is_internal"])
+
+    def test_requester_internal_comment_payload_is_forced_to_public(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="E-posta şifre sorunu",
+            description="E-posta şifremi sıfırlamam gerekiyor.",
+            category=Ticket.Category.ACCESS,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/comments/",
+            {
+                "body": "Kullanıcı olarak ek yorum yazıyorum.",
+                "is_internal": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(response.data["is_internal"])
+
+        comment = TicketComment.objects.get(id=response.data["id"])
+
+        self.assertFalse(comment.is_internal)
+
+    def test_technician_can_create_internal_comment(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="VPN erişim sorunu",
+            description="VPN bağlantısı sık sık kopuyor.",
+            category=Ticket.Category.NETWORK,
+            priority=Ticket.Priority.HIGH,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/comments/",
+            {
+                "body": "İç not: logları kontrol et.",
+                "is_internal": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["is_internal"])
+
+    def test_empty_ticket_comment_returns_400(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Boş yorum testi",
+            description="Boş yorum gönderimi engellenmeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/comments/",
+            {
+                "body": "   ",
+                "is_internal": False,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("body", response.data)
 
     def test_ticket_with_approver_manager_requires_approval_and_stays_out_of_it_queue(self):
         self.employee.manager = self.approver_employee
@@ -387,3 +496,512 @@ class TicketApiTests(APITestCase):
         ticket.refresh_from_db()
 
         self.assertEqual(ticket.approval_status, Ticket.ApprovalStatus.PENDING)
+
+    def test_ticket_table_endpoint_returns_paginated_queue_for_technician(self):
+        visible_ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Görünen queue ticket",
+            description="Onay gerektirmeyen açık ticket.",
+            category=Ticket.Category.HARDWARE,
+            priority=Ticket.Priority.URGENT,
+            status=Ticket.Status.OPEN,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            created_by=self.requester,
+        )
+        Ticket.objects.create(
+            employee=self.employee,
+            title="Kapalı ticket görünmemeli",
+            description="Kapalı ticket queue table içinde görünmemeli.",
+            category=Ticket.Category.SOFTWARE,
+            priority=Ticket.Priority.NORMAL,
+            status=Ticket.Status.CLOSED,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            created_by=self.requester,
+        )
+        Ticket.objects.create(
+            employee=self.employee,
+            title="Onay bekleyen ticket görünmemeli",
+            description="Pending approval ticket IT queue dışında kalmalı.",
+            category=Ticket.Category.ACCESS,
+            priority=Ticket.Priority.HIGH,
+            status=Ticket.Status.OPEN,
+            approval_status=Ticket.ApprovalStatus.PENDING,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.get("/api/tickets/table/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("count", response.data)
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], visible_ticket.id)
+
+    def test_requester_ticket_table_returns_only_own_tickets(self):
+        other_requester = self.create_user_with_role(
+            "other-requester",
+            UserProfile.Role.REQUESTER,
+        )
+        other_employee = Employee.objects.create(
+            user=other_requester,
+            full_name="Other Requester Personel",
+            email="other.requester@example.com",
+            is_active=True,
+        )
+
+        own_ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Benim ticket",
+            description="Requester kendi ticketını görmeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+        Ticket.objects.create(
+            employee=other_employee,
+            title="Başka requester ticket",
+            description="Requester başka personelin ticketını görmemeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=other_requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.get("/api/tickets/table/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], own_ticket.id)
+
+    def test_ticket_table_supports_search_status_priority_and_ordering(self):
+        Ticket.objects.create(
+            employee=self.employee,
+            title="VPN özel arama ticket",
+            description="VPN bağlantısı kopuyor.",
+            category=Ticket.Category.NETWORK,
+            priority=Ticket.Priority.HIGH,
+            status=Ticket.Status.IN_PROGRESS,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            created_by=self.requester,
+        )
+        Ticket.objects.create(
+            employee=self.employee,
+            title="Mouse sorunu",
+            description="Mouse tıklama problemi.",
+            category=Ticket.Category.HARDWARE,
+            priority=Ticket.Priority.NORMAL,
+            status=Ticket.Status.OPEN,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.get(
+            "/api/tickets/table/",
+            {
+                "search": "VPN",
+                "status": Ticket.Status.IN_PROGRESS,
+                "priority": Ticket.Priority.HIGH,
+                "ordering": "-created_at",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["title"], "VPN özel arama ticket")
+
+    def test_ticket_summary_endpoint_returns_queue_counts(self):
+        Ticket.objects.create(
+            employee=self.employee,
+            title="Acil açık ticket",
+            description="Acil açık ticket açıklaması.",
+            category=Ticket.Category.HARDWARE,
+            priority=Ticket.Priority.URGENT,
+            status=Ticket.Status.OPEN,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            created_by=self.requester,
+        )
+        Ticket.objects.create(
+            employee=self.employee,
+            title="İşlemde yüksek ticket",
+            description="İşlemde yüksek ticket açıklaması.",
+            category=Ticket.Category.SOFTWARE,
+            priority=Ticket.Priority.HIGH,
+            status=Ticket.Status.IN_PROGRESS,
+            approval_status=Ticket.ApprovalStatus.APPROVED,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.get("/api/tickets/summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["total"], 2)
+        self.assertEqual(response.data["open"], 1)
+        self.assertEqual(response.data["in_progress"], 1)
+        self.assertEqual(response.data["urgent"], 1)
+        self.assertEqual(response.data["high"], 1)
+        self.assertEqual(response.data["high_or_urgent"], 2)
+
+    def test_legacy_ticket_queue_still_returns_array(self):
+        Ticket.objects.create(
+            employee=self.employee,
+            title="Legacy queue ticket",
+            description="Legacy queue array response kontrolü.",
+            category=Ticket.Category.HARDWARE,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.get("/api/tickets/queue/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+
+    def test_requester_context_returns_own_active_assignments_and_approval_preview(self):
+        asset = self.create_asset(
+            name="Requester Laptop",
+            inventory_code="IT-REQ-001",
+        )
+        Assignment.objects.create(
+            asset=asset,
+            employee=self.employee,
+            assigned_by=self.admin,
+        )
+        self.employee.manager = self.approver_employee
+        self.employee.save(update_fields=["manager"])
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.get("/api/tickets/requester-context/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["employee"]["id"], self.employee.id)
+        self.assertEqual(len(response.data["active_assignments"]), 1)
+        self.assertEqual(
+            response.data["active_assignments"][0]["asset_id"],
+            asset.id,
+        )
+        self.assertTrue(response.data["approval_preview"]["requires_approval"])
+        self.assertEqual(
+            response.data["approval_preview"]["approver_name"],
+            self.approver_employee.full_name,
+        )
+        self.assertIn("limits", response.data)
+        self.assertIn("image/png", response.data["limits"]["allowed_mime_types"])
+
+    def test_requester_context_without_approver_manager_does_not_require_approval(self):
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.get("/api/tickets/requester-context/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["approval_preview"]["requires_approval"])
+        self.assertIsNone(response.data["approval_preview"]["approver_name"])
+
+    def test_non_requester_cannot_access_requester_context(self):
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.get("/api/tickets/requester-context/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_requester_can_create_ticket_with_own_active_assignment_asset(self):
+        asset = self.create_asset(
+            name="Assigned Laptop",
+            inventory_code="IT-ASSIGNED-001",
+        )
+        Assignment.objects.create(
+            asset=asset,
+            employee=self.employee,
+            assigned_by=self.admin,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            "/api/tickets/",
+            {
+                "title": "Laptop ekran sorunu",
+                "description": "Zimmetimdeki laptop ekranında görüntü gidip geliyor.",
+                "category": Ticket.Category.HARDWARE,
+                "priority": Ticket.Priority.NORMAL,
+                "asset": asset.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        ticket = Ticket.objects.get(id=response.data["id"])
+
+        self.assertEqual(ticket.asset_id, asset.id)
+        self.assertEqual(ticket.employee_id, self.employee.id)
+
+    def test_requester_cannot_create_ticket_with_unassigned_asset(self):
+        unassigned_asset = self.create_asset(
+            name="Someone Else Laptop",
+            inventory_code="IT-OTHER-001",
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            "/api/tickets/",
+            {
+                "title": "Başka cihaz sorunu",
+                "description": "Bana zimmetli olmayan bir cihaz için kayıt açmaya çalışıyorum.",
+                "category": Ticket.Category.HARDWARE,
+                "priority": Ticket.Priority.NORMAL,
+                "asset": unassigned_asset.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("asset", response.data)
+        self.assertEqual(Ticket.objects.count(), 0)
+
+    def test_requester_can_upload_attachment_to_own_ticket(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Ekran hatası",
+            description="Ekranda hata mesajı var.",
+            category=Ticket.Category.SOFTWARE,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/attachments/",
+            {
+                "file": self.create_png_file(),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(TicketAttachment.objects.count(), 1)
+        self.assertEqual(response.data["original_filename"], "screen.png")
+        self.assertEqual(response.data["mime_type"], "image/png")
+        self.assertEqual(response.data["uploaded_by"], self.requester.id)
+
+    def test_requester_cannot_upload_attachment_to_someone_elses_ticket(self):
+        other_requester = self.create_user_with_role(
+            "attachment-other-requester",
+            UserProfile.Role.REQUESTER,
+        )
+        other_employee = Employee.objects.create(
+            user=other_requester,
+            full_name="Other Requester",
+            email="other@example.com",
+            is_active=True,
+        )
+        ticket = Ticket.objects.create(
+            employee=other_employee,
+            title="Başkasının ticketı",
+            description="Başka requester ticketı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=other_requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/attachments/",
+            {
+                "file": self.create_png_file(),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(TicketAttachment.objects.count(), 0)
+
+    def test_attachment_rejects_unsupported_mime_type(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Dosya tipi testi",
+            description="Desteklenmeyen dosya tipi reddedilmeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+        uploaded_file = SimpleUploadedFile(
+            "malware.exe",
+            b"fake-exe",
+            content_type="application/x-msdownload",
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/attachments/",
+            {
+                "file": uploaded_file,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", response.data)
+        self.assertEqual(TicketAttachment.objects.count(), 0)
+
+    def test_attachment_rejects_files_larger_than_limit(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Büyük dosya testi",
+            description="Limit üstü dosya reddedilmeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+        oversized_file = SimpleUploadedFile(
+            "large.pdf",
+            b"x" * (5 * 1024 * 1024 + 1),
+            content_type="application/pdf",
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/attachments/",
+            {
+                "file": oversized_file,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", response.data)
+        self.assertEqual(TicketAttachment.objects.count(), 0)
+
+    def test_ticket_attachment_limit_per_ticket_is_enforced(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Dosya sayısı limiti",
+            description="Ticket başına dosya limiti test edilir.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+
+        for index in range(TICKET_ATTACHMENT_MAX_FILES_PER_TICKET):
+            TicketAttachment.objects.create(
+                ticket=ticket,
+                file=self.create_pdf_file(name=f"existing-{index}.pdf"),
+                original_filename=f"existing-{index}.pdf",
+                mime_type="application/pdf",
+                size_bytes=100,
+                uploaded_by=self.requester,
+            )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/attachments/",
+            {
+                "file": self.create_png_file(),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", response.data)
+
+    def test_requester_can_list_and_download_own_ticket_attachment(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Download testi",
+            description="Kendi attachment download testidir.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+        attachment = TicketAttachment.objects.create(
+            ticket=ticket,
+            file=self.create_pdf_file(),
+            original_filename="document.pdf",
+            mime_type="application/pdf",
+            size_bytes=100,
+            uploaded_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        list_response = self.client.get(f"/api/tickets/{ticket.id}/attachments/")
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_response.data), 1)
+        self.assertEqual(list_response.data[0]["id"], attachment.id)
+
+        download_response = self.client.get(
+            f"/api/tickets/attachments/{attachment.id}/download/"
+        )
+
+        self.assertEqual(download_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(download_response["Content-Type"], "application/pdf")
+
+    def test_viewer_cannot_download_ticket_attachment(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Viewer download testi",
+            description="Viewer attachment indirmemeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+        attachment = TicketAttachment.objects.create(
+            ticket=ticket,
+            file=self.create_pdf_file(),
+            original_filename="document.pdf",
+            mime_type="application/pdf",
+            size_bytes=100,
+            uploaded_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.viewer)
+
+        response = self.client.get(
+            f"/api/tickets/attachments/{attachment.id}/download/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_technician_can_download_ticket_attachment(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Technician download testi",
+            description="Technician attachment indirebilir.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            created_by=self.requester,
+        )
+        attachment = TicketAttachment.objects.create(
+            ticket=ticket,
+            file=self.create_pdf_file(),
+            original_filename="document.pdf",
+            mime_type="application/pdf",
+            size_bytes=100,
+            uploaded_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.get(
+            f"/api/tickets/attachments/{attachment.id}/download/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)

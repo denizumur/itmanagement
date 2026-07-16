@@ -1,11 +1,70 @@
+import uuid
+from pathlib import Path
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files.utils import validate_file_name
 from django.db import models
 from django.db.models import Q
 
 from apps.employees.models import Employee
 from apps.inventory.models import Asset
 
+
+TICKET_ATTACHMENT_ALLOWED_MIME_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "application/pdf",
+}
+TICKET_ATTACHMENT_ALLOWED_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".pdf",
+}
+TICKET_ATTACHMENT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
+TICKET_ATTACHMENT_MAX_FILES_PER_TICKET = 5
+
+
+def ticket_attachment_upload_to(instance, filename):
+    original_name = Path(filename or "attachment").name
+    safe_name = validate_file_name(original_name)
+    suffix = Path(safe_name).suffix.lower()
+    unique_name = f"{uuid.uuid4().hex}{suffix}"
+
+    return f"ticket_attachments/ticket_{instance.ticket_id}/{unique_name}"
+
+
+def validate_ticket_attachment_file(uploaded_file, *, declared_mime_type=None):
+    if not uploaded_file:
+        raise ValidationError("Dosya zorunludur.")
+
+    file_size = getattr(uploaded_file, "size", 0) or 0
+
+    if file_size <= 0:
+        raise ValidationError("Boş dosya yüklenemez.")
+
+    if file_size > TICKET_ATTACHMENT_MAX_FILE_SIZE_BYTES:
+        raise ValidationError("Dosya boyutu en fazla 5 MB olabilir.")
+
+    file_name = getattr(uploaded_file, "name", "") or ""
+    extension = Path(file_name).suffix.lower()
+
+    if extension not in TICKET_ATTACHMENT_ALLOWED_EXTENSIONS:
+        raise ValidationError(
+            "Sadece PNG, JPG/JPEG veya PDF dosyaları yüklenebilir."
+        )
+
+    content_type = (
+        getattr(uploaded_file, "content_type", None)
+        or declared_mime_type
+        or ""
+    )
+
+    if content_type not in TICKET_ATTACHMENT_ALLOWED_MIME_TYPES:
+        raise ValidationError(
+            "Dosya tipi desteklenmiyor. Sadece PNG, JPG/JPEG veya PDF kabul edilir."
+        )
 
 class Ticket(models.Model):
     class Status(models.TextChoices):
@@ -248,3 +307,56 @@ class TicketComment(models.Model):
 
     def __str__(self):
         return f"Ticket #{self.ticket_id} comment"
+
+
+class TicketAttachment(models.Model):
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to=ticket_attachment_upload_to)
+    original_filename = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=120)
+    size_bytes = models.PositiveIntegerField(default=0)
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="ticket_attachments",
+        null=True,
+        blank=True,
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Ticket Eki"
+        verbose_name_plural = "Ticket Ekleri"
+        ordering = ["-uploaded_at"]
+        indexes = [
+            models.Index(fields=["ticket", "uploaded_at"]),
+            models.Index(fields=["uploaded_by", "uploaded_at"]),
+            models.Index(fields=["mime_type"]),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if self.file:
+            validate_ticket_attachment_file(
+                self.file,
+                declared_mime_type=self.mime_type,
+            )
+    def save(self, *args, **kwargs):
+        if self.file:
+            self.original_filename = self.original_filename or Path(
+                getattr(self.file, "name", "")
+            ).name
+            self.mime_type = self.mime_type or getattr(self.file, "content_type", "")
+            self.size_bytes = self.size_bytes or getattr(self.file, "size", 0) or 0
+
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Ticket #{self.ticket_id} - {self.original_filename}"
