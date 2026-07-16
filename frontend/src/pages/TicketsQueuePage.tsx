@@ -1,21 +1,33 @@
-import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
 import {
-  createTicketComment,
-  fetchTicketComments,
-  fetchTicketQueue,
-  updateTicketStatus,
-} from "../api/tickets";
+  IconAlertTriangle,
+  IconClipboardList,
+  IconMessageCircle,
+  IconRefresh,
+  IconSearch,
+  IconTool,
+} from "@tabler/icons-react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { DataTable, type DataTableColumn } from "../components/common/DataTable";
+import { MiniMetricCard } from "../components/common/MiniMetricCard";
+import { Skeleton } from "../components/common/Skeleton";
+import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
-import { DataTable } from "../components/ui/DataTable";
+import { TicketChatPanel } from "../components/tickets/TicketChatPanel";
+import { GlowButton } from "../components/ui/GlowButton";
+import { PageHeader } from "../components/ui/PageHeader";
+import { PageTransition } from "../components/ui/PageTransition";
 import { StatusBadge } from "../components/ui/StatusBadge";
+import {
+  useTicketSummary,
+  useTicketsTable,
+  useUpdateTicketStatus,
+} from "../hooks/useTickets";
+import { useTableQueryState } from "../hooks/useTableQueryState";
 import { canManage } from "../lib/rbac";
 import type {
   Ticket,
   TicketApprovalStatus,
-  TicketComment,
   TicketPriority,
   TicketStatus,
 } from "../types/tickets";
@@ -66,29 +78,20 @@ const statusOptions: Array<{ value: TicketStatus; label: string }> = [
   { value: "closed", label: "Kapandı" },
 ];
 
-function getErrorMessage(error: unknown) {
-  if (axios.isAxiosError(error)) {
-    const data = error.response?.data;
+const statusFilterOptions = [
+  { value: "", label: "Tüm durumlar" },
+  { value: "open", label: "Açık" },
+  { value: "in_progress", label: "İşlemde" },
+  { value: "resolved", label: "Çözüldü" },
+];
 
-    if (typeof data?.detail === "string") {
-      return data.detail;
-    }
-
-    if (typeof data === "object" && data !== null) {
-      const firstValue = Object.values(data)[0];
-
-      if (Array.isArray(firstValue)) {
-        return String(firstValue[0]);
-      }
-
-      if (typeof firstValue === "string") {
-        return firstValue;
-      }
-    }
-  }
-
-  return "İşlem sırasında bir hata oluştu.";
-}
+const priorityFilterOptions = [
+  { value: "", label: "Tüm öncelikler" },
+  { value: "urgent", label: "Acil" },
+  { value: "high", label: "Yüksek" },
+  { value: "normal", label: "Normal" },
+  { value: "low", label: "Düşük" },
+];
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("tr-TR", {
@@ -97,373 +100,438 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function getErrorMessage(error: unknown) {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return "İşlem sırasında bir hata oluştu.";
+  }
+
+  const response = (
+    error as {
+      response?: {
+        data?: unknown;
+      };
+    }
+  ).response;
+
+  const data = response?.data;
+
+  if (!data) {
+    return "İşlem sırasında bir hata oluştu.";
+  }
+
+  if (typeof data === "string") {
+    return data;
+  }
+
+  if (typeof data === "object" && "detail" in data) {
+    const detail = (data as { detail?: unknown }).detail;
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+  }
+
+  if (typeof data === "object") {
+    const firstEntry = Object.entries(data as Record<string, unknown>)[0];
+
+    if (firstEntry) {
+      const [, value] = firstEntry;
+
+      if (Array.isArray(value)) {
+        return value.join(", ");
+      }
+
+      if (typeof value === "string") {
+        return value;
+      }
+    }
+  }
+
+  return "İşlem sırasında bir hata oluştu.";
+}
+
+function buildTicketColumns({
+  canEditTickets,
+  isUpdatingStatus,
+  selectedTicketId,
+  onStatusChange,
+  onSelectTicket,
+}: {
+  canEditTickets: boolean;
+  isUpdatingStatus: boolean;
+  selectedTicketId?: number | null;
+  onStatusChange: (ticket: Ticket, status: TicketStatus) => void;
+  onSelectTicket: (ticket: Ticket) => void;
+}): DataTableColumn<Ticket>[] {
+  return [
+    {
+      key: "title",
+      label: "Ticket",
+      sortable: true,
+      sortKey: "title",
+      render: (ticket) => (
+        <div>
+          <p className="font-semibold text-text-primary">
+            #{ticket.id} {ticket.title}
+          </p>
+          <p className="mt-xs max-w-sm truncate text-caption text-text-secondary">
+            {ticket.description}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "employee",
+      label: "Requester",
+      sortable: true,
+      sortKey: "employee__full_name",
+      render: (ticket) => (
+        <div className="text-text-secondary">
+          <p>{ticket.employee_name}</p>
+          <p className="text-caption">{ticket.employee_email}</p>
+        </div>
+      ),
+    },
+    {
+      key: "approval_status",
+      label: "Onay",
+      sortable: true,
+      sortKey: "approval_status",
+      render: (ticket) => (
+        <StatusBadge variant={approvalMeta[ticket.approval_status].variant}>
+          {approvalMeta[ticket.approval_status].label}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: "status",
+      label: "Durum",
+      sortable: true,
+      sortKey: "status",
+      render: (ticket) =>
+        canEditTickets ? (
+          <select
+            value={ticket.status}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) =>
+              onStatusChange(ticket, event.target.value as TicketStatus)
+            }
+            disabled={isUpdatingStatus}
+            className="rounded-app border border-border bg-surface-0 px-sm py-xs text-caption outline-none transition focus:border-accent disabled:opacity-60"
+          >
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <StatusBadge variant={statusMeta[ticket.status].variant}>
+            {statusMeta[ticket.status].label}
+          </StatusBadge>
+        ),
+    },
+    {
+      key: "priority",
+      label: "Öncelik",
+      sortable: true,
+      sortKey: "priority",
+      render: (ticket) => (
+        <StatusBadge variant={priorityMeta[ticket.priority].variant}>
+          {priorityMeta[ticket.priority].label}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: "created_at",
+      label: "Tarih",
+      sortable: true,
+      sortKey: "created_at",
+      render: (ticket) => (
+        <span className="text-text-secondary">{formatDate(ticket.created_at)}</span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Chat",
+      className: "text-right",
+      render: (ticket) => (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectTicket(ticket);
+          }}
+          className={`inline-flex items-center gap-xs rounded-app border px-sm py-xs text-caption transition ${
+            selectedTicketId === ticket.id
+              ? "border-accent text-accent"
+              : "border-border text-text-secondary hover:border-accent hover:text-accent"
+          }`}
+        >
+          <IconMessageCircle size={14} aria-hidden={true} />
+          Detay
+        </button>
+      ),
+    },
+  ];
+}
+
 export function TicketsQueuePage() {
   const { user } = useAuth();
   const canEditTickets = canManage(user?.role);
 
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [comments, setComments] = useState<TicketComment[]>([]);
-  const [commentBody, setCommentBody] = useState("");
-  const [isInternalComment, setIsInternalComment] = useState(true);
+  const {
+    state,
+    setSearch,
+    setSort,
+    setPage,
+    setPageSize,
+    setFilter,
+    resetFilters,
+  } = useTableQueryState({
+    page: 1,
+    pageSize: 25,
+    ordering: "-created_at",
+  });
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+  const ticketsQuery = useTicketsTable(state);
+  const summaryQuery = useTicketSummary();
+  const updateStatusMutation = useUpdateTicketStatus();
+
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadQueue() {
-    setIsLoading(true);
-    setError(null);
+  const tableData = ticketsQuery.data;
+  const tickets = tableData?.results ?? [];
+  const summary = summaryQuery.data;
 
-    try {
-      const data = await fetchTicketQueue();
-      setTickets(data);
+  const selectedStatus =
+    typeof state.filters.status === "string" ? state.filters.status : "";
+  const selectedPriority =
+    typeof state.filters.priority === "string" ? state.filters.priority : "";
 
-      if (selectedTicket) {
-        const refreshed = data.find((ticket) => ticket.id === selectedTicket.id);
-        setSelectedTicket(refreshed ?? null);
-      }
-    } catch (loadError) {
-      setError(getErrorMessage(loadError));
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const columns = useMemo(
+    () =>
+      buildTicketColumns({
+        canEditTickets,
+        isUpdatingStatus: updateStatusMutation.isPending,
+        selectedTicketId: selectedTicket?.id,
+        onStatusChange: handleStatusChange,
+        onSelectTicket: setSelectedTicket,
+      }),
+    [canEditTickets, updateStatusMutation.isPending, selectedTicket?.id]
+  );
 
-  async function loadComments(ticketId: number) {
-    setIsCommentsLoading(true);
-
-    try {
-      const data = await fetchTicketComments(ticketId);
-      setComments(data);
-    } catch (loadError) {
-      setError(getErrorMessage(loadError));
-    } finally {
-      setIsCommentsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadQueue();
-  }, []);
-
-  const summary = useMemo(() => {
-    return {
-      open: tickets.filter((ticket) => ticket.status === "open").length,
-      inProgress: tickets.filter((ticket) => ticket.status === "in_progress")
-        .length,
-      urgent: tickets.filter((ticket) => ticket.priority === "urgent").length,
-    };
-  }, [tickets]);
-
-  async function handleSelectTicket(ticket: Ticket) {
-    setSelectedTicket(ticket);
-    setCommentBody("");
-    setError(null);
-    await loadComments(ticket.id);
+  async function refetchAll() {
+    await Promise.all([ticketsQuery.refetch(), summaryQuery.refetch()]);
   }
 
   async function handleStatusChange(ticket: Ticket, status: TicketStatus) {
     setError(null);
 
     try {
-      const updated = await updateTicketStatus(ticket.id, status);
-
-      setTickets((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item))
-      );
+      const updated = await updateStatusMutation.mutateAsync({
+        ticketId: ticket.id,
+        status,
+      });
 
       if (selectedTicket?.id === updated.id) {
         setSelectedTicket(updated);
       }
+
+      await refetchAll();
     } catch (updateError) {
       setError(getErrorMessage(updateError));
     }
   }
 
-  async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const isInitialLoading = ticketsQuery.isLoading || summaryQuery.isLoading;
+  const hasError = ticketsQuery.isError || summaryQuery.isError;
 
-    if (!selectedTicket || !commentBody.trim()) {
-      return;
-    }
+  if (isInitialLoading) {
+    return (
+      <AppShell>
+        <div className="flex flex-wrap gap-sm">
+          <Skeleton className="h-14 w-36 rounded-full" />
+          <Skeleton className="h-14 w-36 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
+        </div>
 
-    setError(null);
+        <div className="mt-lg">
+          <Skeleton className="h-[520px]" />
+        </div>
+      </AppShell>
+    );
+  }
 
-    try {
-      await createTicketComment(selectedTicket.id, {
-        body: commentBody.trim(),
-        is_internal: isInternalComment,
-      });
-
-      setCommentBody("");
-      await loadComments(selectedTicket.id);
-      await loadQueue();
-    } catch (commentError) {
-      setError(getErrorMessage(commentError));
-    }
+  if (hasError) {
+    return (
+      <AppShell>
+        <div className="rounded-panel border border-danger/30 bg-danger-bg p-lg text-danger">
+          Ticket verisi alınamadı. Ticket endpointlerini ve yetki durumunu kontrol et.
+        </div>
+      </AppShell>
+    );
   }
 
   return (
     <AppShell>
-      <div className="mb-lg flex flex-col gap-md md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-display">Ticket Kuyruğu</h1>
-          <p className="mt-sm text-text-secondary">
-            IT kuyruğu sadece onaylanmış veya onay gerektirmeyen ticketları gösterir.
-          </p>
-        </div>
+      <PageTransition>
+        <PageHeader
+          eyebrow="IT Operasyon Kuyruğu"
+          title="Ticket Kuyruğu"
+          description="Onaylanmış veya onay gerektirmeyen ticketları yönet; requester ile aynı chat paneli üzerinden konuş."
+          actions={
+            <GlowButton
+              variant="ghost"
+              onClick={refetchAll}
+              disabled={
+                ticketsQuery.isFetching ||
+                summaryQuery.isFetching ||
+                updateStatusMutation.isPending
+              }
+              icon={<IconRefresh size={16} aria-hidden={true} />}
+            >
+              {ticketsQuery.isFetching || summaryQuery.isFetching
+                ? "Yenileniyor"
+                : "Veriyi yenile"}
+            </GlowButton>
+          }
+        />
 
-        <button
-          type="button"
-          onClick={loadQueue}
-          className="rounded-app border border-border-subtle px-md py-sm text-body text-text-secondary transition hover:border-border-strong hover:text-text-primary"
-        >
-          Kuyruğu Yenile
-        </button>
-      </div>
+        <section className="mt-lg flex flex-wrap gap-sm">
+          <MiniMetricCard
+            label="Gösterilen ticket"
+            value={tableData?.count ?? tickets.length}
+            icon={<IconClipboardList size={15} aria-hidden={true} />}
+            tone="accent"
+          />
 
-      <div className="mb-lg grid gap-md md:grid-cols-3">
-        <div className="panel">
-          <p className="text-caption text-text-secondary">Açık Ticket</p>
-          <p className="mt-xs text-h2">{summary.open}</p>
-        </div>
+          <MiniMetricCard
+            label="Açık"
+            value={summary?.open ?? 0}
+            icon={<IconClipboardList size={15} aria-hidden={true} />}
+            tone="accent"
+          />
 
-        <div className="panel">
-          <p className="text-caption text-text-secondary">İşlemde</p>
-          <p className="mt-xs text-h2">{summary.inProgress}</p>
-        </div>
+          <MiniMetricCard
+            label="İşlemde"
+            value={summary?.in_progress ?? 0}
+            icon={<IconTool size={15} aria-hidden={true} />}
+            tone="warning"
+          />
 
-        <div className="panel">
-          <p className="text-caption text-text-secondary">Acil</p>
-          <p className="mt-xs text-h2">{summary.urgent}</p>
-        </div>
-      </div>
+          <MiniMetricCard
+            label="Acil"
+            value={summary?.urgent ?? 0}
+            icon={<IconAlertTriangle size={15} aria-hidden={true} />}
+            tone="danger"
+          />
 
-      {error && (
-        <div className="mb-lg rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
-          {error}
-        </div>
-      )}
+          <MiniMetricCard
+            label="Yüksek/Acil"
+            value={summary?.high_or_urgent ?? 0}
+            icon={<IconAlertTriangle size={15} aria-hidden={true} />}
+            tone="warning"
+          />
+        </section>
 
-      <div className="grid gap-lg xl:grid-cols-[1.2fr_0.8fr]">
-        <DataTable
-          title="IT Ticket Kuyruğu"
-          description="Pending/rejected approval ticketları backend tarafından bu kuyruktan hariç tutulur."
-        >
-          {isLoading ? (
-            <div className="p-lg text-body text-text-secondary">
-              Ticket kuyruğu yükleniyor...
-            </div>
-          ) : tickets.length === 0 ? (
-            <div className="p-lg text-center text-body text-text-secondary">
-              Kuyrukta aktif ticket yok.
-            </div>
-          ) : (
-            <table className="min-w-full text-left text-body">
-              <thead className="text-caption text-text-secondary">
-                <tr>
-                  <th className="px-sm py-sm">Ticket</th>
-                  <th className="px-sm py-sm">Requester</th>
-                  <th className="px-sm py-sm">Onay</th>
-                  <th className="px-sm py-sm">Durum</th>
-                  <th className="px-sm py-sm">Öncelik</th>
-                  <th className="px-sm py-sm">Tarih</th>
-                  <th className="px-sm py-sm">Aksiyon</th>
-                </tr>
-              </thead>
+        {error ? (
+          <div className="mt-lg rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
+            {error}
+          </div>
+        ) : null}
 
-              <tbody>
-                {tickets.map((ticket) => (
-                  <tr key={ticket.id} className="border-t border-border-subtle">
-                    <td className="px-sm py-md">
-                      <p className="font-semibold">#{ticket.id} {ticket.title}</p>
-                      <p className="mt-xs max-w-sm truncate text-caption text-text-secondary">
-                        {ticket.description}
-                      </p>
-                    </td>
+        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+          <div className="grid gap-md xl:grid-cols-[1fr_200px_200px_auto]">
+            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
+              <IconSearch
+                size={18}
+                className="text-text-secondary"
+                aria-hidden={true}
+              />
 
-                    <td className="px-sm py-md text-text-secondary">
-                      <p>{ticket.employee_name}</p>
-                      <p className="text-caption">{ticket.employee_email}</p>
-                    </td>
+              <input
+                className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+                placeholder="Başlık, açıklama, requester, varlık veya atanan kişi ara..."
+                value={state.search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
 
-                    <td className="px-sm py-md">
-                      <StatusBadge
-                        variant={approvalMeta[ticket.approval_status].variant}
-                      >
-                        {approvalMeta[ticket.approval_status].label}
-                      </StatusBadge>
-                    </td>
+            <select
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedStatus}
+              onChange={(event) => setFilter("status", event.target.value || null)}
+              aria-label="Ticket durum filtresi"
+            >
+              {statusFilterOptions.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
-                    <td className="px-sm py-md">
-                      {canEditTickets ? (
-                        <select
-                          value={ticket.status}
-                          onChange={(event) =>
-                            handleStatusChange(
-                              ticket,
-                              event.target.value as TicketStatus
-                            )
-                          }
-                          className="rounded-app border border-border-subtle bg-surface-0 px-sm py-xs text-caption outline-none transition focus:border-accent"
-                        >
-                          {statusOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <StatusBadge variant={statusMeta[ticket.status].variant}>
-                          {statusMeta[ticket.status].label}
-                        </StatusBadge>
-                      )}
-                    </td>
+            <select
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedPriority}
+              onChange={(event) => setFilter("priority", event.target.value || null)}
+              aria-label="Ticket öncelik filtresi"
+            >
+              {priorityFilterOptions.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
-                    <td className="px-sm py-md">
-                      <StatusBadge variant={priorityMeta[ticket.priority].variant}>
-                        {priorityMeta[ticket.priority].label}
-                      </StatusBadge>
-                    </td>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+            >
+              Temizle
+            </button>
+          </div>
+        </section>
 
-                    <td className="px-sm py-md text-text-secondary">
-                      {formatDate(ticket.created_at)}
-                    </td>
+        <section className="mt-lg grid gap-lg xl:grid-cols-[minmax(0,1fr)_480px]">
+          <div className="flex min-w-0 flex-col gap-md">
+            <DataTable
+              columns={columns}
+              data={tickets}
+              getRowKey={(ticket) => ticket.id}
+              ordering={state.ordering}
+              onSortChange={setSort}
+              isLoading={ticketsQuery.isLoading}
+              emptyMessage="Kuyrukta aktif ticket yok."
+              onRowClick={setSelectedTicket}
+              getRowClassName={(ticket) =>
+                selectedTicket?.id === ticket.id ? "bg-accent/10" : ""
+              }
+            />
 
-                    <td className="px-sm py-md">
-                      <button
-                        type="button"
-                        onClick={() => handleSelectTicket(ticket)}
-                        className="rounded-app border border-border-subtle px-sm py-xs text-caption text-text-secondary transition hover:border-border-strong hover:text-text-primary"
-                      >
-                        Detay
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </DataTable>
+            <TablePagination
+              page={state.page}
+              pageSize={state.pageSize}
+              totalCount={tableData?.count ?? 0}
+              hasNext={Boolean(tableData?.next)}
+              hasPrevious={Boolean(tableData?.previous)}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          </div>
 
-        <aside className="panel">
-          {!selectedTicket ? (
-            <div>
-              <h2 className="text-h3">Ticket Detayı</h2>
-              <p className="mt-sm text-body text-text-secondary">
-                Detay ve yorumları görmek için kuyruktan bir ticket seç.
-              </p>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-start justify-between gap-md">
-                <div>
-                  <h2 className="text-h3">#{selectedTicket.id} {selectedTicket.title}</h2>
-                  <p className="mt-xs text-caption text-text-secondary">
-                    {selectedTicket.employee_name} · {formatDate(selectedTicket.created_at)}
-                  </p>
-
-                  <div className="mt-sm flex flex-wrap gap-sm">
-                    <StatusBadge
-                      variant={approvalMeta[selectedTicket.approval_status].variant}
-                    >
-                      {approvalMeta[selectedTicket.approval_status].label}
-                    </StatusBadge>
-
-                    <StatusBadge variant={priorityMeta[selectedTicket.priority].variant}>
-                      {priorityMeta[selectedTicket.priority].label}
-                    </StatusBadge>
-                  </div>
-                </div>
-
-                <StatusBadge variant={statusMeta[selectedTicket.status].variant}>
-                  {statusMeta[selectedTicket.status].label}
-                </StatusBadge>
-              </div>
-
-              <p className="mt-md rounded-2xl bg-surface-0 p-md text-body text-text-secondary">
-                {selectedTicket.description}
-              </p>
-
-              <div className="mt-lg">
-                <h3 className="text-h3">Yorumlar</h3>
-
-                {isCommentsLoading ? (
-                  <p className="mt-md text-body text-text-secondary">
-                    Yorumlar yükleniyor...
-                  </p>
-                ) : comments.length === 0 ? (
-                  <p className="mt-md text-body text-text-secondary">
-                    Henüz yorum yok.
-                  </p>
-                ) : (
-                  <div className="mt-md space-y-sm">
-                    {comments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="rounded-2xl border border-border-subtle bg-surface-0 p-md"
-                      >
-                        <div className="flex items-center justify-between gap-md">
-                          <p className="text-body font-semibold">
-                            {comment.author_name ?? "Sistem"}
-                          </p>
-
-                          {comment.is_internal && (
-                            <StatusBadge variant="warning">İç not</StatusBadge>
-                          )}
-                        </div>
-
-                        <p className="mt-xs text-body text-text-secondary">
-                          {comment.body}
-                        </p>
-
-                        <p className="mt-xs text-caption text-text-secondary">
-                          {formatDate(comment.created_at)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {canEditTickets && (
-                <form className="mt-lg space-y-md" onSubmit={handleCommentSubmit}>
-                  <div>
-                    <label className="text-caption text-text-secondary">
-                      Yorum / İç Not
-                    </label>
-                    <textarea
-                      value={commentBody}
-                      onChange={(event) => setCommentBody(event.target.value)}
-                      className="mt-xs min-h-[90px] w-full rounded-app border border-border-subtle bg-surface-0 px-md py-sm text-body outline-none transition focus:border-accent"
-                      placeholder="Ticket hakkında not ekle."
-                    />
-                  </div>
-
-                  <label className="flex items-center gap-sm text-body text-text-secondary">
-                    <input
-                      type="checkbox"
-                      checked={isInternalComment}
-                      onChange={(event) =>
-                        setIsInternalComment(event.target.checked)
-                      }
-                    />
-                    IT iç notu olarak ekle
-                  </label>
-
-                  <button
-                    type="submit"
-                    className="w-full rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90"
-                  >
-                    Yorum Ekle
-                  </button>
-                </form>
-              )}
-            </div>
-          )}
-        </aside>
-      </div>
+          <TicketChatPanel
+            ticket={selectedTicket}
+            open={Boolean(selectedTicket)}
+            canUseInternalNotes={canEditTickets}
+            onClose={() => setSelectedTicket(null)}
+            onCommentCreated={refetchAll}
+          />
+        </section>
+      </PageTransition>
     </AppShell>
   );
 }

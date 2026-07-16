@@ -20,6 +20,7 @@ const items = [
   { to: "/licenses", label: "Lisanslar", icon: IconLicense },
   { to: "/maintenance", label: "Bakım", icon: IconTool },
   { to: "/reminders", label: "Hatırlatıcılar", icon: IconBell },
+    { to: "/personnel", label: "Personel", icon: IconUsers },
 ];
 
 export function Sidebar() {

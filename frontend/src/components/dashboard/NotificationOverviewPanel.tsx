@@ -5,7 +5,9 @@ import {
   IconTicket,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router";
+import { MiniMetricCard } from "../common/MiniMetricCard";
 import { StatusBadge } from "../ui/StatusBadge";
+import { sortNotificationItems } from "../../lib/urgency";
 import type {
   NotificationItem,
   NotificationOverview,
@@ -18,25 +20,48 @@ interface NotificationOverviewPanelProps {
 
 const MAX_PREVIEW_ITEMS = 3;
 
-const ticketPriorityOrder: Record<string, number> = {
-  urgent: 0,
-  high: 1,
-  normal: 2,
-  low: 3,
-};
+function metadataString(item: NotificationItem, key: string) {
+  const value = item.metadata[key];
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  return "";
+}
+
+function metadataNumber(item: NotificationItem, key: string) {
+  const value = item.metadata[key];
+
+  return typeof value === "number" ? value : null;
+}
 
 function itemMeta(item: NotificationItem) {
   if (item.type === "ticket") {
     return [
-      item.metadata.priority_label,
-      item.metadata.status_label,
-      item.metadata.employee_name,
+      metadataString(item, "priority_label"),
+      metadataString(item, "status_label"),
+      metadataString(item, "employee_name"),
     ]
       .filter(Boolean)
       .join(" · ");
   }
 
-  const days = item.metadata.days_until_due;
+  if (item.type === "ticket_approval") {
+    return [
+      metadataString(item, "priority_label"),
+      metadataString(item, "employee_name"),
+      metadataString(item, "approver_name"),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  const days = metadataNumber(item, "days_until_due");
 
   if (typeof days === "number") {
     if (days < 0) {
@@ -50,26 +75,11 @@ function itemMeta(item: NotificationItem) {
     return `${days} gün kaldı`;
   }
 
-  return item.metadata.source_type_label ?? "";
+  return metadataString(item, "source_type_label");
 }
 
 function getTargetUrl(items: NotificationItem[], fallbackUrl: string) {
   return items[0]?.url ?? fallbackUrl;
-}
-
-function sortTicketsByPriority(items: NotificationItem[]) {
-  return [...items].sort((a, b) => {
-    const aPriority = ticketPriorityOrder[a.metadata.priority ?? "normal"] ?? 99;
-    const bPriority = ticketPriorityOrder[b.metadata.priority ?? "normal"] ?? 99;
-
-    if (aPriority !== bPriority) {
-      return aPriority - bPriority;
-    }
-
-    return (
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-  });
 }
 
 function AlertGroup({
@@ -120,18 +130,26 @@ function AlertGroup({
               onClick={() => navigate(item.url)}
               className="block w-full rounded-2xl border border-border-subtle bg-surface-0 p-md text-left transition hover:border-border-strong hover:bg-surface-2"
             >
-              <p className="line-clamp-1 text-body font-semibold text-text-primary">
-                {item.message}
-              </p>
-              <p className="mt-xs text-caption text-text-secondary">
-                {item.title} · {itemMeta(item)}
-              </p>
+              <div className="flex items-start justify-between gap-md">
+                <div className="min-w-0">
+                  <p className="line-clamp-1 text-body font-semibold text-text-primary">
+                    {item.message}
+                  </p>
+                  <p className="mt-xs text-caption text-text-secondary">
+                    {item.title} · {itemMeta(item)}
+                  </p>
+                </div>
+
+                <span className="shrink-0 rounded-full border border-border bg-surface-1 px-sm py-[2px] text-[11px] font-semibold text-text-secondary">
+                  {item.urgency_score}
+                </span>
+              </div>
             </button>
           ))
         )}
       </div>
 
-      {items.length > 0 && (
+      {items.length > 0 ? (
         <button
           type="button"
           onClick={() => navigate(getTargetUrl(items, fallbackUrl))}
@@ -141,7 +159,7 @@ function AlertGroup({
             ? `Tümünü gör · +${remainingCount} kayıt daha`
             : "Detaya git"}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -163,17 +181,30 @@ export function NotificationOverviewPanel({
 
   const urgentTickets = overview?.urgent_tickets ?? [];
   const activeTickets = overview?.active_tickets ?? [];
-  const allOpenTickets = sortTicketsByPriority([
+  const pendingApprovals = overview?.pending_approvals ?? [];
+
+  const actionItems = sortNotificationItems([
+    ...pendingApprovals,
     ...urgentTickets,
     ...activeTickets,
   ]);
 
-  const dueToday = overview?.reminders_due_today ?? [];
-  const sevenDays = overview?.reminders_7_days ?? [];
-  const thirtyDays = overview?.reminders_30_days ?? [];
+  const dueToday = sortNotificationItems(overview?.reminders_due_today ?? []);
+  const sevenDays = sortNotificationItems(overview?.reminders_7_days ?? []);
+  const thirtyDays = sortNotificationItems(overview?.reminders_30_days ?? []);
 
-  const criticalCount = urgentTickets.length + dueToday.length;
+  const criticalActionCount =
+    actionItems.filter((item) => item.severity === "critical").length +
+    dueToday.length;
+
   const planningCount = sevenDays.length + thirtyDays.length;
+
+  const actionVariant =
+    actionItems.some((item) => item.severity === "critical")
+      ? "danger"
+      : actionItems.length > 0
+        ? "warning"
+        : "success";
 
   return (
     <section className="panel">
@@ -181,40 +212,36 @@ export function NotificationOverviewPanel({
         <div>
           <h2 className="text-h2">Dikkat Gerektirenler</h2>
           <p className="mt-xs text-body text-text-secondary">
-            Kritik aksiyonları ve yaklaşan 30/7/bugün hatırlatmalarını özetler.
-            Detay listeler için ilgili modüle geç.
+            Kritik aksiyonları, onayları, açık ticketları ve yaklaşan
+            hatırlatıcıları tek standart bildirim mantığıyla özetler.
           </p>
         </div>
 
-        <div className="grid gap-sm sm:grid-cols-2">
-          <div className="rounded-2xl border border-danger/20 bg-danger-bg px-md py-sm">
-            <div className="flex items-center gap-sm">
-              <IconAlertTriangle size={18} aria-hidden="true" />
-              <p className="text-caption font-semibold text-danger">
-                Kritik aksiyon
-              </p>
-            </div>
-            <p className="mt-xs text-h3 text-danger">{criticalCount}</p>
-          </div>
+        <div className="flex flex-wrap gap-sm">
+          <MiniMetricCard
+            label="Kritik aksiyon"
+            value={criticalActionCount}
+            tone={criticalActionCount > 0 ? "danger" : "success"}
+            icon={<IconAlertTriangle size={15} aria-hidden={true} />}
+          />
 
-          <div className="rounded-2xl border border-border-subtle bg-surface-0 px-md py-sm">
-            <div className="flex items-center gap-sm text-text-secondary">
-              <IconCalendarDue size={18} aria-hidden="true" />
-              <p className="text-caption font-semibold">Planlanacak</p>
-            </div>
-            <p className="mt-xs text-h3">{planningCount}</p>
-          </div>
+          <MiniMetricCard
+            label="Planlanacak"
+            value={planningCount}
+            tone={planningCount > 0 ? "accent" : "success"}
+            icon={<IconCalendarDue size={15} aria-hidden={true} />}
+          />
         </div>
       </div>
 
       <div className="mt-lg grid gap-md xl:grid-cols-4">
         <AlertGroup
-          title="Açık Ticketlar"
-          description="Açık / işlemde olan ticketlar, aciliğe göre sıralı."
-          items={allOpenTickets}
-          variant={urgentTickets.length > 0 ? "danger" : allOpenTickets.length > 0 ? "warning" : "success"}
+          title="Aksiyonlar"
+          description="Onay bekleyen işler ve açık / işlemde olan ticketlar, aciliyete göre sıralı."
+          items={actionItems}
+          variant={actionVariant}
           fallbackUrl="/tickets"
-          emptyText="Açık ticket yok"
+          emptyText="Aksiyon gerektiren ticket veya onay yok"
         />
 
         <AlertGroup

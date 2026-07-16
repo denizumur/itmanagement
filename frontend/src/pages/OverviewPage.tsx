@@ -46,7 +46,7 @@ export function OverviewPage() {
   return (
     <AppShell
       reminderCount={
-        notifications?.counts.normal ?? data.metrics.visible_pending_reminders
+        notifications?.counts.total ?? data.metrics.visible_pending_reminders
       }
     >
       <PageTransition>

@@ -1,42 +1,32 @@
 import type { ReactNode } from "react";
-import { IconChevronDown, IconChevronUp, IconSelector } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconSelector,
+} from "@tabler/icons-react";
 import { cn } from "../../lib/cn";
 import { getSortDirection } from "../../lib/tableQuery";
 
-export interface DataTableColumn<T> {
+export type DataTableColumn<T> = {
   key: string;
   label: string;
   sortable?: boolean;
   sortKey?: string;
   className?: string;
-  render?: (row: T) => ReactNode;
-}
+  render: (item: T) => ReactNode;
+};
 
-interface DataTableProps<T> {
+type DataTableProps<T> = {
   columns: DataTableColumn<T>[];
   data: T[];
-  getRowKey: (row: T) => string | number;
-  ordering: string | null;
-  onSortChange: (field: string) => void;
+  getRowKey: (item: T) => string | number;
+  ordering?: string | null;
+  onSortChange?: (sortKey: string) => void;
   isLoading?: boolean;
   emptyMessage?: string;
-}
-
-function SortIcon({
-  direction,
-}: {
-  direction: "asc" | "desc" | null;
-}) {
-  if (direction === "asc") {
-    return <IconChevronUp size={14} aria-hidden={true} />;
-  }
-
-  if (direction === "desc") {
-    return <IconChevronDown size={14} aria-hidden={true} />;
-  }
-
-  return <IconSelector size={14} aria-hidden={true} />;
-}
+  onRowClick?: (item: T) => void;
+  getRowClassName?: (item: T) => string;
+};
 
 export function DataTable<T>({
   columns,
@@ -46,34 +36,55 @@ export function DataTable<T>({
   onSortChange,
   isLoading = false,
   emptyMessage = "Kayıt bulunamadı.",
+  onRowClick,
+  getRowClassName,
 }: DataTableProps<T>) {
+  const currentOrdering = ordering ?? "";
+
+  function renderSortIcon(column: DataTableColumn<T>) {
+    if (!column.sortable) {
+      return null;
+    }
+
+    const sortKey = column.sortKey ?? column.key;
+    const direction = getSortDirection(currentOrdering, sortKey);
+
+    if (direction === "asc") {
+      return <IconChevronUp size={14} aria-hidden={true} />;
+    }
+
+    if (direction === "desc") {
+      return <IconChevronDown size={14} aria-hidden={true} />;
+    }
+
+    return <IconSelector size={14} aria-hidden={true} />;
+  }
+
   return (
     <div className="overflow-hidden rounded-panel border border-border bg-surface-1 shadow-panel">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-border text-left">
-          <thead className="bg-surface-2/80">
-            <tr>
+        <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-body">
+          <thead>
+            <tr className="text-caption text-text-secondary">
               {columns.map((column) => {
-                const sortField = column.sortKey ?? column.key;
-                const direction = getSortDirection(ordering, sortField);
+                const sortKey = column.sortKey ?? column.key;
 
                 return (
                   <th
                     key={column.key}
-                    scope="col"
                     className={cn(
-                      "whitespace-nowrap px-md py-sm text-caption font-semibold uppercase tracking-wide text-text-secondary",
+                      "border-b border-border px-md py-sm font-normal",
                       column.className
                     )}
                   >
-                    {column.sortable ? (
+                    {column.sortable && onSortChange ? (
                       <button
                         type="button"
-                        onClick={() => onSortChange(sortField)}
-                        className="inline-flex items-center gap-xs text-left transition hover:text-text-primary"
+                        onClick={() => onSortChange(sortKey)}
+                        className="inline-flex items-center gap-xs text-left transition hover:text-accent"
                       >
                         <span>{column.label}</span>
-                        <SortIcon direction={direction} />
+                        {renderSortIcon(column)}
                       </button>
                     ) : (
                       column.label
@@ -84,51 +95,50 @@ export function DataTable<T>({
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-border">
+          <tbody>
             {isLoading ? (
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-md py-lg text-center text-body text-text-secondary"
+                  className="px-md py-lg text-center text-text-secondary"
                 >
                   Yükleniyor...
                 </td>
               </tr>
-            ) : null}
-
-            {!isLoading && data.length === 0 ? (
+            ) : data.length === 0 ? (
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-md py-lg text-center text-body text-text-secondary"
+                  className="px-md py-lg text-center text-text-secondary"
                 >
                   {emptyMessage}
                 </td>
               </tr>
-            ) : null}
-
-            {!isLoading
-              ? data.map((row) => (
-                  <tr
-                    key={getRowKey(row)}
-                    className="transition hover:bg-surface-2/60"
-                  >
-                    {columns.map((column) => (
-                      <td
-                        key={column.key}
-                        className={cn(
-                          "whitespace-nowrap px-md py-sm text-body text-text-primary",
-                          column.className
-                        )}
-                      >
-                        {column.render
-                          ? column.render(row)
-                          : String((row as Record<string, unknown>)[column.key] ?? "-")}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              : null}
+            ) : (
+              data.map((item) => (
+                <tr
+                  key={getRowKey(item)}
+                  onClick={onRowClick ? () => onRowClick(item) : undefined}
+                  className={cn(
+                    "transition hover:bg-surface-2",
+                    onRowClick && "cursor-pointer",
+                    getRowClassName?.(item)
+                  )}
+                >
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={cn(
+                        "border-b border-border px-md py-md align-top",
+                        column.className
+                      )}
+                    >
+                      {column.render(item)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

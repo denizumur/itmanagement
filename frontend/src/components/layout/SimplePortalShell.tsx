@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { useAuth } from "../../auth/AuthContext";
+import { useNotificationCenter } from "../../hooks/useNotificationCenter";
+import { NotificationBell } from "./NotificationBell";
 
 interface SimplePortalShellProps {
   title: string;
@@ -15,6 +17,7 @@ export function SimplePortalShell({
   children,
 }: SimplePortalShellProps) {
   const { user, logout } = useAuth();
+  const { data } = useNotificationCenter();
 
   async function handleLogout() {
     await logout();
@@ -44,6 +47,22 @@ export function SimplePortalShell({
           </div>
 
           <div className="flex items-center gap-md">
+            <NotificationBell
+              variant="normal"
+              title="Bildirimler"
+              emptyText="Normal bildirim yok."
+              count={data?.counts.normal ?? 0}
+              items={data?.normal ?? []}
+            />
+
+            <NotificationBell
+              variant="critical"
+              title="Kritik Uyarılar"
+              emptyText="Kritik uyarı yok."
+              count={data?.counts.critical ?? 0}
+              items={data?.critical ?? []}
+            />
+
             <div className="hidden text-right sm:block">
               <p className="text-body font-semibold">{displayName}</p>
               <p className="text-caption text-text-secondary">{user?.email}</p>

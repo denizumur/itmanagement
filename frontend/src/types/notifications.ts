@@ -1,50 +1,48 @@
 export type NotificationSeverity = "normal" | "critical";
-export type NotificationType = "ticket" | "reminder";
+
+export type NotificationType = "ticket" | "ticket_approval" | "reminder";
+
+export type NotificationMetadata = Record<string, unknown>;
 
 export interface NotificationItem {
   id: string;
   type: NotificationType;
   severity: NotificationSeverity;
+  urgency_score: number;
+  urgency_label: string;
   title: string;
   message: string;
   url: string;
   created_at: string;
-  metadata: {
-    ticket_id?: number;
-    reminder_id?: number;
-    status?: string;
-    status_label?: string;
-    priority?: string;
-    priority_label?: string;
-    employee_name?: string;
-    source_type?: string;
-    source_type_label?: string;
-    due_date?: string;
-    days_until_due?: number;
-    threshold_days?: number;
-    bucket?: "due_today" | "seven_days" | "thirty_days";
-  };
+  metadata: NotificationMetadata;
+}
+
+export interface NotificationCounts {
+  normal: number;
+  critical: number;
+  total: number;
 }
 
 export interface NotificationOverview {
   urgent_tickets: NotificationItem[];
   active_tickets: NotificationItem[];
+  pending_approvals: NotificationItem[];
   reminders_due_today: NotificationItem[];
   reminders_7_days: NotificationItem[];
   reminders_30_days: NotificationItem[];
 }
 
+export interface NotificationPolling {
+  interval_seconds?: number;
+  normal_interval_seconds?: number;
+  critical_interval_seconds?: number;
+}
+
 export interface NotificationCenterResponse {
-  counts: {
-    normal: number;
-    critical: number;
-    total: number;
-  };
+  counts: NotificationCounts;
+  items: NotificationItem[];
   normal: NotificationItem[];
   critical: NotificationItem[];
   overview: NotificationOverview;
-  polling: {
-    normal_interval_seconds: number;
-    critical_interval_seconds: number;
-  };
+  polling: NotificationPolling;
 }

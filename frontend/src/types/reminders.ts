@@ -1,8 +1,22 @@
-export type ReminderSourceType = "warranty" | "maintenance" | "license" | "ticket_sla";
+import type { PaginatedApiResponse } from "./api";
+
+export type ReminderSourceType =
+  | "warranty"
+  | "maintenance"
+  | "license"
+  | "ticket_sla";
 
 export type ReminderStatus = "pending" | "sent" | "dismissed" | "cancelled";
 
 export type ReminderChannel = "in_app" | "email";
+
+export type ReminderTimeStatus =
+  | "overdue"
+  | "today"
+  | "next_7_days"
+  | "next_30_days"
+  | "snoozed_today"
+  | "future";
 
 export type Reminder = {
   id: number;
@@ -21,9 +35,13 @@ export type Reminder = {
   notified_at?: string | null;
   dismissed_at?: string | null;
   cancelled_at?: string | null;
+  snoozed_until?: string | null;
+  snoozed_at?: string | null;
   metadata?: Record<string, unknown> | null;
   is_due_to_show: boolean;
   days_until_due: number;
+  is_snoozed_today: boolean;
+  is_visible_today: boolean;
   created_by?: number | null;
   created_by_username?: string | null;
   created_at: string;
@@ -35,8 +53,12 @@ export type ReminderFilters = {
   status?: string;
   channel?: string;
   visible?: string;
+  snoozed_today?: string;
+  time_status?: string;
   due_before?: string;
   due_after?: string;
+  scheduled_before?: string;
+  scheduled_after?: string;
 };
 
 export type ReminderSummary = {
@@ -46,6 +68,7 @@ export type ReminderSummary = {
   sent: number;
   dismissed: number;
   cancelled: number;
+  snoozed_today: number;
   overdue_due_date: number;
   due_today: number;
   upcoming_7_days: number;
@@ -67,3 +90,5 @@ export type ReminderSummary = {
 export type ReminderGeneratePayload = {
   channel: ReminderChannel;
 };
+
+export type PaginatedReminderResponse<T> = PaginatedApiResponse<T>;

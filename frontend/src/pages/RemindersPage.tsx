@@ -9,12 +9,13 @@ import {
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
+import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { Skeleton } from "../components/common/Skeleton";
+import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
 import { AppToast } from "../components/ui/AppToast";
-import { DataCard } from "../components/ui/DataCard";
-import { DataTable } from "../components/ui/DataTable";
 import { GlowButton } from "../components/ui/GlowButton";
 import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
@@ -25,10 +26,13 @@ import {
   useDismissReminder,
   useGenerateReminders,
   useReminderSummary,
-  useReminders,
+  useRemindersTable,
+  useSnoozeReminderToday,
 } from "../hooks/useReminders";
+import { useTableQueryState } from "../hooks/useTableQueryState";
 import { canManage } from "../lib/rbac";
-import type { Reminder, ReminderFilters } from "../types/reminders";
+import type { TableQueryState } from "../types/table";
+import type { Reminder } from "../types/reminders";
 
 type ToastState = {
   type: "success" | "error";
@@ -44,10 +48,10 @@ const sourceTypeOptions = [
 ];
 
 const actionStatusOptions = [
-  { value: "", label: "Tüm işlem durumları" },
+  { value: "all", label: "Tüm işlem durumları" },
   { value: "pending", label: "Bekliyor" },
   { value: "sent", label: "Gönderildi" },
-  { value: "dismissed", label: "Kapatıldı" },
+  { value: "dismissed", label: "Kalıcı kapatıldı" },
   { value: "cancelled", label: "İptal edildi" },
 ];
 
@@ -57,6 +61,7 @@ const timeStatusOptions = [
   { value: "today", label: "Bugün" },
   { value: "next_7_days", label: "7 gün içinde" },
   { value: "next_30_days", label: "30 gün içinde" },
+  { value: "snoozed_today", label: "Bugün gizlenen" },
   { value: "future", label: "İleride" },
 ];
 
@@ -129,24 +134,24 @@ function getActionStatusVariant(
 }
 
 function getActionStatusLabel(reminder: Reminder) {
-  if (reminder.status_label) {
-    return reminder.status_label;
-  }
-
   const labels: Record<string, string> = {
     pending: "Bekliyor",
     sent: "Gönderildi",
-    dismissed: "Kapatıldı",
+    dismissed: "Kalıcı kapatıldı",
     cancelled: "İptal edildi",
   };
 
-  return labels[reminder.status] ?? reminder.status;
+  return labels[reminder.status] ?? reminder.status_label ?? reminder.status;
 }
 
 function getTimeStatusVariant(
   reminder: Reminder
 ): "accent" | "success" | "warning" | "danger" | "neutral" {
   if (reminder.status !== "pending") {
+    return "neutral";
+  }
+
+  if (reminder.is_snoozed_today) {
     return "neutral";
   }
 
@@ -174,6 +179,10 @@ function getTimeStatusLabel(reminder: Reminder) {
     return "-";
   }
 
+  if (reminder.is_snoozed_today) {
+    return "Bugün gizlendi";
+  }
+
   if (reminder.days_until_due < 0) {
     return "Gecikti";
   }
@@ -191,88 +200,6 @@ function getTimeStatusLabel(reminder: Reminder) {
   }
 
   return "İleride";
-}
-
-function matchesTimeStatus(reminder: Reminder, timeStatus: string) {
-  if (!timeStatus) {
-    return true;
-  }
-
-  if (reminder.status !== "pending") {
-    return false;
-  }
-
-  if (timeStatus === "overdue") {
-    return reminder.days_until_due < 0;
-  }
-
-  if (timeStatus === "today") {
-    return reminder.days_until_due === 0;
-  }
-
-  if (timeStatus === "next_7_days") {
-    return reminder.days_until_due >= 0 && reminder.days_until_due <= 7;
-  }
-
-  if (timeStatus === "next_30_days") {
-    return reminder.days_until_due >= 0 && reminder.days_until_due <= 30;
-  }
-
-  if (timeStatus === "future") {
-    return reminder.days_until_due > 30;
-  }
-
-  return true;
-}
-
-function getDueProximityScore(reminder: Reminder) {
-  if (typeof reminder.days_until_due === "number") {
-    return Math.abs(reminder.days_until_due);
-  }
-
-  const dueDateTime = new Date(reminder.due_date).getTime();
-
-  if (Number.isNaN(dueDateTime)) {
-    return Number.MAX_SAFE_INTEGER;
-  }
-
-  return Math.abs(dueDateTime - Date.now());
-}
-
-function compareRemindersByDueProximity(a: Reminder, b: Reminder) {
-  const proximityDiff = getDueProximityScore(a) - getDueProximityScore(b);
-
-  if (proximityDiff !== 0) {
-    return proximityDiff;
-  }
-
-  const aIsOverdue = a.status === "pending" && a.days_until_due < 0;
-  const bIsOverdue = b.status === "pending" && b.days_until_due < 0;
-
-  if (aIsOverdue && !bIsOverdue) {
-    return -1;
-  }
-
-  if (!aIsOverdue && bIsOverdue) {
-    return 1;
-  }
-
-  const aDueDateTime = new Date(a.due_date).getTime();
-  const bDueDateTime = new Date(b.due_date).getTime();
-
-  if (Number.isNaN(aDueDateTime) && Number.isNaN(bDueDateTime)) {
-    return 0;
-  }
-
-  if (Number.isNaN(aDueDateTime)) {
-    return 1;
-  }
-
-  if (Number.isNaN(bDueDateTime)) {
-    return -1;
-  }
-
-  return aDueDateTime - bDueDateTime;
 }
 
 function getDueLabel(reminder: Reminder) {
@@ -320,92 +247,238 @@ function DetailRow({
   );
 }
 
+function buildEffectiveReminderTableState({
+  state,
+  selectedVisible,
+  selectedActionStatus,
+}: {
+  state: TableQueryState;
+  selectedVisible: string;
+  selectedActionStatus: string;
+}): TableQueryState {
+  const filters: TableQueryState["filters"] = {
+    ...state.filters,
+  };
+
+  delete filters.visible;
+  delete filters.status;
+
+  if (selectedVisible === "true") {
+    filters.visible = "true";
+    filters.status = "pending";
+  } else if (selectedActionStatus && selectedActionStatus !== "all") {
+    filters.status = selectedActionStatus;
+  }
+
+  return {
+    ...state,
+    filters,
+  };
+}
+
+function buildReminderColumns({
+  userCanManage,
+  isSubmitting,
+  onSelectReminder,
+  onSnoozeToday,
+  onDismiss,
+  onCancel,
+}: {
+  userCanManage: boolean;
+  isSubmitting: boolean;
+  onSelectReminder: (reminder: Reminder) => void;
+  onSnoozeToday: (reminder: Reminder) => void;
+  onDismiss: (reminder: Reminder) => void;
+  onCancel: (reminder: Reminder) => void;
+}): DataTableColumn<Reminder>[] {
+  return [
+    {
+      key: "title",
+      label: "Hatırlatıcı",
+      sortable: true,
+      sortKey: "title",
+      render: (reminder) => (
+        <div>
+          <p className="text-text-primary">{reminder.title}</p>
+          <p className="max-w-[420px] truncate text-caption text-text-secondary">
+            {reminder.message}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "source_type",
+      label: "Kaynak",
+      sortable: true,
+      sortKey: "source_type",
+      render: (reminder) => (
+        <div className="text-text-secondary">
+          <p>{getSourceLabel(reminder)}</p>
+          <p className="text-caption">Kaynak ID: {reminder.source_id}</p>
+        </div>
+      ),
+    },
+    {
+      key: "due_date",
+      label: "Son tarih",
+      sortable: true,
+      sortKey: "due_date",
+      render: (reminder) => (
+        <div className="text-text-secondary">
+          <p className="text-body text-text-primary">
+            {formatDate(reminder.due_date)}
+          </p>
+          <p className="text-caption">{getDueLabel(reminder)}</p>
+        </div>
+      ),
+    },
+    {
+      key: "scheduled_for",
+      label: "Gösterim",
+      sortable: true,
+      sortKey: "scheduled_for",
+      render: (reminder) => (
+        <span className="text-text-secondary">
+          {formatDate(reminder.scheduled_for)}
+        </span>
+      ),
+    },
+    {
+      key: "channel",
+      label: "Kanal",
+      sortable: true,
+      sortKey: "channel",
+      render: (reminder) => (
+        <span className="text-text-secondary">
+          {reminder.channel_label ?? reminder.channel}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Zaman / İşlem",
+      sortable: true,
+      sortKey: "status",
+      render: (reminder) => (
+        <div className="flex flex-col items-start gap-xs">
+          <StatusBadge variant={getTimeStatusVariant(reminder)}>
+            {getTimeStatusLabel(reminder)}
+          </StatusBadge>
+
+          <StatusBadge variant={getActionStatusVariant(reminder)}>
+            {getActionStatusLabel(reminder)}
+          </StatusBadge>
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      label: "İşlem",
+      className: "text-right",
+      render: (reminder) => (
+        <div className="flex justify-end gap-sm">
+          <GlowButton variant="ghost" onClick={() => onSelectReminder(reminder)}>
+            Detay
+          </GlowButton>
+
+          {userCanManage && reminder.status === "pending" ? (
+            <>
+              <GlowButton
+                variant="ghost"
+                onClick={() => onSnoozeToday(reminder)}
+                disabled={isSubmitting}
+                icon={<IconClock size={16} aria-hidden={true} />}
+              >
+                Bugün Gizle
+              </GlowButton>
+
+              <GlowButton
+                variant="ghost"
+                onClick={() => onDismiss(reminder)}
+                disabled={isSubmitting}
+                icon={<IconCheck size={16} aria-hidden={true} />}
+              >
+                Kalıcı Kapat
+              </GlowButton>
+
+              <GlowButton
+                variant="ghost"
+                onClick={() => onCancel(reminder)}
+                disabled={isSubmitting}
+                icon={<IconX size={16} aria-hidden={true} />}
+              >
+                İptal
+              </GlowButton>
+            </>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
+}
+
 export function RemindersPage() {
   const { user } = useAuth();
   const userCanManage = canManage(user?.role);
 
-  const [search, setSearch] = useState("");
-  const [sourceType, setSourceType] = useState("");
-  const [actionStatusFilter, setActionStatusFilter] = useState("pending");
-  const [timeStatusFilter, setTimeStatusFilter] = useState("");
-  const [visibleOnly, setVisibleOnly] = useState(true);
-  const [sortMode, setSortMode] = useState<"default" | "due_closest">(
-    "default"
-  );
-  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(
-    null
-  );
+  const {
+    state,
+    setSearch,
+    setSort,
+    setPage,
+    setPageSize,
+    setFilter,
+    resetFilters,
+  } = useTableQueryState({
+    page: 1,
+    pageSize: 25,
+    ordering: "scheduled_for",
+  });
+
+  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const filters: ReminderFilters = useMemo(() => {
-    const nextFilters: ReminderFilters = {
-      source_type: sourceType,
-      status: actionStatusFilter,
-    };
+  const selectedSourceType =
+    typeof state.filters.source_type === "string" ? state.filters.source_type : "";
+  const selectedActionStatus =
+    typeof state.filters.status === "string" ? state.filters.status : "pending";
+  const selectedTimeStatus =
+    typeof state.filters.time_status === "string" ? state.filters.time_status : "";
+  const selectedVisible =
+    typeof state.filters.visible === "string" ? state.filters.visible : "true";
 
-    if (visibleOnly) {
-      nextFilters.visible = "true";
-      nextFilters.status = "pending";
-    }
+  const visibleOnly = selectedVisible === "true";
 
-    return nextFilters;
-  }, [sourceType, actionStatusFilter, visibleOnly]);
+  const effectiveTableState = useMemo(
+    () =>
+      buildEffectiveReminderTableState({
+        state,
+        selectedVisible,
+        selectedActionStatus,
+      }),
+    [state, selectedVisible, selectedActionStatus]
+  );
 
-  const remindersQuery = useReminders(filters);
+  const remindersQuery = useRemindersTable(effectiveTableState);
   const summaryQuery = useReminderSummary();
 
   const generateMutation = useGenerateReminders();
+  const snoozeTodayMutation = useSnoozeReminderToday();
   const dismissMutation = useDismissReminder();
   const cancelMutation = useCancelReminder();
 
-  const reminders = remindersQuery.data ?? [];
+  const tableData = remindersQuery.data;
+  const reminders = tableData?.results ?? [];
   const summary = summaryQuery.data;
 
   const isSubmitting =
     generateMutation.isPending ||
+    snoozeTodayMutation.isPending ||
     dismissMutation.isPending ||
     cancelMutation.isPending;
 
   const isInitialLoading = remindersQuery.isLoading || summaryQuery.isLoading;
   const hasError = remindersQuery.isError || summaryQuery.isError;
-
-  const filteredReminders = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase("tr-TR");
-
-    return reminders.filter((reminder) => {
-      if (!matchesTimeStatus(reminder, timeStatusFilter)) {
-        return false;
-      }
-
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      const haystack = [
-        reminder.title,
-        reminder.message,
-        reminder.source_type,
-        reminder.source_type_label,
-        reminder.status_label,
-        getActionStatusLabel(reminder),
-        getTimeStatusLabel(reminder),
-        getDueLabel(reminder),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR");
-
-      return haystack.includes(normalizedSearch);
-    });
-  }, [reminders, search, timeStatusFilter]);
-
-  const visibleReminders = useMemo(() => {
-    if (sortMode !== "due_closest") {
-      return filteredReminders;
-    }
-
-    return [...filteredReminders].sort(compareRemindersByDueProximity);
-  }, [filteredReminders, sortMode]);
 
   function refetchAll() {
     remindersQuery.refetch();
@@ -430,9 +503,40 @@ export function RemindersPage() {
     }
   }
 
+  async function handleSnoozeToday(reminder: Reminder) {
+    const confirmed = window.confirm(
+      `"${reminder.title}" hatırlatıcısı bugün gizlenecek. Yarın hâlâ geçerliyse tekrar görünecek. Devam edilsin mi?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await snoozeTodayMutation.mutateAsync(reminder.id);
+
+      setToast({
+        type: "success",
+        message:
+          "Hatırlatıcı bugün gizlendi. Yarın hâlâ geçerliyse tekrar görünür.",
+      });
+
+      if (selectedReminder?.id === reminder.id) {
+        setSelectedReminder(null);
+      }
+
+      refetchAll();
+    } catch (error) {
+      setToast({
+        type: "error",
+        message: getMutationErrorMessage(error),
+      });
+    }
+  }
+
   async function handleDismiss(reminder: Reminder) {
     const confirmed = window.confirm(
-      `"${reminder.title}" hatırlatıcısı kapatılacak. Devam edilsin mi?`
+      `"${reminder.title}" hatırlatıcısı kalıcı olarak kapatılacak. Yarın tekrar görünmez. Devam edilsin mi?`
     );
 
     if (!confirmed) {
@@ -444,7 +548,7 @@ export function RemindersPage() {
 
       setToast({
         type: "success",
-        message: "Hatırlatıcı kapatıldı.",
+        message: "Hatırlatıcı kalıcı olarak kapatıldı.",
       });
 
       if (selectedReminder?.id === reminder.id) {
@@ -490,14 +594,36 @@ export function RemindersPage() {
     }
   }
 
+  function handleVisibleOnlyChange(checked: boolean) {
+    setFilter("visible", checked ? "true" : "all");
+
+    if (checked) {
+      setFilter("status", "pending");
+    }
+  }
+
+  const reminderColumns = useMemo(
+    () =>
+      buildReminderColumns({
+        userCanManage,
+        isSubmitting,
+        onSelectReminder: setSelectedReminder,
+        onSnoozeToday: handleSnoozeToday,
+        onDismiss: handleDismiss,
+        onCancel: handleCancel,
+      }),
+    [userCanManage, isSubmitting, selectedReminder?.id]
+  );
+
   if (isInitialLoading) {
     return (
       <AppShell>
-        <div className="grid gap-md md:grid-cols-4">
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
+        <div className="flex flex-wrap gap-sm">
+          <Skeleton className="h-14 w-36 rounded-full" />
+          <Skeleton className="h-14 w-36 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-36 rounded-full" />
         </div>
 
         <div className="mt-lg">
@@ -546,51 +672,52 @@ export function RemindersPage() {
           }
         />
 
-        <section className="grid gap-md md:grid-cols-2 xl:grid-cols-4">
-          <DataCard className="metric-card-accent p-lg">
-            <IconBell size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {summary?.visible_pending ?? 0}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Görünür bekleyen
-            </p>
-          </DataCard>
+        <section className="mt-lg flex flex-wrap gap-sm">
+          <MiniMetricCard
+            label="Gösterilen kayıt"
+            value={tableData?.count ?? reminders.length}
+            icon={<IconBell size={15} aria-hidden={true} />}
+            tone="accent"
+          />
 
-          <DataCard className="metric-card-danger p-lg">
-            <IconAlertTriangle size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {summary?.overdue_due_date ?? 0}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Geciken son tarih
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="Görünür bekleyen"
+            value={summary?.visible_pending ?? 0}
+            icon={<IconBell size={15} aria-hidden={true} />}
+            tone="accent"
+          />
 
-          <DataCard className="metric-card-warning p-lg">
-            <IconClock size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {summary?.upcoming_7_days ?? 0}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              7 gün içinde
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="Geciken"
+            value={summary?.overdue_due_date ?? 0}
+            icon={<IconAlertTriangle size={15} aria-hidden={true} />}
+            tone="danger"
+          />
 
-          <DataCard className="metric-card-success p-lg">
-            <IconCheck size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {summary?.dismissed ?? 0}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Kapatılan
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="Bugün"
+            value={summary?.due_today ?? 0}
+            icon={<IconClock size={15} aria-hidden={true} />}
+            tone="warning"
+          />
+
+          <MiniMetricCard
+            label="7 gün"
+            value={summary?.upcoming_7_days ?? 0}
+            icon={<IconClock size={15} aria-hidden={true} />}
+            tone="warning"
+          />
+
+          <MiniMetricCard
+            label="Bugün gizlenen"
+            value={summary?.snoozed_today ?? 0}
+            icon={<IconCheck size={15} aria-hidden={true} />}
+          />
         </section>
 
-        <DataCard className="mt-lg p-lg">
-          <div className="grid gap-md xl:grid-cols-[1fr_200px_220px_220px_220px]">
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm shadow-panel">
+        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+          <div className="grid gap-md xl:grid-cols-[1fr_200px_220px_220px_240px_auto]">
+            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
               <IconSearch
                 size={18}
                 className="text-text-secondary"
@@ -599,16 +726,18 @@ export function RemindersPage() {
 
               <input
                 className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
-                placeholder="Başlık, mesaj veya kaynak ara..."
-                value={search}
+                placeholder="Başlık, mesaj veya oluşturan ara..."
+                value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
               />
             </label>
 
             <select
-              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
-              value={sourceType}
-              onChange={(event) => setSourceType(event.target.value)}
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedSourceType}
+              onChange={(event) =>
+                setFilter("source_type", event.target.value || null)
+              }
               aria-label="Kaynak filtresi"
             >
               {sourceTypeOptions.map((option) => (
@@ -619,23 +748,25 @@ export function RemindersPage() {
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none disabled:opacity-60"
-              value={actionStatusFilter}
-              onChange={(event) => setActionStatusFilter(event.target.value)}
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none disabled:opacity-60"
+              value={selectedActionStatus}
+              onChange={(event) => setFilter("status", event.target.value)}
               aria-label="İşlem durumu filtresi"
               disabled={visibleOnly}
             >
               {actionStatusOptions.map((option) => (
-                <option key={option.value || "all"} value={option.value}>
+                <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
-              value={timeStatusFilter}
-              onChange={(event) => setTimeStatusFilter(event.target.value)}
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedTimeStatus}
+              onChange={(event) =>
+                setFilter("time_status", event.target.value || null)
+              }
               aria-label="Zaman durumu filtresi"
             >
               {timeStatusOptions.map((option) => (
@@ -645,165 +776,45 @@ export function RemindersPage() {
               ))}
             </select>
 
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel">
+            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel">
               <input
                 type="checkbox"
                 checked={visibleOnly}
-                onChange={(event) => {
-                  setVisibleOnly(event.target.checked);
-
-                  if (event.target.checked) {
-                    setActionStatusFilter("pending");
-                  }
-                }}
+                onChange={(event) => handleVisibleOnlyChange(event.target.checked)}
               />
               <span>Bugün görünür bekleyenler</span>
             </label>
+
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+            >
+              Temizle
+            </button>
           </div>
-        </DataCard>
+        </section>
 
-        <section className="mt-lg">
+        <section className="mt-lg flex flex-col gap-md">
           <DataTable
-            title="Hatırlatıcı listesi"
-            description={`${visibleReminders.length} kayıt görüntüleniyor.`}
-          >
-            {!visibleReminders.length ? (
-              <div className="rounded-app border border-border bg-surface-1 p-lg text-center text-text-secondary">
-                Filtrelere uygun hatırlatıcı bulunamadı.
-              </div>
-            ) : (
-              <table className="w-full min-w-[1320px] border-separate border-spacing-0 text-left text-body">
-                <thead>
-                  <tr className="text-caption text-text-secondary">
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Hatırlatıcı
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Kaynak
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      <button
-                        type="button"
-                        className="flex items-center gap-xs text-left text-caption text-text-secondary transition hover:text-text-primary"
-                        onClick={() => setSortMode("due_closest")}
-                        title="Son tarihe bugünden en yakın olanları üste taşı"
-                      >
-                        <span>Son tarih</span>
-                        <span className="text-[11px]">
-                          {sortMode === "due_closest"
-                            ? "Yakın → uzak"
-                            : "Sırala"}
-                        </span>
-                      </button>
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Gösterim
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Kanal
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Zaman / İşlem
-                    </th>
-                    <th className="border-b border-border px-md py-sm text-right font-normal">
-                      İşlem
-                    </th>
-                  </tr>
-                </thead>
+            columns={reminderColumns}
+            data={reminders}
+            getRowKey={(reminder) => reminder.id}
+            ordering={state.ordering}
+            onSortChange={setSort}
+            isLoading={remindersQuery.isLoading}
+            emptyMessage="Filtrelere uygun hatırlatıcı bulunamadı."
+          />
 
-                <tbody>
-                  {visibleReminders.map((reminder) => (
-                    <tr
-                      key={reminder.id}
-                      className="transition hover:bg-surface-1"
-                    >
-                      <td className="border-b border-border px-md py-md">
-                        <p className="text-text-primary">{reminder.title}</p>
-                        <p className="max-w-[420px] truncate text-caption text-text-secondary">
-                          {reminder.message}
-                        </p>
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        <p>{getSourceLabel(reminder)}</p>
-                        <p className="text-caption text-text-secondary">
-                          Kaynak ID: {reminder.source_id}
-                        </p>
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        <p className="text-body text-text-primary">
-                          {formatDate(reminder.due_date)}
-                        </p>
-                        <p className="text-caption text-text-secondary">
-                          {getDueLabel(reminder)}
-                        </p>
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        {formatDate(reminder.scheduled_for)}
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        {reminder.channel_label ?? reminder.channel}
-                      </td>
-
-                      <td className="border-b border-border px-md py-md">
-                        <div className="flex flex-col items-start gap-xs">
-                          <StatusBadge
-                            variant={getTimeStatusVariant(reminder)}
-                          >
-                            {getTimeStatusLabel(reminder)}
-                          </StatusBadge>
-
-                          <StatusBadge
-                            variant={getActionStatusVariant(reminder)}
-                          >
-                            {getActionStatusLabel(reminder)}
-                          </StatusBadge>
-                        </div>
-                      </td>
-
-                      <td className="border-b border-border px-md py-md">
-                        <div className="flex justify-end gap-sm">
-                          <GlowButton
-                            variant="ghost"
-                            onClick={() => setSelectedReminder(reminder)}
-                          >
-                            Detay
-                          </GlowButton>
-
-                          {userCanManage && reminder.status === "pending" && (
-                            <>
-                              <GlowButton
-                                variant="ghost"
-                                onClick={() => handleDismiss(reminder)}
-                                disabled={isSubmitting}
-                                icon={
-                                  <IconCheck size={16} aria-hidden={true} />
-                                }
-                              >
-                                Kapat
-                              </GlowButton>
-
-                              <GlowButton
-                                variant="ghost"
-                                onClick={() => handleCancel(reminder)}
-                                disabled={isSubmitting}
-                                icon={<IconX size={16} aria-hidden={true} />}
-                              >
-                                İptal
-                              </GlowButton>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </DataTable>
+          <TablePagination
+            page={state.page}
+            pageSize={state.pageSize}
+            totalCount={tableData?.count ?? 0}
+            hasNext={Boolean(tableData?.next)}
+            hasPrevious={Boolean(tableData?.previous)}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </section>
 
         <SlideOverPanel
@@ -821,29 +832,34 @@ export function RemindersPage() {
                   </p>
 
                   <div className="mt-xs flex flex-wrap gap-xs">
-                    <StatusBadge
-                      variant={getTimeStatusVariant(selectedReminder)}
-                    >
+                    <StatusBadge variant={getTimeStatusVariant(selectedReminder)}>
                       {getTimeStatusLabel(selectedReminder)}
                     </StatusBadge>
 
-                    <StatusBadge
-                      variant={getActionStatusVariant(selectedReminder)}
-                    >
+                    <StatusBadge variant={getActionStatusVariant(selectedReminder)}>
                       {getActionStatusLabel(selectedReminder)}
                     </StatusBadge>
                   </div>
                 </div>
 
                 {userCanManage && selectedReminder.status === "pending" && (
-                  <div className="flex gap-sm">
+                  <div className="flex flex-wrap justify-end gap-sm">
+                    <GlowButton
+                      variant="ghost"
+                      icon={<IconClock size={16} aria-hidden={true} />}
+                      onClick={() => handleSnoozeToday(selectedReminder)}
+                      disabled={isSubmitting}
+                    >
+                      Bugün Gizle
+                    </GlowButton>
+
                     <GlowButton
                       variant="ghost"
                       icon={<IconCheck size={16} aria-hidden={true} />}
                       onClick={() => handleDismiss(selectedReminder)}
                       disabled={isSubmitting}
                     >
-                      Kapat
+                      Kalıcı Kapat
                     </GlowButton>
 
                     <GlowButton
@@ -904,7 +920,15 @@ export function RemindersPage() {
                   value={formatDate(selectedReminder.notified_at)}
                 />
                 <DetailRow
-                  label="Kapatılma zamanı"
+                  label="Bugün gizlenme tarihi"
+                  value={formatDate(selectedReminder.snoozed_until)}
+                />
+                <DetailRow
+                  label="Bugün gizlenme zamanı"
+                  value={formatDate(selectedReminder.snoozed_at)}
+                />
+                <DetailRow
+                  label="Kalıcı kapatma zamanı"
                   value={formatDate(selectedReminder.dismissed_at)}
                 />
                 <DetailRow

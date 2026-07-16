@@ -1,3 +1,5 @@
+import type { PaginatedApiResponse } from "./api";
+
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
@@ -88,3 +90,26 @@ export interface TicketCommentCreatePayload {
   body: string;
   is_internal?: boolean;
 }
+
+export interface TicketSummary {
+  total: number;
+  open: number;
+  in_progress: number;
+  resolved: number;
+  closed: number;
+  urgent: number;
+  high: number;
+  high_or_urgent: number;
+  pending_approval: number;
+  approved_or_not_required_open: number;
+}
+
+export interface TicketFilters {
+  search?: string;
+  status?: TicketStatus | "";
+  priority?: TicketPriority | "";
+  category?: TicketCategory | "";
+  approval_status?: TicketApprovalStatus | "";
+}
+
+export type PaginatedTicketResponse<T> = PaginatedApiResponse<T>;

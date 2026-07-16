@@ -12,8 +12,9 @@ export function Topbar({ reminderCount = 0 }: TopbarProps) {
   const { user, logout } = useAuth();
   const { data } = useNotificationCenter();
 
-  const normalCount = data?.counts.normal ?? reminderCount;
+  const totalCount = data?.counts.total ?? reminderCount;
   const criticalCount = data?.counts.critical ?? 0;
+  const items = data?.items ?? [];
 
   return (
     <header className="topbar-glass sticky top-0 z-20 flex items-center justify-between px-lg py-md">
@@ -24,19 +25,12 @@ export function Topbar({ reminderCount = 0 }: TopbarProps) {
 
       <div className="ml-lg flex items-center gap-md">
         <NotificationBell
-          variant="normal"
-          title="Bildirimler"
-          emptyText="Normal bildirim yok."
-          count={normalCount}
-          items={data?.normal ?? []}
-        />
-
-        <NotificationBell
-          variant="critical"
-          title="Kritik Uyarılar"
-          emptyText="Kritik uyarı yok."
-          count={criticalCount}
-          items={data?.critical ?? []}
+          title="Bildirim Merkezi"
+          emptyText="Bildirim yok."
+          count={totalCount}
+          criticalCount={criticalCount}
+          items={items}
+          variant="unified"
         />
 
         <div className="hidden rounded-app border border-border bg-surface-1 px-md py-sm text-right shadow-panel sm:block">

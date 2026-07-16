@@ -1,5 +1,8 @@
+import { buildTableApiParams } from "../lib/tableQuery";
+import type { TableQueryState } from "../types/table";
 import { api } from "./http";
 import type {
+  PaginatedTicketResponse,
   Ticket,
   TicketApproval,
   TicketApprovalDecisionPayload,
@@ -7,25 +10,49 @@ import type {
   TicketCommentCreatePayload,
   TicketCreatePayload,
   TicketStatus,
+  TicketSummary,
 } from "../types/tickets";
 
+const TICKETS_ENDPOINT = "/api/tickets/";
+
 export async function fetchMyTickets() {
-  const response = await api.get<Ticket[]>("/api/tickets/");
+  const response = await api.get<Ticket[]>(TICKETS_ENDPOINT);
+  return response.data;
+}
+
+export async function fetchTicketsTable(state: TableQueryState) {
+  const response = await api.get<PaginatedTicketResponse<Ticket>>(
+    `${TICKETS_ENDPOINT}table/`,
+    {
+      params: buildTableApiParams(state),
+    }
+  );
+
+  return response.data;
+}
+
+export async function fetchTicketSummary() {
+  const response = await api.get<TicketSummary>(`${TICKETS_ENDPOINT}summary/`);
   return response.data;
 }
 
 export async function createTicket(payload: TicketCreatePayload) {
-  const response = await api.post<Ticket>("/api/tickets/", payload);
+  const response = await api.post<Ticket>(TICKETS_ENDPOINT, {
+    ...payload,
+    title: payload.title.trim(),
+    description: payload.description.trim(),
+  });
+
   return response.data;
 }
 
 export async function fetchTicketQueue() {
-  const response = await api.get<Ticket[]>("/api/tickets/queue/");
+  const response = await api.get<Ticket[]>(`${TICKETS_ENDPOINT}queue/`);
   return response.data;
 }
 
 export async function fetchTicketApprovals() {
-  const response = await api.get<TicketApproval[]>("/api/tickets/approvals/");
+  const response = await api.get<TicketApproval[]>(`${TICKETS_ENDPOINT}approvals/`);
   return response.data;
 }
 
@@ -34,7 +61,7 @@ export async function approveTicket(
   payload: TicketApprovalDecisionPayload
 ) {
   const response = await api.post<Ticket>(
-    `/api/tickets/${ticketId}/approve/`,
+    `${TICKETS_ENDPOINT}${ticketId}/approve/`,
     payload
   );
   return response.data;
@@ -45,14 +72,14 @@ export async function rejectTicket(
   payload: TicketApprovalDecisionPayload
 ) {
   const response = await api.post<Ticket>(
-    `/api/tickets/${ticketId}/reject/`,
+    `${TICKETS_ENDPOINT}${ticketId}/reject/`,
     payload
   );
   return response.data;
 }
 
 export async function updateTicketStatus(ticketId: number, status: TicketStatus) {
-  const response = await api.post<Ticket>(`/api/tickets/${ticketId}/status/`, {
+  const response = await api.post<Ticket>(`${TICKETS_ENDPOINT}${ticketId}/status/`, {
     status,
   });
   return response.data;
@@ -60,7 +87,7 @@ export async function updateTicketStatus(ticketId: number, status: TicketStatus)
 
 export async function fetchTicketComments(ticketId: number) {
   const response = await api.get<TicketComment[]>(
-    `/api/tickets/${ticketId}/comments/`
+    `${TICKETS_ENDPOINT}${ticketId}/comments/`
   );
   return response.data;
 }
@@ -70,8 +97,12 @@ export async function createTicketComment(
   payload: TicketCommentCreatePayload
 ) {
   const response = await api.post<TicketComment>(
-    `/api/tickets/${ticketId}/comments/`,
-    payload
+    `${TICKETS_ENDPOINT}${ticketId}/comments/`,
+    {
+      body: payload.body.trim(),
+      is_internal: Boolean(payload.is_internal),
+    }
   );
+
   return response.data;
 }
