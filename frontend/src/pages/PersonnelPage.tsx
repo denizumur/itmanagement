@@ -1,11 +1,39 @@
-import { IconRefresh, IconSearch, IconUsers } from "@tabler/icons-react";
-import { AppShell } from "../components/layout/AppShell";
+import {
+  IconBriefcase,
+  IconDeviceLaptop,
+  IconDownload,
+  IconRefresh,
+  IconSearch,
+  IconTicket,
+  IconUserCircle,
+  IconUserCheck,
+  IconUsers,
+  IconX,
+} from "@tabler/icons-react";
+import { useMemo, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
-import { TablePagination } from "../components/common/TablePagination";
-import { useEmployeeTable } from "../hooks/useEmployeeTable";
-import { useTableQueryState } from "../hooks/useTableQueryState";
-import type { Employee } from "../types/employees";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
+import { TablePagination } from "../components/common/TablePagination";
+import { AppShell } from "../components/layout/AppShell";
+import {
+  useEmployeeDetail,
+  useEmployeeExport,
+  useEmployeeTable,
+} from "../hooks/useEmployeeTable";
+import { useTableQueryState } from "../hooks/useTableQueryState";
+import { canManage } from "../lib/rbac";
+import type {
+  Employee,
+  EmployeeActiveAssignment,
+  EmployeeDetailResponse,
+  EmployeeRecentTicket,
+} from "../types/employees";
+
+type ToastState = {
+  type: "success" | "error";
+  message: string;
+};
 
 function getEmployeeDisplayName(employee: Employee) {
   return employee.full_name || employee.name || "";
@@ -47,6 +75,450 @@ function getLastName(employee: Employee) {
   return parts.slice(1).join(" ");
 }
 
+function getRoleLabel(employee: Employee) {
+  if (employee.user_role_label) {
+    return employee.user_role_label;
+  }
+
+  const roleLabels: Record<string, string> = {
+    admin: "Admin",
+    technician: "Technician",
+    viewer: "Viewer",
+    approver: "Approver",
+    requester: "Requester",
+  };
+
+  if (employee.user_role && typeof employee.user_role === "string") {
+    return roleLabels[employee.user_role] ?? employee.user_role;
+  }
+
+  return employee.user ? "Rol yok" : "User yok";
+}
+
+function formatDate(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function displayValue(value?: string | number | boolean | null) {
+  if (value === undefined || value === null || value === "") {
+    return "-";
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Evet" : "Hayır";
+  }
+
+  return value;
+}
+
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | number | boolean | null;
+}) {
+  return (
+    <div className="rounded-app border border-border bg-surface-2 p-md">
+      <p className="text-caption text-text-secondary">{label}</p>
+      <p className="mt-xs break-words text-body text-text-primary">
+        {displayValue(value)}
+      </p>
+    </div>
+  );
+}
+
+function StatusPill({
+  children,
+  tone = "neutral",
+}: {
+  children: string;
+  tone?: "success" | "danger" | "warning" | "accent" | "neutral";
+}) {
+  const toneClassName = {
+    success: "border-success/30 bg-success/10 text-success",
+    danger: "border-danger/30 bg-danger/10 text-danger",
+    warning: "border-warning/30 bg-warning/10 text-warning",
+    accent: "border-accent/30 bg-accent/10 text-accent",
+    neutral: "border-border bg-surface-2 text-text-secondary",
+  }[tone];
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-sm py-1 text-caption ${toneClassName}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function getTicketStatusTone(status?: string | null) {
+  if (status === "resolved") {
+    return "success";
+  }
+
+  if (status === "closed") {
+    return "neutral";
+  }
+
+  if (status === "in_progress") {
+    return "warning";
+  }
+
+  return "accent";
+}
+
+function getTicketPriorityTone(priority?: string | null) {
+  if (priority === "urgent") {
+    return "danger";
+  }
+
+  if (priority === "high") {
+    return "warning";
+  }
+
+  return "neutral";
+}
+
+function EmployeeAssignmentCard({
+  assignment,
+}: {
+  assignment: EmployeeActiveAssignment;
+}) {
+  return (
+    <article className="rounded-app border border-border bg-surface-2 p-md">
+      <div className="flex flex-col gap-xs sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-semibold text-text-primary">
+            {assignment.asset_name}
+          </p>
+          <p className="mt-xs text-caption text-text-secondary">
+            {assignment.asset_display_identifier ||
+              assignment.asset_inventory_code ||
+              assignment.asset_serial_number ||
+              "Varlık kodu yok"}
+          </p>
+        </div>
+
+        <StatusPill tone="accent">
+          {assignment.asset_status_label || assignment.asset_status || "Durum yok"}
+        </StatusPill>
+      </div>
+
+      <div className="mt-sm grid gap-sm sm:grid-cols-2">
+        <DetailRow label="Kategori" value={assignment.asset_category} />
+        <DetailRow label="Zimmet Tarihi" value={formatDate(assignment.assigned_at)} />
+        <DetailRow label="Zimmetleyen" value={assignment.assigned_by_username} />
+        <DetailRow label="Not" value={assignment.notes} />
+      </div>
+    </article>
+  );
+}
+
+function EmployeeTicketCard({ ticket }: { ticket: EmployeeRecentTicket }) {
+  return (
+    <article className="rounded-app border border-border bg-surface-2 p-md">
+      <div className="flex flex-col gap-sm sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-semibold text-text-primary">{ticket.title}</p>
+          <p className="mt-xs text-caption text-text-secondary">
+            #{ticket.id} · {ticket.category_label || ticket.category || "Kategori yok"} ·{" "}
+            {formatDateTime(ticket.created_at)}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-xs">
+          <StatusPill tone={getTicketStatusTone(ticket.status)}>
+            {ticket.status_label || ticket.status || "Durum yok"}
+          </StatusPill>
+          <StatusPill tone={getTicketPriorityTone(ticket.priority)}>
+            {ticket.priority_label || ticket.priority || "Öncelik yok"}
+          </StatusPill>
+        </div>
+      </div>
+
+      <div className="mt-sm grid gap-sm sm:grid-cols-2">
+        <DetailRow label="Onay Durumu" value={ticket.approval_status_label} />
+        <DetailRow label="Bağlı Varlık" value={ticket.asset_name} />
+        <DetailRow label="Atanan" value={ticket.assigned_to_username} />
+        <DetailRow label="Güncellenme" value={formatDateTime(ticket.updated_at)} />
+      </div>
+    </article>
+  );
+}
+
+function EmployeeDetailPanel({
+  detail,
+  isLoading,
+  isError,
+  onClose,
+}: {
+  detail?: EmployeeDetailResponse;
+  isLoading: boolean;
+  isError: boolean;
+  onClose: () => void;
+}) {
+  const employee = detail?.employee;
+  const user = detail?.user;
+  const summary = detail?.summary;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
+      <aside className="flex h-full w-full max-w-3xl flex-col border-l border-border bg-surface-0 shadow-panel">
+        <header className="flex items-start justify-between gap-md border-b border-border bg-surface-1 p-lg">
+          <div>
+            <div className="flex flex-wrap items-center gap-xs">
+              <span className="rounded-full border border-border bg-surface-2 px-sm py-1 text-caption text-text-secondary">
+                Personel Detayı
+              </span>
+
+              {employee ? (
+                <StatusPill tone={employee.is_active ? "success" : "danger"}>
+                  {employee.is_active ? "Aktif" : "Pasif"}
+                </StatusPill>
+              ) : null}
+            </div>
+
+            <h2 className="mt-sm text-h2">
+              {employee?.full_name || "Personel detayı"}
+            </h2>
+
+            <p className="mt-xs text-body text-text-secondary">
+              {employee?.employee_code || "Personel kodu yok"}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-app border border-border text-text-secondary transition hover:border-accent hover:text-accent"
+            aria-label="Detay panelini kapat"
+          >
+            <IconX size={18} aria-hidden={true} />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-lg">
+          {isLoading ? (
+            <div className="rounded-panel border border-border bg-surface-1 p-lg text-body text-text-secondary">
+              Personel detayı yükleniyor...
+            </div>
+          ) : null}
+
+          {isError ? (
+            <div className="rounded-panel border border-danger/30 bg-danger/10 p-lg text-body text-danger">
+              Personel detayı yüklenemedi.
+            </div>
+          ) : null}
+
+          {detail && employee && summary ? (
+            <div className="flex flex-col gap-lg">
+              <section className="grid gap-sm sm:grid-cols-2 xl:grid-cols-4">
+                <MiniMetricCard
+                  label="Aktif zimmet"
+                  value={summary.active_assignment_count}
+                  icon={<IconDeviceLaptop size={15} aria-hidden={true} />}
+                />
+                <MiniMetricCard
+                  label="Toplam zimmet"
+                  value={summary.total_assignment_count}
+                  icon={<IconBriefcase size={15} aria-hidden={true} />}
+                />
+                <MiniMetricCard
+                  label="Açık ticket"
+                  value={
+                    summary.open_ticket_count + summary.in_progress_ticket_count
+                  }
+                  icon={<IconTicket size={15} aria-hidden={true} />}
+                />
+                <MiniMetricCard
+                  label="Toplam ticket"
+                  value={summary.total_ticket_count}
+                  icon={<IconTicket size={15} aria-hidden={true} />}
+                />
+              </section>
+
+              <section className="rounded-panel border border-border bg-surface-1 p-md">
+                <h3 className="text-h3">Kullanıcı & Rol</h3>
+
+                <div className="mt-md grid gap-sm sm:grid-cols-2">
+                  <DetailRow label="Sistem Kullanıcısı" value={user?.username} />
+                  <DetailRow label="User E-posta" value={user?.email} />
+                  <DetailRow label="Rol" value={user?.role_label || user?.role} />
+                  <DetailRow
+                    label="User Aktif Mi"
+                    value={user ? user.is_active : null}
+                  />
+                  <DetailRow
+                    label="Son Giriş"
+                    value={formatDateTime(user?.last_login)}
+                  />
+                  <DetailRow
+                    label="Kayıt Tarihi"
+                    value={formatDateTime(user?.date_joined)}
+                  />
+                </div>
+              </section>
+
+              <section className="rounded-panel border border-border bg-surface-1 p-md">
+                <h3 className="text-h3">Organizasyon Bilgileri</h3>
+
+                <div className="mt-md grid gap-sm sm:grid-cols-2">
+                  <DetailRow label="Ad Soyad" value={employee.full_name} />
+                  <DetailRow label="Personel Kodu" value={employee.employee_code} />
+                  <DetailRow label="E-posta" value={employee.email} />
+                  <DetailRow label="Telefon" value={employee.phone} />
+                  <DetailRow label="Departman" value={employee.department?.name} />
+                  <DetailRow label="Unvan" value={employee.job_title?.name} />
+                  <DetailRow
+                    label="Yönetici"
+                    value={employee.manager?.full_name}
+                  />
+                  <DetailRow
+                    label="Yönetici E-posta"
+                    value={employee.manager?.email}
+                  />
+                  <DetailRow
+                    label="Veri Kaynağı"
+                    value={employee.sync_source_label || employee.sync_source}
+                  />
+                  <DetailRow
+                    label="External HR ID"
+                    value={employee.external_hr_id}
+                  />
+                  <DetailRow
+                    label="Oluşturulma"
+                    value={formatDateTime(employee.created_at)}
+                  />
+                  <DetailRow
+                    label="Güncellenme"
+                    value={formatDateTime(employee.updated_at)}
+                  />
+                </div>
+
+                {employee.notes ? (
+                  <div className="mt-sm rounded-app border border-border bg-surface-2 p-md">
+                    <p className="text-caption text-text-secondary">Notlar</p>
+                    <p className="mt-xs whitespace-pre-wrap text-body text-text-primary">
+                      {employee.notes}
+                    </p>
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="rounded-panel border border-border bg-surface-1 p-md">
+                <div className="flex items-center justify-between gap-md">
+                  <div>
+                    <h3 className="text-h3">Aktif Zimmetler</h3>
+                    <p className="mt-xs text-caption text-text-secondary">
+                      Personelin iade edilmemiş zimmet kayıtları.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-md flex flex-col gap-sm">
+                  {detail.active_assignments.length > 0 ? (
+                    detail.active_assignments.map((assignment) => (
+                      <EmployeeAssignmentCard
+                        key={assignment.id}
+                        assignment={assignment}
+                      />
+                    ))
+                  ) : (
+                    <div className="rounded-app border border-border bg-surface-2 p-md text-body text-text-secondary">
+                      Aktif zimmet kaydı bulunamadı.
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-panel border border-border bg-surface-1 p-md">
+                <div className="flex items-center justify-between gap-md">
+                  <div>
+                    <h3 className="text-h3">Ticket Geçmişi</h3>
+                    <p className="mt-xs text-caption text-text-secondary">
+                      Son 10 ticket kaydı ve operasyonel durum özeti.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-md grid gap-sm sm:grid-cols-4">
+                  <MiniMetricCard
+                    label="Açık"
+                    value={summary.open_ticket_count}
+                    icon={<IconTicket size={15} aria-hidden={true} />}
+                  />
+                  <MiniMetricCard
+                    label="İşlemde"
+                    value={summary.in_progress_ticket_count}
+                    icon={<IconTicket size={15} aria-hidden={true} />}
+                  />
+                  <MiniMetricCard
+                    label="Çözüldü"
+                    value={summary.resolved_ticket_count}
+                    icon={<IconTicket size={15} aria-hidden={true} />}
+                  />
+                  <MiniMetricCard
+                    label="Kapandı"
+                    value={summary.closed_ticket_count}
+                    icon={<IconTicket size={15} aria-hidden={true} />}
+                  />
+                </div>
+
+                <div className="mt-md flex flex-col gap-sm">
+                  {detail.recent_tickets.length > 0 ? (
+                    detail.recent_tickets.map((ticket) => (
+                      <EmployeeTicketCard key={ticket.id} ticket={ticket} />
+                    ))
+                  ) : (
+                    <div className="rounded-app border border-border bg-surface-2 p-md text-body text-text-secondary">
+                      Ticket kaydı bulunamadı.
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          ) : null}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 const columns: DataTableColumn<Employee>[] = [
   {
     key: "first_name",
@@ -64,7 +536,7 @@ const columns: DataTableColumn<Employee>[] = [
   },
   {
     key: "email",
-    label: "E-Posta adresi",
+    label: "E-posta adresi",
     sortable: true,
     sortKey: "email",
     render: (employee) => employee.user_email || employee.email || "-",
@@ -78,29 +550,38 @@ const columns: DataTableColumn<Employee>[] = [
   },
   {
     key: "job_title_name",
-    label: "Meslek",
+    label: "Unvan",
     sortable: true,
     sortKey: "job_title__name",
     render: (employee) => employee.job_title_name || "-",
   },
   {
+    key: "user_role",
+    label: "Rol",
+    sortable: true,
+    sortKey: "user__username",
+    render: (employee) => getRoleLabel(employee),
+  },
+  {
     key: "is_active",
     label: "Durum",
     render: (employee) => (
-      <span
-        className={
-          employee.is_active
-            ? "rounded-full border border-success/30 bg-success/10 px-sm py-1 text-caption text-success"
-            : "rounded-full border border-danger/30 bg-danger/10 px-sm py-1 text-caption text-danger"
-        }
-      >
+      <StatusPill tone={employee.is_active ? "success" : "danger"}>
         {employee.is_active ? "Aktif" : "Pasif"}
-      </span>
+      </StatusPill>
     ),
   },
 ];
 
 export function PersonnelPage() {
+  const { user } = useAuth();
+  const userCanExport = canManage(user?.role);
+
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(
+    null
+  );
+  const [toast, setToast] = useState<ToastState | null>(null);
+
   const {
     state,
     setSearch,
@@ -116,7 +597,11 @@ export function PersonnelPage() {
   });
 
   const employeesQuery = useEmployeeTable(state);
+  const employeeDetailQuery = useEmployeeDetail(selectedEmployeeId);
+  const employeeExportMutation = useEmployeeExport();
+
   const data = employeesQuery.data;
+  const employees = data?.results ?? [];
   const totalUserCount = data?.count ?? 0;
 
   const selectedRole =
@@ -125,6 +610,41 @@ export function PersonnelPage() {
   const selectedStatus =
     typeof state.filters.is_active === "string" ? state.filters.is_active : "";
 
+  const visibleLinkedUserCount = useMemo(() => {
+    return employees.filter((employee) => Boolean(employee.user)).length;
+  }, [employees]);
+
+  const visibleActiveCount = useMemo(() => {
+    return employees.filter((employee) => employee.is_active).length;
+  }, [employees]);
+
+  async function handleExport() {
+    setToast(null);
+
+    try {
+      await employeeExportMutation.mutateAsync(state);
+
+      setToast({
+        type: "success",
+        message: "Personel export dosyası indirildi.",
+      });
+    } catch {
+      setToast({
+        type: "error",
+        message:
+          "Personel export alınamadı. Yetkini veya filtreleri kontrol et.",
+      });
+    }
+  }
+
+  function refetchAll() {
+    employeesQuery.refetch();
+
+    if (selectedEmployeeId) {
+      employeeDetailQuery.refetch();
+    }
+  }
+
   return (
     <AppShell>
       <section className="flex flex-col gap-lg">
@@ -132,26 +652,65 @@ export function PersonnelPage() {
           <div>
             <h1 className="text-h1">Personel</h1>
             <p className="mt-sm max-w-3xl text-body text-text-secondary">
-              Şirket personel kayıtlarını görüntüle, ara, filtrele ve sırala.
+              Şirket personel kayıtlarını görüntüle, ara, filtrele, detaylarını
+              incele ve yetkiliysen filtrelenmiş CSV export al.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => employeesQuery.refetch()}
-            className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
-          >
-            <IconRefresh size={18} aria-hidden={true} />
-            Yenile
-          </button>
+          <div className="flex flex-wrap gap-sm">
+            {userCanExport ? (
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={employeeExportMutation.isPending}
+                className="inline-flex items-center justify-center gap-xs rounded-app border border-accent bg-accent/10 px-md py-sm text-body text-accent transition hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <IconDownload size={18} aria-hidden={true} />
+                {employeeExportMutation.isPending
+                  ? "Export hazırlanıyor..."
+                  : "CSV Export"}
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={refetchAll}
+              className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+            >
+              <IconRefresh size={18} aria-hidden={true} />
+              Yenile
+            </button>
+          </div>
         </header>
 
+        {toast ? (
+          <div
+            className={
+              toast.type === "success"
+                ? "rounded-panel border border-success/30 bg-success/10 p-md text-body text-success"
+                : "rounded-panel border border-danger/30 bg-danger/10 p-md text-body text-danger"
+            }
+          >
+            {toast.message}
+          </div>
+        ) : null}
+
         <section className="flex flex-wrap gap-sm">
-            <MiniMetricCard
-                label="Kullanıcı sayısı"
-                value={totalUserCount}
-                icon={<IconUsers size={15} aria-hidden={true} />}
-            />
+          <MiniMetricCard
+            label="Toplam kayıt"
+            value={totalUserCount}
+            icon={<IconUsers size={15} aria-hidden={true} />}
+          />
+          <MiniMetricCard
+            label="Bu sayfada aktif"
+            value={visibleActiveCount}
+            icon={<IconUserCheck size={15} aria-hidden={true} />}
+          />
+          <MiniMetricCard
+            label="Linked user"
+            value={visibleLinkedUserCount}
+            icon={<IconUserCircle size={15} aria-hidden={true} />}
+          />
         </section>
 
         <section className="grid gap-md rounded-panel border border-border bg-surface-1 p-md shadow-panel md:grid-cols-[1.5fr_220px_220px_auto] md:items-end">
@@ -218,12 +777,16 @@ export function PersonnelPage() {
 
         <DataTable
           columns={columns}
-          data={data?.results ?? []}
+          data={employees}
           getRowKey={(employee) => employee.id}
           ordering={state.ordering}
           onSortChange={setSort}
           isLoading={employeesQuery.isLoading}
           emptyMessage="Personel kaydı bulunamadı."
+          onRowClick={(employee) => setSelectedEmployeeId(employee.id)}
+          getRowClassName={(employee) =>
+            selectedEmployeeId === employee.id ? "bg-surface-2" : ""
+          }
         />
 
         <TablePagination
@@ -236,6 +799,15 @@ export function PersonnelPage() {
           onPageSizeChange={setPageSize}
         />
       </section>
+
+      {selectedEmployeeId ? (
+        <EmployeeDetailPanel
+          detail={employeeDetailQuery.data}
+          isLoading={employeeDetailQuery.isLoading}
+          isError={employeeDetailQuery.isError}
+          onClose={() => setSelectedEmployeeId(null)}
+        />
+      ) : null}
     </AppShell>
   );
 }
