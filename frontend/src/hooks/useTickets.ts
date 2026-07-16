@@ -9,17 +9,21 @@ import {
   createTicket,
   createTicketComment,
   fetchMyTickets,
+  fetchRequesterContext,
   fetchTicketApprovals,
+  fetchTicketAttachments,
   fetchTicketComments,
   fetchTicketQueue,
   fetchTicketSummary,
   fetchTicketsTable,
   rejectTicket,
   updateTicketStatus,
+  uploadTicketAttachment,
 } from "../api/tickets";
 import type { TableQueryState } from "../types/table";
 import type {
   TicketApprovalDecisionPayload,
+  TicketAttachmentUploadPayload,
   TicketCommentCreatePayload,
   TicketCreatePayload,
   TicketStatus,
@@ -27,6 +31,10 @@ import type {
 
 export function ticketCommentsQueryKey(ticketId?: number | null) {
   return ["tickets", "comments", ticketId] as const;
+}
+
+export function ticketAttachmentsQueryKey(ticketId?: number | null) {
+  return ["tickets", "attachments", ticketId] as const;
 }
 
 export function useMyTickets() {
@@ -51,6 +59,14 @@ export function useTicketSummary() {
     queryKey: ["tickets", "summary"],
     queryFn: fetchTicketSummary,
     staleTime: 30_000,
+  });
+}
+
+export function useRequesterContext() {
+  return useQuery({
+    queryKey: ["tickets", "requester-context"],
+    queryFn: fetchRequesterContext,
+    staleTime: 60_000,
   });
 }
 
@@ -80,6 +96,15 @@ export function useTicketComments(ticketId?: number | null, enabled = true) {
   });
 }
 
+export function useTicketAttachments(ticketId?: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ticketAttachmentsQueryKey(ticketId),
+    queryFn: () => fetchTicketAttachments(Number(ticketId)),
+    enabled: enabled && Boolean(ticketId),
+    staleTime: 30_000,
+  });
+}
+
 export function useCreateTicket() {
   const queryClient = useQueryClient();
 
@@ -89,6 +114,21 @@ export function useCreateTicket() {
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useUploadTicketAttachment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: TicketAttachmentUploadPayload) =>
+      uploadTicketAttachment(payload),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ticketAttachmentsQueryKey(variables.ticketId),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["tickets"] });
     },
   });
 }

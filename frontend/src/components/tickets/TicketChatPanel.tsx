@@ -5,6 +5,11 @@ import type { FormEvent } from "react";
 import { createTicketComment } from "../../api/tickets";
 import { useAuth } from "../../auth/AuthContext";
 import { useTicketComments, ticketCommentsQueryKey } from "../../hooks/useTickets";
+import {
+  getTicketApprovalMeta,
+  getTicketPriorityMeta,
+  getTicketStatusMeta,
+} from "../../lib/ticketLabels";
 import type {
   Ticket,
   TicketComment,
@@ -171,14 +176,14 @@ export function TicketChatPanel({
   >({
     mutationFn: async (payload) => {
       if (!ticketId) {
-        throw new Error("Ticket seçili değil.");
+        throw new Error("Talep seçili değil.");
       }
 
       return createTicketComment(ticketId, payload);
     },
     onMutate: async (payload) => {
       if (!ticketId) {
-        throw new Error("Ticket seçili değil.");
+        throw new Error("Talep seçili değil.");
       }
 
       const queryKey = ticketCommentsQueryKey(ticketId);
@@ -275,21 +280,25 @@ export function TicketChatPanel({
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-text-secondary">
             <IconMessageCircle size={22} aria-hidden={true} />
           </div>
-          <h2 className="mt-md text-h3 text-text-primary">Ticket Chat</h2>
+          <h2 className="mt-md text-h3 text-text-primary">Mesajlar</h2>
           <p className="mt-sm max-w-sm text-body text-text-secondary">
-            Ticket detayını ve konuşmayı görmek için listeden bir ticket seç.
+            Talep detayını ve yazışmaları görmek için listeden bir talep seç.
           </p>
         </div>
       </aside>
     );
   }
 
+  const statusMeta = getTicketStatusMeta(ticket.status);
+  const priorityMeta = getTicketPriorityMeta(ticket.priority);
+  const approvalMeta = getTicketApprovalMeta(ticket.approval_status);
+
   return (
     <aside className="rounded-panel border border-border bg-surface-1 p-lg shadow-panel">
       <div className="flex min-h-[640px] flex-col">
         <div className="flex items-start justify-between gap-md border-b border-border pb-md">
           <div>
-            <p className="text-caption text-text-secondary">Ticket Chat</p>
+            <p className="text-caption text-text-secondary">Talep Mesajları</p>
             <h2 className="mt-xs text-h3 text-text-primary">
               #{ticket.id} {ticket.title}
             </h2>
@@ -302,7 +311,7 @@ export function TicketChatPanel({
             type="button"
             onClick={onClose}
             className="rounded-full border border-border p-xs text-text-secondary transition hover:border-accent hover:text-accent"
-            aria-label="Chat panelini kapat"
+            aria-label="Mesaj panelini kapat"
           >
             <IconX size={18} aria-hidden={true} />
           </button>
@@ -310,30 +319,12 @@ export function TicketChatPanel({
 
         <div className="mt-md rounded-2xl bg-surface-2 p-md">
           <div className="flex flex-wrap gap-sm">
-            <StatusBadge variant="accent">{ticket.status_label}</StatusBadge>
-            <StatusBadge
-              variant={
-                ticket.priority === "urgent"
-                  ? "danger"
-                  : ticket.priority === "high"
-                    ? "warning"
-                    : "neutral"
-              }
-            >
-              {ticket.priority_label}
+            <StatusBadge variant={statusMeta.variant}>{statusMeta.label}</StatusBadge>
+            <StatusBadge variant={priorityMeta.variant}>
+              {priorityMeta.requesterLabel}
             </StatusBadge>
-            <StatusBadge
-              variant={
-                ticket.approval_status === "pending"
-                  ? "warning"
-                  : ticket.approval_status === "rejected"
-                    ? "danger"
-                    : ticket.approval_status === "approved"
-                      ? "success"
-                      : "neutral"
-              }
-            >
-              {ticket.approval_status_label}
+            <StatusBadge variant={approvalMeta.variant}>
+              {approvalMeta.requesterLabel}
             </StatusBadge>
           </div>
 
@@ -363,7 +354,7 @@ export function TicketChatPanel({
             <p className="text-body text-text-secondary">Mesajlar yükleniyor...</p>
           ) : sortedComments.length === 0 ? (
             <p className="text-body text-text-secondary">
-              Henüz mesaj yok. İlk mesajı yazabilirsin.
+              Henüz mesaj yok. İlk mesajı buradan yazabilirsin.
             </p>
           ) : (
             <div className="space-y-sm">
@@ -373,7 +364,9 @@ export function TicketChatPanel({
                   className={`rounded-2xl border p-md ${
                     comment.id < 0
                       ? "border-accent/40 bg-accent/10"
-                      : "border-border bg-surface-1"
+                      : comment.is_internal
+                        ? "border-warning/40 bg-warning-bg"
+                        : "border-border bg-surface-1"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-md">
@@ -419,7 +412,7 @@ export function TicketChatPanel({
               value={body}
               onChange={(event) => setBody(event.target.value)}
               className="mt-xs min-h-[110px] w-full rounded-app border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
-              placeholder="Ticket hakkında mesaj yaz..."
+              placeholder="Talebin hakkında mesaj yaz..."
             />
           </div>
 

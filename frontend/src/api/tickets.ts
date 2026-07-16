@@ -6,9 +6,12 @@ import type {
   Ticket,
   TicketApproval,
   TicketApprovalDecisionPayload,
+  TicketAttachment,
+  TicketAttachmentUploadPayload,
   TicketComment,
   TicketCommentCreatePayload,
   TicketCreatePayload,
+  TicketRequesterContext,
   TicketStatus,
   TicketSummary,
 } from "../types/tickets";
@@ -33,6 +36,14 @@ export async function fetchTicketsTable(state: TableQueryState) {
 
 export async function fetchTicketSummary() {
   const response = await api.get<TicketSummary>(`${TICKETS_ENDPOINT}summary/`);
+  return response.data;
+}
+
+export async function fetchRequesterContext() {
+  const response = await api.get<TicketRequesterContext>(
+    `${TICKETS_ENDPOINT}requester-context/`
+  );
+
   return response.data;
 }
 
@@ -102,6 +113,30 @@ export async function createTicketComment(
       body: payload.body.trim(),
       is_internal: Boolean(payload.is_internal),
     }
+  );
+
+  return response.data;
+}
+
+export async function fetchTicketAttachments(ticketId: number) {
+  const response = await api.get<TicketAttachment[]>(
+    `${TICKETS_ENDPOINT}${ticketId}/attachments/`
+  );
+
+  return response.data;
+}
+
+export async function uploadTicketAttachment({
+  ticketId,
+  file,
+}: TicketAttachmentUploadPayload) {
+  const formData = new FormData();
+
+  formData.append("file", file);
+
+  const response = await api.post<TicketAttachment>(
+    `${TICKETS_ENDPOINT}${ticketId}/attachments/`,
+    formData
   );
 
   return response.data;

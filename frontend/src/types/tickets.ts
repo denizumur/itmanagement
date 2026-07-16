@@ -40,6 +40,7 @@ export interface Ticket {
   created_by: number | null;
   created_by_name: string | null;
   comments_count: number;
+  attachments_count: number;
   resolved_at: string | null;
   closed_at: string | null;
   created_at: string;
@@ -91,6 +92,23 @@ export interface TicketCommentCreatePayload {
   is_internal?: boolean;
 }
 
+export interface TicketAttachment {
+  id: number;
+  ticket: number;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by: number | null;
+  uploaded_by_name: string | null;
+  uploaded_at: string;
+  download_url: string;
+}
+
+export interface TicketAttachmentUploadPayload {
+  ticketId: number;
+  file: File;
+}
+
 export interface TicketSummary {
   total: number;
   open: number;
@@ -110,6 +128,56 @@ export interface TicketFilters {
   priority?: TicketPriority | "";
   category?: TicketCategory | "";
   approval_status?: TicketApprovalStatus | "";
+}
+
+export interface RequesterContextNamedObject {
+  id: number;
+  name?: string;
+  full_name?: string;
+  email?: string;
+}
+
+export interface RequesterContextEmployee {
+  id: number;
+  full_name: string;
+  email: string | null;
+  department: RequesterContextNamedObject | null;
+  job_title: RequesterContextNamedObject | null;
+  manager: RequesterContextNamedObject | null;
+}
+
+export interface RequesterContextAssignment {
+  id: number;
+  asset_id: number;
+  asset_name: string;
+  asset_inventory_code: string | null;
+  asset_serial_number: string | null;
+  asset_category: string | null;
+  asset_status: string | null;
+  asset_status_label: string | null;
+  asset_display_identifier: string | null;
+  assigned_at: string;
+}
+
+export interface TicketRequesterApprovalPreview {
+  requires_approval: boolean;
+  approver_name: string | null;
+  approver_email: string | null;
+  approver_role: string | null;
+}
+
+export interface TicketAttachmentLimits {
+  max_file_size_bytes: number;
+  max_file_size_mb: number;
+  max_files_per_ticket: number;
+  allowed_mime_types: string[];
+}
+
+export interface TicketRequesterContext {
+  employee: RequesterContextEmployee;
+  active_assignments: RequesterContextAssignment[];
+  approval_preview: TicketRequesterApprovalPreview;
+  limits: TicketAttachmentLimits;
 }
 
 export type PaginatedTicketResponse<T> = PaginatedApiResponse<T>;
