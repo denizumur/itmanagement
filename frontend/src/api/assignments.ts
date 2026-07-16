@@ -1,10 +1,15 @@
+import { buildTableApiParams } from "../lib/tableQuery";
+import type { TableQueryState } from "../types/table";
 import { api } from "./http";
 import type {
   Assignment,
   AssignmentCreatePayload,
   AssignmentReturnPayload,
+  AssignmentSummary,
   PaginatedAssignmentResponse,
 } from "../types/assignments";
+
+const ASSIGNMENTS_ENDPOINT = "/api/assignments/";
 
 function extractResults<T>(responseData: T[] | PaginatedAssignmentResponse<T>) {
   if (Array.isArray(responseData)) {
@@ -18,39 +23,64 @@ function cleanAssignmentPayload(payload: AssignmentCreatePayload) {
   return {
     asset: payload.asset,
     employee: payload.employee,
-    assigned_at: payload.assigned_at || null,
-    notes: payload.notes?.trim() || null,
+    ...(payload.assigned_at ? { assigned_at: payload.assigned_at } : {}),
+    notes: payload.notes?.trim() || "",
   };
 }
 
 function cleanReturnPayload(payload: AssignmentReturnPayload = {}) {
+  const returnedAt = payload.returned_at || payload.return_date || undefined;
+
   return {
-    returned_at: payload.returned_at || payload.return_date || null,
-    return_date: payload.return_date || payload.returned_at || null,
-    return_notes: payload.return_notes?.trim() || null,
-    notes: payload.notes?.trim() || null,
+    ...(returnedAt
+      ? {
+          returned_at: returnedAt,
+          return_date: returnedAt,
+        }
+      : {}),
+    return_notes: payload.return_notes?.trim() || "",
+    notes: payload.notes?.trim() || "",
   };
 }
 
 export async function getAssignments() {
   const response = await api.get<
     Assignment[] | PaginatedAssignmentResponse<Assignment>
-  >("/api/assignments/");
+  >(ASSIGNMENTS_ENDPOINT);
 
   return extractResults(response.data);
+}
+
+export async function getAssignmentsTable(state: TableQueryState) {
+  const response = await api.get<PaginatedAssignmentResponse<Assignment>>(
+    `${ASSIGNMENTS_ENDPOINT}table/`,
+    {
+      params: buildTableApiParams(state),
+    }
+  );
+
+  return response.data;
+}
+
+export async function getAssignmentSummary() {
+  const response = await api.get<AssignmentSummary>(
+    `${ASSIGNMENTS_ENDPOINT}summary/`
+  );
+
+  return response.data;
 }
 
 export async function getActiveAssignments() {
   const response = await api.get<
     Assignment[] | PaginatedAssignmentResponse<Assignment>
-  >("/api/assignments/active/");
+  >(`${ASSIGNMENTS_ENDPOINT}active/`);
 
   return extractResults(response.data);
 }
 
 export async function createAssignment(payload: AssignmentCreatePayload) {
   const response = await api.post<Assignment>(
-    "/api/assignments/",
+    ASSIGNMENTS_ENDPOINT,
     cleanAssignmentPayload(payload)
   );
 
@@ -62,7 +92,7 @@ export async function returnAssignment(
   payload: AssignmentReturnPayload = {}
 ) {
   const response = await api.post<Assignment>(
-    `/api/assignments/${id}/return/`,
+    `${ASSIGNMENTS_ENDPOINT}${id}/return/`,
     cleanReturnPayload(payload)
   );
 

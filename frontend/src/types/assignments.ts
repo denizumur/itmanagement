@@ -1,3 +1,5 @@
+import type { PaginatedApiResponse } from "./api";
+
 export interface AssignmentEmployee {
   id?: number;
   name?: string | null;
@@ -29,6 +31,8 @@ export interface Assignment {
   asset_detail?: AssignmentAsset | null;
   asset_name?: string | null;
   asset_inventory_code?: string | null;
+  asset_serial_number?: string | null;
+  asset_status?: string | null;
 
   employee?: number | string | AssignmentEmployee | null;
   employee_id?: number | null;
@@ -36,11 +40,21 @@ export interface Assignment {
   employee_full_name?: string | null;
   assigned_employee_name?: string | null;
   assigned_to_name?: string | null;
+  employee_department?: string | null;
+  employee_job_title?: string | null;
   employee_department_name?: string | null;
   employee_job_title_name?: string | null;
+
   assigned_at?: string | null;
   returned_at?: string | null;
   return_date?: string | null;
+  is_active?: boolean | null;
+
+  assigned_by?: number | null;
+  assigned_by_username?: string | null;
+  returned_by?: number | null;
+  returned_by_username?: string | null;
+
   notes?: string | null;
   return_notes?: string | null;
 
@@ -64,9 +78,19 @@ export interface AssignmentReturnPayload {
   notes?: string | null;
 }
 
-export interface PaginatedAssignmentResponse<T> {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: T[];
+export interface AssignmentSummary {
+  total: number;
+  active: number;
+  returned: number;
+  assigned_last_30_days: number;
+  returned_last_30_days: number;
 }
+
+export interface AssignmentFilters {
+  search?: string;
+  active?: string;
+  asset?: string | number;
+  employee?: string | number;
+}
+
+export type PaginatedAssignmentResponse<T> = PaginatedApiResponse<T>;

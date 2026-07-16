@@ -1,16 +1,24 @@
-from django.db import IntegrityError, transaction
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
-from apps.assignments.services import create_assignment_for_asset
+
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
+from apps.assignments.filters import AssignmentFilterSet
 from apps.assignments.models import Assignment
 from apps.assignments.serializers import AssignmentSerializer
+from apps.assignments.services import create_assignment_for_asset
 from apps.audit.models import AuditLog
 from apps.audit.services import create_audit_log, serialize_instance
+from apps.common.pagination import StandardResultsPagination
 from apps.inventory.models import Asset
 
 
@@ -18,6 +26,57 @@ ASSIGNMENT_AUDIT_EXCLUDE_FIELDS = (
     "created_at",
     "updated_at",
 )
+
+
+def assignment_base_queryset():
+    return Assignment.objects.select_related(
+        "asset",
+        "asset__category",
+        "employee",
+        "employee__department",
+        "employee__job_title",
+        "assigned_by",
+        "returned_by",
+    )
+
+
+class AssignmentTableListAPIView(ListAPIView):
+    serializer_class = AssignmentSerializer
+    permission_classes = [ReadOnlyForViewerWriteForTechnician]
+    pagination_class = StandardResultsPagination
+    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_class = AssignmentFilterSet
+
+    search_fields = [
+        "asset__name",
+        "asset__inventory_code",
+        "asset__serial_number",
+        "employee__full_name",
+        "employee__employee_code",
+        "employee__department__name",
+        "employee__job_title__name",
+        "assigned_by__username",
+        "returned_by__username",
+        "notes",
+        "return_notes",
+    ]
+
+    ordering_fields = [
+        "asset__name",
+        "asset__inventory_code",
+        "employee__full_name",
+        "employee__department__name",
+        "employee__job_title__name",
+        "assigned_at",
+        "returned_at",
+        "created_at",
+        "updated_at",
+    ]
+
+    ordering = ["-assigned_at"]
+
+    def get_queryset(self):
+        return assignment_base_queryset().order_by("-assigned_at")
 
 
 class AssignmentViewSet(viewsets.ModelViewSet):
@@ -28,7 +87,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "asset": [
-                    "Bu varlık zaten aktif olarak zimmetli."
+                    "Bu varlık zaten aktif olarak zimmetli.",
                 ]
             },
             status=status.HTTP_400_BAD_REQUEST,
@@ -59,16 +118,9 @@ class AssignmentViewSet(viewsets.ModelViewSet):
                 {"detail": getattr(exc, "messages", [str(exc)])},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
     def get_queryset(self):
-        queryset = Assignment.objects.select_related(
-            "asset",
-            "asset__category",
-            "employee",
-            "employee__department",
-            "employee__job_title",
-            "assigned_by",
-            "returned_by",
-        ).order_by("-assigned_at")
+        queryset = assignment_base_queryset().order_by("-assigned_at")
 
         active = self.request.query_params.get("active")
         asset_id = self.request.query_params.get("asset")
@@ -155,6 +207,26 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=False, methods=["get"])
+    def summary(self, request):
+        queryset = self.get_queryset()
+        now = timezone.now()
+        last_30_days = now - timedelta(days=30)
+
+        data = {
+            "total": queryset.count(),
+            "active": queryset.filter(returned_at__isnull=True).count(),
+            "returned": queryset.filter(returned_at__isnull=False).count(),
+            "assigned_last_30_days": queryset.filter(
+                assigned_at__gte=last_30_days,
+            ).count(),
+            "returned_last_30_days": queryset.filter(
+                returned_at__gte=last_30_days,
+            ).count(),
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=["get"])
     def active(self, request):
         queryset = self.get_queryset().filter(returned_at__isnull=True)
         serializer = self.get_serializer(queryset, many=True)
@@ -203,7 +275,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
 
         assignment.returned_at = timezone.now()
         assignment.returned_by = request.user
-        assignment.return_notes = return_notes
+        assignment.return_notes = return_notes or ""
         assignment.save()
 
         asset = assignment.asset
