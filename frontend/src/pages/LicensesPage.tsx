@@ -11,12 +11,13 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
+import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { Skeleton } from "../components/common/Skeleton";
+import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
 import { AppToast } from "../components/ui/AppToast";
-import { DataCard } from "../components/ui/DataCard";
-import { DataTable } from "../components/ui/DataTable";
 import { GlowButton } from "../components/ui/GlowButton";
 import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
@@ -27,16 +28,16 @@ import {
   useCreateLicenseSubscription,
   useDeleteLicenseSubscription,
   useLicenseSubscriptionSummary,
-  useLicenseSubscriptions,
+  useLicenseSubscriptionTable,
   useRestoreLicenseSubscription,
   useUpdateLicenseSubscription,
 } from "../hooks/useLicensing";
+import { useTableQueryState } from "../hooks/useTableQueryState";
 import { canManage } from "../lib/rbac";
 import type { Asset } from "../types/inventory";
 import type {
   LicenseBillingCycle,
   LicenseSubscription,
-  LicenseSubscriptionFilters,
   LicenseSubscriptionPayload,
   LicenseType,
 } from "../types/licensing";
@@ -219,6 +220,178 @@ function DetailRow({
       <p className="mt-xs text-body text-text-primary">{displayValue}</p>
     </div>
   );
+}
+
+function DateCell({ value }: { value?: string | null }) {
+  return (
+    <span className="inline-flex min-w-[108px] items-center justify-center rounded-app border border-border bg-surface-1 px-sm py-xs text-caption text-text-secondary shadow-panel">
+      {formatDate(value)}
+    </span>
+  );
+}
+
+function getSelectedStatusFilter(filters: Record<string, string | string[]>) {
+  if (filters.expired === "true") {
+    return "expired";
+  }
+
+  if (filters.upcoming === "true") {
+    return "upcoming";
+  }
+
+  if (filters.is_active === "true") {
+    return "active";
+  }
+
+  if (filters.is_active === "false") {
+    return "inactive";
+  }
+
+  return "";
+}
+
+function buildLicenseColumns({
+  userCanManage,
+  isSubmitting,
+  onSelectLicense,
+  onEditLicense,
+  onDeleteLicense,
+  onRestoreLicense,
+}: {
+  userCanManage: boolean;
+  isSubmitting: boolean;
+  onSelectLicense: (license: LicenseSubscription) => void;
+  onEditLicense: (license: LicenseSubscription) => void;
+  onDeleteLicense: (license: LicenseSubscription) => void;
+  onRestoreLicense: (license: LicenseSubscription) => void;
+}): DataTableColumn<LicenseSubscription>[] {
+  return [
+    {
+      key: "name",
+      label: "Lisans / Abonelik",
+      sortable: true,
+      sortKey: "name",
+      render: (license) => (
+        <div className={license.is_deleted ? "opacity-70" : undefined}>
+          <p className="text-text-primary">{license.name}</p>
+          <p className="text-caption text-text-secondary">
+            {license.tracking_code ?? "Takip kodu yok"}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "type",
+      label: "Tip",
+      sortable: true,
+      sortKey: "type",
+      render: (license) =>
+        license.type_label ??
+        (license.type === "license" ? "Lisans" : "Abonelik"),
+    },
+    {
+      key: "vendor",
+      label: "Tedarikçi",
+      sortable: true,
+      sortKey: "vendor",
+      render: (license) => license.vendor || "-",
+    },
+    {
+      key: "license_key_masked",
+      label: "Anahtar",
+      render: (license) => license.license_key_masked || "-",
+    },
+    {
+      key: "seat_count",
+      label: "Koltuk",
+      sortable: true,
+      sortKey: "seat_count",
+      render: (license) => license.seat_count,
+    },
+    {
+      key: "assigned_asset",
+      label: "Bağlı Varlık",
+      sortable: true,
+      sortKey: "assigned_asset__name",
+      render: (license) =>
+        license.assigned_asset_name ? (
+          <div>
+            <p className="text-body text-text-primary">
+              {license.assigned_asset_name}
+            </p>
+            <p className="text-caption text-text-secondary">
+              {license.assigned_asset_inventory_code ?? "-"}
+            </p>
+          </div>
+        ) : (
+          "-"
+        ),
+    },
+    {
+      key: "end_date",
+      label: "Bitiş",
+      sortable: true,
+      sortKey: "end_date",
+      render: (license) => <DateCell value={license.end_date} />,
+    },
+    {
+      key: "status",
+      label: "Durum",
+      render: (license) => (
+        <StatusBadge variant={getLicenseStatusVariant(license)}>
+          {getLicenseStatusLabel(license)}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: "actions",
+      label: "İşlem",
+      className: "text-right",
+      render: (license) => (
+        <div className="flex justify-end gap-sm">
+          <GlowButton
+            variant="ghost"
+            onClick={() => onSelectLicense(license)}
+            icon={<IconEye size={16} aria-hidden={true} />}
+          >
+            Detay
+          </GlowButton>
+
+          {userCanManage ? (
+            license.is_deleted ? (
+              <GlowButton
+                variant="ghost"
+                onClick={() => onRestoreLicense(license)}
+                disabled={isSubmitting}
+                icon={<IconRefresh size={16} aria-hidden={true} />}
+              >
+                Geri Yükle
+              </GlowButton>
+            ) : (
+              <>
+                <GlowButton
+                  variant="ghost"
+                  onClick={() => onEditLicense(license)}
+                  icon={<IconEdit size={16} aria-hidden={true} />}
+                >
+                  Düzenle
+                </GlowButton>
+
+                <GlowButton
+                  variant="ghost"
+                  onClick={() => onDeleteLicense(license)}
+                  disabled={isSubmitting}
+                  icon={<IconTrash size={16} aria-hidden={true} />}
+                >
+                  Sil
+                </GlowButton>
+              </>
+            )
+          ) : null}
+        </div>
+      ),
+    },
+  ];
 }
 
 function LicenseForm({
@@ -556,10 +729,20 @@ export function LicensesPage() {
   const { user } = useAuth();
   const userCanManage = canManage(user?.role);
 
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [showDeleted, setShowDeleted] = useState(false);
+  const {
+    state,
+    setSearch,
+    setSort,
+    setPage,
+    setPageSize,
+    setFilter,
+    resetFilters,
+  } = useTableQueryState({
+    page: 1,
+    pageSize: 25,
+    ordering: "end_date",
+  });
+
   const [selectedLicense, setSelectedLicense] =
     useState<LicenseSubscription | null>(null);
   const [formMode, setFormMode] = useState<LicenseFormMode | null>(null);
@@ -567,36 +750,19 @@ export function LicensesPage() {
     useState<LicenseSubscription | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const filters: LicenseSubscriptionFilters = useMemo(() => {
-    const nextFilters: LicenseSubscriptionFilters = {
-      search,
-      type,
-    };
+  const selectedType =
+    typeof state.filters.type === "string" ? state.filters.type : "";
 
-    if (showDeleted) {
-      nextFilters.deleted = "true";
-    }
+  const selectedDeleted =
+    typeof state.filters.deleted === "string" ? state.filters.deleted : "";
 
-    if (!showDeleted && statusFilter === "active") {
-      nextFilters.is_active = "true";
-    }
+  const showDeleted = selectedDeleted === "true";
 
-    if (!showDeleted && statusFilter === "inactive") {
-      nextFilters.is_active = "false";
-    }
+  const selectedStatusFilter = showDeleted
+    ? ""
+    : getSelectedStatusFilter(state.filters);
 
-    if (!showDeleted && statusFilter === "expired") {
-      nextFilters.expired = "true";
-    }
-
-    if (!showDeleted && statusFilter === "upcoming") {
-      nextFilters.upcoming = "true";
-    }
-
-    return nextFilters;
-  }, [search, type, statusFilter, showDeleted]);
-
-  const licensesQuery = useLicenseSubscriptions(filters);
+  const licensesQuery = useLicenseSubscriptionTable(state);
   const summaryQuery = useLicenseSubscriptionSummary();
   const assetsQuery = useAssets({});
 
@@ -605,7 +771,8 @@ export function LicensesPage() {
   const deleteMutation = useDeleteLicenseSubscription();
   const restoreMutation = useRestoreLicenseSubscription();
 
-  const licenses = licensesQuery.data ?? [];
+  const licenseTableData = licensesQuery.data;
+  const licenses = licenseTableData?.results ?? [];
   const summary = summaryQuery.data;
   const assets = assetsQuery.data ?? [];
 
@@ -646,6 +813,38 @@ export function LicensesPage() {
 
     setFormMode(null);
     setEditingLicense(null);
+  }
+
+  function applyStatusFilter(value: string) {
+    setFilter("is_active", null);
+    setFilter("expired", null);
+    setFilter("upcoming", null);
+
+    if (value === "active") {
+      setFilter("is_active", "true");
+    }
+
+    if (value === "inactive") {
+      setFilter("is_active", "false");
+    }
+
+    if (value === "expired") {
+      setFilter("expired", "true");
+    }
+
+    if (value === "upcoming") {
+      setFilter("upcoming", "true");
+    }
+  }
+
+  function applyDeletedFilter(checked: boolean) {
+    setFilter("deleted", checked ? "true" : null);
+
+    if (checked) {
+      setFilter("is_active", null);
+      setFilter("expired", null);
+      setFilter("upcoming", null);
+    }
   }
 
   async function handleSubmit(payload: LicenseSubscriptionPayload) {
@@ -736,14 +935,28 @@ export function LicensesPage() {
     }
   }
 
+  const licenseColumns = useMemo(
+    () =>
+      buildLicenseColumns({
+        userCanManage,
+        isSubmitting,
+        onSelectLicense: setSelectedLicense,
+        onEditLicense: openEditForm,
+        onDeleteLicense: handleDelete,
+        onRestoreLicense: handleRestore,
+      }),
+    [userCanManage, isSubmitting]
+  );
+
   if (isInitialLoading) {
     return (
       <AppShell>
-        <div className="grid gap-md md:grid-cols-4">
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
+        <div className="flex flex-wrap gap-sm">
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-28 rounded-full" />
+          <Skeleton className="h-14 w-28 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-36 rounded-full" />
         </div>
 
         <div className="mt-lg">
@@ -792,51 +1005,45 @@ export function LicensesPage() {
           }
         />
 
-        <section className="grid gap-md md:grid-cols-2 xl:grid-cols-4">
-          <DataCard className="metric-card-accent p-lg">
-            <IconKey size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {summary?.total ?? licenses.length}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Toplam kayıt
-            </p>
-          </DataCard>
+        <section className="mt-lg flex flex-wrap gap-sm">
+          <MiniMetricCard
+            label="Listelenen lisans"
+            value={licenseTableData?.count ?? licenses.length}
+            icon={<IconKey size={15} aria-hidden={true} />}
+            tone="accent"
+          />
 
-          <DataCard className="metric-card-success p-lg">
-            <IconUsers size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {summary?.total_seats ?? 0}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Aktif koltuk
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="aktif lisans sayısı"
+            value={summary?.active ?? 0}
+            icon={<IconKey size={15} aria-hidden={true} />}
+            tone="success"
+          />
 
-          <DataCard className="metric-card-warning p-lg">
-            <IconCalendar size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {summary?.upcoming_30_days ?? 0}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              30 gün içinde yenilenecek
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="lisansların toplam kullanıcı sayısı"
+            value={summary?.total_seats ?? 0}
+            icon={<IconUsers size={15} aria-hidden={true} />}
+            tone="success"
+          />
 
-          <DataCard className="metric-card-danger p-lg">
-            <IconKey size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {summary?.expired ?? 0}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Süresi dolan
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="30 gün içinde bitecek"
+            value={summary?.upcoming_30_days ?? 0}
+            icon={<IconCalendar size={15} aria-hidden={true} />}
+            tone="warning"
+          />
+
+          <MiniMetricCard
+            label="Süresi dolan"
+            value={summary?.expired ?? 0}
+            icon={<IconKey size={15} aria-hidden={true} />}
+            tone="danger"
+          />
         </section>
-
-        <DataCard className="mt-lg p-lg">
-          <div className="grid gap-md xl:grid-cols-[1fr_220px_220px_220px_260px]">
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm shadow-panel">
+        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+          <div className="grid gap-md xl:grid-cols-[1fr_220px_220px_220px_auto]">
+            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
               <IconSearch
                 size={18}
                 className="text-text-secondary"
@@ -846,15 +1053,15 @@ export function LicensesPage() {
               <input
                 className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
                 placeholder="Lisans adı, takip kodu, tedarikçi ara..."
-                value={search}
+                value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
               />
             </label>
 
             <select
-              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
-              value={type}
-              onChange={(event) => setType(event.target.value)}
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedType}
+              onChange={(event) => setFilter("type", event.target.value || null)}
               aria-label="Tip filtresi"
             >
               <option value="">Tüm tipler</option>
@@ -863,9 +1070,9 @@ export function LicensesPage() {
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none disabled:opacity-60"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none disabled:opacity-60"
+              value={selectedStatusFilter}
+              onChange={(event) => applyStatusFilter(event.target.value)}
               aria-label="Durum filtresi"
               disabled={showDeleted}
             >
@@ -876,199 +1083,49 @@ export function LicensesPage() {
               <option value="expired">Süresi dolan</option>
             </select>
 
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel">
+            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel">
               <input
                 type="checkbox"
                 checked={showDeleted}
-                onChange={(event) => {
-                  setShowDeleted(event.target.checked);
-
-                  if (event.target.checked) {
-                    setStatusFilter("");
-                  }
-                }}
+                onChange={(event) => applyDeletedFilter(event.target.checked)}
               />
               <span>Silinenleri göster</span>
             </label>
 
-            <div className="rounded-app border border-border bg-surface-1 px-md py-sm text-caption text-text-secondary shadow-panel">
-              30 gün yenileme maliyeti:
-              <span className="ml-xs text-body text-text-primary">
-                {formatCurrency(summary?.upcoming_30_days_renewal_cost)}
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+            >
+              Temizle
+            </button>
           </div>
-        </DataCard>
+        </section>
 
-        <section className="mt-lg">
+        <section className="mt-lg flex flex-col gap-md">
           <DataTable
-            title={
+            columns={licenseColumns}
+            data={licenses}
+            getRowKey={(license) => license.id}
+            ordering={state.ordering}
+            onSortChange={setSort}
+            isLoading={licensesQuery.isLoading}
+            emptyMessage={
               showDeleted
-                ? "Silinen lisans ve abonelikler"
-                : "Lisans ve abonelik listesi"
+                ? "Silinen lisans veya abonelik bulunamadı."
+                : "Filtrelere uygun lisans veya abonelik bulunamadı."
             }
-            description={`${licenses.length} kayıt görüntüleniyor.`}
-          >
-            {!licenses.length ? (
-              <div className="rounded-app border border-border bg-surface-1 p-lg text-center text-text-secondary">
-                {showDeleted
-                  ? "Silinen lisans veya abonelik bulunamadı."
-                  : "Filtrelere uygun lisans veya abonelik bulunamadı."}
-              </div>
-            ) : (
-              <table className="w-full min-w-[1360px] border-separate border-spacing-0 text-left text-body">
-                <thead>
-                  <tr className="text-caption text-text-secondary">
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Lisans / Abonelik
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Tip
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Tedarikçi
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Anahtar
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Koltuk
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Bağlı Varlık
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Bitiş
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Durum
-                    </th>
-                    <th className="border-b border-border px-md py-sm text-right font-normal">
-                      İşlem
-                    </th>
-                  </tr>
-                </thead>
+          />
 
-                <tbody>
-                  {licenses.map((license) => (
-                    <tr
-                      key={license.id}
-                      className={`transition hover:bg-surface-1 ${
-                        license.is_deleted ? "opacity-70" : ""
-                      }`}
-                    >
-                      <td className="border-b border-border px-md py-md">
-                        <p className="text-text-primary">{license.name}</p>
-                        <p className="text-caption text-text-secondary">
-                          {license.tracking_code ?? "Takip kodu yok"}
-                        </p>
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        {license.type_label ??
-                          (license.type === "license" ? "Lisans" : "Abonelik")}
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        {license.vendor || "-"}
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        {license.license_key_masked || "-"}
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        {license.seat_count}
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        {license.assigned_asset_name ? (
-                          <div>
-                            <p className="text-body text-text-primary">
-                              {license.assigned_asset_name}
-                            </p>
-                            <p className="text-caption text-text-secondary">
-                              {license.assigned_asset_inventory_code ?? "-"}
-                            </p>
-                          </div>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-
-                      <td className="border-b border-border px-md py-md text-text-secondary">
-                        {formatDate(license.end_date)}
-                      </td>
-
-                      <td className="border-b border-border px-md py-md">
-                        <StatusBadge variant={getLicenseStatusVariant(license)}>
-                          {getLicenseStatusLabel(license)}
-                        </StatusBadge>
-                      </td>
-
-                      <td className="border-b border-border px-md py-md">
-                        <div className="flex justify-end gap-sm">
-                          <GlowButton
-                            variant="ghost"
-                            onClick={() => setSelectedLicense(license)}
-                            icon={<IconEye size={16} aria-hidden={true} />}
-                          >
-                            Detay
-                          </GlowButton>
-
-                          {userCanManage && (
-                            <>
-                              {license.is_deleted ? (
-                                <GlowButton
-                                  variant="ghost"
-                                  onClick={() => handleRestore(license)}
-                                  disabled={isSubmitting}
-                                  icon={
-                                    <IconRefresh
-                                      size={16}
-                                      aria-hidden={true}
-                                    />
-                                  }
-                                >
-                                  Geri Yükle
-                                </GlowButton>
-                              ) : (
-                                <>
-                                  <GlowButton
-                                    variant="ghost"
-                                    onClick={() => openEditForm(license)}
-                                    icon={
-                                      <IconEdit size={16} aria-hidden={true} />
-                                    }
-                                  >
-                                    Düzenle
-                                  </GlowButton>
-
-                                  <GlowButton
-                                    variant="ghost"
-                                    onClick={() => handleDelete(license)}
-                                    disabled={isSubmitting}
-                                    icon={
-                                      <IconTrash
-                                        size={16}
-                                        aria-hidden={true}
-                                      />
-                                    }
-                                  >
-                                    Sil
-                                  </GlowButton>
-                                </>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </DataTable>
+          <TablePagination
+            page={state.page}
+            pageSize={state.pageSize}
+            totalCount={licenseTableData?.count ?? 0}
+            hasNext={Boolean(licenseTableData?.next)}
+            hasPrevious={Boolean(licenseTableData?.previous)}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </section>
 
         <SlideOverPanel
@@ -1115,6 +1172,7 @@ export function LicensesPage() {
                   label="Takip kodu"
                   value={selectedLicense.tracking_code}
                 />
+
                 <DetailRow
                   label="Tip"
                   value={
@@ -1124,15 +1182,19 @@ export function LicensesPage() {
                       : "Abonelik")
                   }
                 />
+
                 <DetailRow label="Tedarikçi" value={selectedLicense.vendor} />
+
                 <DetailRow
                   label="Maskeli lisans anahtarı"
                   value={selectedLicense.license_key_masked}
                 />
+
                 <DetailRow
                   label="Koltuk sayısı"
                   value={selectedLicense.seat_count}
                 />
+
                 <DetailRow
                   label="Bağlı varlık"
                   value={
@@ -1141,14 +1203,17 @@ export function LicensesPage() {
                       : null
                   }
                 />
+
                 <DetailRow
                   label="Başlangıç tarihi"
                   value={formatDate(selectedLicense.start_date)}
                 />
+
                 <DetailRow
                   label="Bitiş / yenileme tarihi"
                   value={formatDate(selectedLicense.end_date)}
                 />
+
                 <DetailRow
                   label="Kalan gün"
                   value={
@@ -1158,10 +1223,12 @@ export function LicensesPage() {
                       : selectedLicense.days_until_end
                   }
                 />
+
                 <DetailRow
                   label="Yenileme maliyeti"
                   value={formatCurrency(selectedLicense.renewal_cost)}
                 />
+
                 <DetailRow
                   label="Faturalama"
                   value={
@@ -1169,10 +1236,12 @@ export function LicensesPage() {
                     selectedLicense.billing_cycle
                   }
                 />
+
                 <DetailRow
                   label="Otomatik yenileme"
                   value={selectedLicense.auto_renew ? "Evet" : "Hayır"}
                 />
+
                 <DetailRow
                   label="Silinme tarihi"
                   value={

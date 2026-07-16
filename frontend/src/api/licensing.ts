@@ -1,3 +1,6 @@
+import { buildTableApiParams } from "../lib/tableQuery";
+import type { PaginatedApiResponse } from "../types/api";
+import type { TableQueryState } from "../types/table";
 import { api } from "./http";
 import type {
   LicenseSubscription,
@@ -26,6 +29,17 @@ export async function getLicenseSubscriptions(
   const response = await api.get<LicenseSubscription[]>(LICENSES_ENDPOINT, {
     params: cleanParams(filters),
   });
+
+  return response.data;
+}
+
+export async function getLicenseSubscriptionsTable(state: TableQueryState) {
+  const response = await api.get<PaginatedApiResponse<LicenseSubscription>>(
+    `${LICENSES_ENDPOINT}table/`,
+    {
+      params: buildTableApiParams(state),
+    }
+  );
 
   return response.data;
 }

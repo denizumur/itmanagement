@@ -10,14 +10,72 @@ from apps.audit.models import AuditLog
 from apps.audit.services import create_audit_log, serialize_instance
 from apps.licensing.models import LicenseSubscription
 from apps.licensing.serializers import LicenseSubscriptionSerializer
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import ListAPIView
 
+from apps.common.pagination import StandardResultsPagination
+from apps.licensing.filters import LicenseSubscriptionFilterSet
 
 LICENSE_AUDIT_EXCLUDE_FIELDS = (
     "created_at",
     "updated_at",
 )
 
+def license_subscription_base_queryset(manager):
+    return manager.select_related(
+        "assigned_asset",
+        "created_by",
+        "updated_by",
+    )
+class LicenseSubscriptionTableListAPIView(ListAPIView):
+    serializer_class = LicenseSubscriptionSerializer
+    permission_classes = [ReadOnlyForViewerWriteForTechnician]
+    pagination_class = StandardResultsPagination
+    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_class = LicenseSubscriptionFilterSet
 
+    search_fields = [
+        "name",
+        "tracking_code",
+        "vendor",
+        "license_key_masked",
+        "assigned_asset__name",
+        "assigned_asset__inventory_code",
+        "notes",
+    ]
+
+    ordering_fields = [
+        "name",
+        "tracking_code",
+        "type",
+        "vendor",
+        "seat_count",
+        "assigned_asset__name",
+        "assigned_asset__inventory_code",
+        "start_date",
+        "end_date",
+        "renewal_cost",
+        "billing_cycle",
+        "auto_renew",
+        "is_active",
+        "created_at",
+        "updated_at",
+    ]
+
+    ordering = ["end_date", "name"]
+
+    def get_queryset(self):
+        deleted = self.request.query_params.get("deleted")
+        include_deleted = self.request.query_params.get("include_deleted")
+
+        if deleted == "true" or include_deleted == "true":
+            manager = LicenseSubscription.all_objects
+        else:
+            manager = LicenseSubscription.objects
+
+        return license_subscription_base_queryset(manager).order_by("end_date", "name")
+    
 class LicenseSubscriptionViewSet(viewsets.ModelViewSet):
     serializer_class = LicenseSubscriptionSerializer
     permission_classes = [ReadOnlyForViewerWriteForTechnician]
@@ -31,11 +89,7 @@ class LicenseSubscriptionViewSet(viewsets.ModelViewSet):
         else:
             manager = LicenseSubscription.objects
 
-        queryset = manager.select_related(
-            "assigned_asset",
-            "created_by",
-            "updated_by",
-        ).order_by("end_date", "name")
+        queryset = license_subscription_base_queryset(manager).order_by("end_date", "name")
 
         if deleted == "true":
             queryset = queryset.filter(is_deleted=True)

@@ -1,6 +1,10 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from apps.licensing.views import LicenseSubscriptionViewSet
+from apps.licensing.views import (
+    LicenseSubscriptionTableListAPIView,
+    LicenseSubscriptionViewSet,
+)
 
 router = DefaultRouter()
 router.register(
@@ -9,4 +13,11 @@ router.register(
     basename="license-subscription",
 )
 
-urlpatterns = router.urls
+urlpatterns = [
+    path(
+        "subscriptions/table/",
+        LicenseSubscriptionTableListAPIView.as_view(),
+        name="license-subscription-table",
+    ),
+    *router.urls,
+]

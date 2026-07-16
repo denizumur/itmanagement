@@ -1,14 +1,21 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   createLicenseSubscription,
   deleteLicenseSubscription,
   getExpiredLicenseSubscriptions,
   getLicenseSubscriptions,
+  getLicenseSubscriptionsTable,
   getLicenseSubscriptionSummary,
   getUpcomingLicenseSubscriptions,
   restoreLicenseSubscription,
   updateLicenseSubscription,
 } from "../api/licensing";
+import type { TableQueryState } from "../types/table";
 import type {
   LicenseSubscriptionFilters,
   LicenseSubscriptionPayload,
@@ -18,6 +25,15 @@ export function useLicenseSubscriptions(filters?: LicenseSubscriptionFilters) {
   return useQuery({
     queryKey: ["licensing", "subscriptions", filters],
     queryFn: () => getLicenseSubscriptions(filters),
+    staleTime: 45_000,
+  });
+}
+
+export function useLicenseSubscriptionTable(state: TableQueryState) {
+  return useQuery({
+    queryKey: ["licensing", "subscriptions-table", state],
+    queryFn: () => getLicenseSubscriptionsTable(state),
+    placeholderData: keepPreviousData,
     staleTime: 45_000,
   });
 }
