@@ -1,6 +1,5 @@
 import {
   IconAlertTriangle,
-  IconCheck,
   IconChevronRight,
   IconClipboardList,
   IconClock,
@@ -16,6 +15,7 @@ import { TablePagination } from "../components/common/TablePagination";
 import { SimplePortalShell } from "../components/layout/SimplePortalShell";
 import { RequesterTicketForm } from "../components/tickets/RequesterTicketForm";
 import { TicketChatPanel } from "../components/tickets/TicketChatPanel";
+import { TicketProgressStepper } from "../components/tickets/TicketProgressStepper";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import {
   useRequesterContext,
@@ -54,66 +54,11 @@ const approvalFilterOptions: Array<{
   { value: "not_required", label: "IT ekibine iletildi" },
 ];
 
-type TicketStep = {
-  key: string;
-  label: string;
-  state: "done" | "active" | "waiting" | "danger";
-};
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("tr-TR", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function getTicketSteps(ticket: Ticket): TicketStep[] {
-  const isRejected = ticket.approval_status === "rejected";
-  const isPendingApproval = ticket.approval_status === "pending";
-  const isApproved = ticket.approval_status === "approved";
-  const isNoApproval = ticket.approval_status === "not_required";
-  const isDone = ticket.status === "resolved" || ticket.status === "closed";
-
-  const isItStage =
-    !isPendingApproval &&
-    !isRejected &&
-    (ticket.status === "open" || ticket.status === "in_progress");
-
-  const steps: TicketStep[] = [
-    {
-      key: "submitted",
-      label: "Gönderildi",
-      state: "done",
-    },
-  ];
-
-  if (!isNoApproval) {
-    steps.push({
-      key: "approval",
-      label: isRejected ? "Onaylanmadı" : "Onay",
-      state: isRejected
-        ? "danger"
-        : isPendingApproval
-          ? "active"
-          : isApproved
-            ? "done"
-            : "waiting",
-    });
-  }
-
-  steps.push({
-    key: "it",
-    label: "IT’de",
-    state: isDone ? "done" : isItStage ? "active" : "waiting",
-  });
-
-  steps.push({
-    key: "done",
-    label: "Çözüldü",
-    state: isDone ? "done" : "waiting",
-  });
-
-  return steps;
 }
 
 function getNextActionText(ticket: Ticket) {
@@ -138,74 +83,6 @@ function getNextActionText(ticket: Ticket) {
   }
 
   return "Talebinin durumunu buradan takip edebilirsin.";
-}
-
-function TicketProgressMini({ ticket }: { ticket: Ticket }) {
-  const steps = getTicketSteps(ticket);
-
-  return (
-    <div className="mt-md">
-      <div className="flex items-center gap-xs">
-        {steps.map((step, index) => {
-          const isLast = index === steps.length - 1;
-
-          return (
-            <div key={step.key} className="flex min-w-0 flex-1 items-center">
-              <div
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
-                  step.state === "done" &&
-                    "border-success/40 bg-success/10 text-success",
-                  step.state === "active" &&
-                    "border-accent/40 bg-accent/10 text-accent",
-                  step.state === "danger" &&
-                    "border-danger/40 bg-danger/10 text-danger",
-                  step.state === "waiting" &&
-                    "border-border bg-surface-2 text-text-secondary"
-                )}
-              >
-                {step.state === "done" ? (
-                  <IconCheck size={15} aria-hidden={true} />
-                ) : (
-                  index + 1
-                )}
-              </div>
-
-              {!isLast ? (
-                <div
-                  className={cn(
-                    "mx-xs h-px flex-1",
-                    step.state === "done" ? "bg-success/40" : "bg-border"
-                  )}
-                />
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-
-      <div
-        className="mt-xs grid gap-xs text-[10px] text-text-secondary"
-        style={{
-          gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
-        }}
-      >
-        {steps.map((step) => (
-          <span
-            key={step.key}
-            className={cn(
-              "truncate",
-              step.state === "active" && "font-semibold text-accent",
-              step.state === "danger" && "font-semibold text-danger",
-              step.state === "done" && "text-success"
-            )}
-          >
-            {step.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function TicketCard({
@@ -266,7 +143,7 @@ function TicketCard({
           </div>
         </div>
 
-        <TicketProgressMini ticket={ticket} />
+        <TicketProgressStepper ticket={ticket} compact />
 
         <div className="mt-md rounded-2xl border border-border bg-surface-2 p-md">
           <p className="text-caption font-semibold text-text-secondary">
@@ -505,57 +382,59 @@ export function MyTicketsPage() {
                 />
               </div>
 
-<section className="mt-lg rounded-2xl border border-border bg-surface-2 p-md">
-  <div className="grid gap-md md:grid-cols-2">
-    <label className="flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md md:col-span-2">
-      <IconSearch size={16} className="shrink-0 text-text-secondary" />
-      <input
-        className="w-full min-w-0 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
-        placeholder="Konu veya açıklama ara..."
-        value={state.search}
-        onChange={(event) => setSearch(event.target.value)}
-      />
-    </label>
+              <section className="mt-lg rounded-2xl border border-border bg-surface-2 p-md">
+                <div className="grid gap-md md:grid-cols-2">
+                  <label className="flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md md:col-span-2">
+                    <IconSearch size={16} className="shrink-0 text-text-secondary" />
+                    <input
+                      className="w-full min-w-0 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+                      placeholder="Konu veya açıklama ara..."
+                      value={state.search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </label>
 
-    <select
-      className="h-12 w-full min-w-0 rounded-app border border-border bg-surface-1 px-md text-body text-text-primary focus:outline-none"
-      value={selectedStatus}
-      onChange={(event) => setFilter("status", event.target.value || null)}
-      aria-label="Talep durum filtresi"
-    >
-      {statusFilterOptions.map((option) => (
-        <option key={option.value || "all"} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+                  <select
+                    className="h-12 w-full min-w-0 rounded-app border border-border bg-surface-1 px-md text-body text-text-primary focus:outline-none"
+                    value={selectedStatus}
+                    onChange={(event) =>
+                      setFilter("status", event.target.value || null)
+                    }
+                    aria-label="Talep durum filtresi"
+                  >
+                    {statusFilterOptions.map((option) => (
+                      <option key={option.value || "all"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
 
-    <select
-      className="h-12 w-full min-w-0 rounded-app border border-border bg-surface-1 px-md text-body text-text-primary focus:outline-none"
-      value={selectedApproval}
-      onChange={(event) =>
-        setFilter("approval_status", event.target.value || null)
-      }
-      aria-label="Onay durumu filtresi"
-    >
-      {approvalFilterOptions.map((option) => (
-        <option key={option.value || "all"} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+                  <select
+                    className="h-12 w-full min-w-0 rounded-app border border-border bg-surface-1 px-md text-body text-text-primary focus:outline-none"
+                    value={selectedApproval}
+                    onChange={(event) =>
+                      setFilter("approval_status", event.target.value || null)
+                    }
+                    aria-label="Onay durumu filtresi"
+                  >
+                    {approvalFilterOptions.map((option) => (
+                      <option key={option.value || "all"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
 
-    <div className="flex justify-end md:col-span-2">
-      <button
-        type="button"
-        onClick={resetFilters}
-        className="h-11 w-full rounded-app border border-border px-md text-body text-text-primary transition hover:border-accent hover:text-accent sm:w-auto"
-      >
-        Temizle
-      </button>
-    </div>
-  </div>
-</section>
+                  <div className="flex justify-end md:col-span-2">
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="h-11 w-full rounded-app border border-border px-md text-body text-text-primary transition hover:border-accent hover:text-accent sm:w-auto"
+                    >
+                      Temizle
+                    </button>
+                  </div>
+                </div>
+              </section>
             </div>
 
             <section className="mt-lg flex min-w-0 flex-col gap-md">

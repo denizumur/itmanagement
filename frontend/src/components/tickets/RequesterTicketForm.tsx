@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
 import { useMemo, useState } from "react";
+import { TicketProgressStepper } from "./TicketProgressStepper";
 import {
   getRequesterCategoryOption,
   requesterCategoryOptions,
@@ -337,22 +338,27 @@ export function RequesterTicketForm({
         <div className="mt-md rounded-2xl border border-success/30 bg-success/10 p-md text-body text-success">
           <div className="flex gap-sm">
             <IconCheck size={18} className="mt-1 shrink-0" />
-            <div>
-              <p className="font-semibold">
-                Talebin alındı: #{successState.ticket.id}
-              </p>
-              <p className="mt-xs">
-                {successState.ticket.approval_status === "pending"
-                  ? `Önce ${successState.ticket.pending_approver_name ?? "yöneticin"} onayına gidecek.`
-                  : "IT ekibine iletildi. Durumu aşağıdaki listeden takip edebilirsin."}
-              </p>
-
-              {successState.failedUploads.length > 0 ? (
-                <p className="mt-xs">
-                  Ancak bazı dosyalar yüklenemedi:{" "}
-                  {successState.failedUploads.join(", ")}
+            <div className="min-w-0 flex-1">
+                <p className="font-semibold">
+                    Talebin alındı: #{successState.ticket.id}
                 </p>
-              ) : null}
+                <p className="mt-xs">
+                    {successState.ticket.approval_status === "pending"
+                    ? `Önce ${successState.ticket.pending_approver_name ?? "yöneticin"} onayına gidecek.`
+                    : "IT ekibine iletildi. Durumu aşağıdaki listeden takip edebilirsin."}
+                </p>
+                <TicketProgressStepper
+                ticket={successState.ticket}
+                compact={false}
+                className="mt-md"
+                />
+                
+                {successState.failedUploads.length > 0 ? (
+                    <p className="mt-md">
+                        Ancak bazı dosyalar yüklenemedi:{" "}
+                        {successState.failedUploads.join(", ")}
+                    </p>
+                ) : null}
             </div>
           </div>
         </div>
