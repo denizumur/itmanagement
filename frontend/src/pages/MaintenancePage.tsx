@@ -10,13 +10,14 @@ import {
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { MaintenanceForm } from "../components/maintenance/MaintenanceForm";
+import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
+import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { Skeleton } from "../components/common/Skeleton";
+import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
+import { MaintenanceForm } from "../components/maintenance/MaintenanceForm";
 import { AppToast } from "../components/ui/AppToast";
-import { DataCard } from "../components/ui/DataCard";
-import { DataTable } from "../components/ui/DataTable";
 import { GlowButton } from "../components/ui/GlowButton";
 import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
@@ -25,11 +26,10 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 import { useAssets } from "../hooks/useInventory";
 import {
   useCreateMaintenanceRecord,
-  useMaintenanceRecords,
   useMaintenanceSummary,
-  useOverdueMaintenanceRecords,
-  useUpcomingMaintenanceRecords,
+  useMaintenanceTable,
 } from "../hooks/useMaintenance";
+import { useTableQueryState } from "../hooks/useTableQueryState";
 import {
   formatMaintenanceCost,
   formatMaintenanceDate,
@@ -40,7 +40,6 @@ import {
   getMaintenanceStatusLabel,
   getMaintenanceStatusVariant,
   getMaintenanceSummaryCount,
-  getMaintenanceSummaryTotal,
   getMaintenanceTypeLabel,
   getMaintenanceTypeVariant,
   isMaintenanceOverdue,
@@ -49,6 +48,7 @@ import { canManage } from "../lib/rbac";
 import type {
   MaintenanceCreatePayload,
   MaintenanceRecord,
+  MaintenanceSummary,
 } from "../types/maintenance";
 
 type ToastState = {
@@ -61,6 +61,12 @@ const typeFilterOptions = [
   { value: "maintenance", label: "Bakım" },
   { value: "repair", label: "Onarım" },
   { value: "disposal", label: "İmha" },
+];
+
+const overdueFilterOptions = [
+  { value: "", label: "Tüm durumlar" },
+  { value: "true", label: "Gecikmiş" },
+  { value: "false", label: "Gecikmemiş" },
 ];
 
 function getRecordTitle(record: MaintenanceRecord) {
@@ -128,59 +134,156 @@ function getMutationErrorMessage(error: unknown) {
   return fallback;
 }
 
+function getSummaryTypeCount(
+  summary: MaintenanceSummary | undefined,
+  type: string,
+  fallback: number
+) {
+  const byType = summary?.by_type;
+
+  if (Array.isArray(byType)) {
+    const item = byType.find((entry) => entry.type === type);
+
+    if (item) {
+      return item.count;
+    }
+  }
+
+  return getMaintenanceSummaryCount(summary, `${type}_count`) || fallback;
+}
+
+function buildMaintenanceColumns(): DataTableColumn<MaintenanceRecord>[] {
+  return [
+    {
+      key: "asset",
+      label: "Varlık",
+      sortable: true,
+      sortKey: "asset__name",
+      render: (record) => (
+        <div>
+          <p className="text-text-primary">{getMaintenanceAssetName(record)}</p>
+          <p className="text-caption text-text-secondary">
+            {getMaintenanceAssetCode(record) ?? "-"}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "record",
+      label: "Kayıt",
+      render: (record) => (
+        <div>
+          <p className="text-text-primary">{getRecordTitle(record)}</p>
+          <p className="line-clamp-2 max-w-[320px] text-caption text-text-secondary">
+            {getRecordDescription(record)}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "type",
+      label: "Tür",
+      sortable: true,
+      sortKey: "type",
+      render: (record) => (
+        <StatusBadge variant={getMaintenanceTypeVariant(record)}>
+          {getMaintenanceTypeLabel(record)}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: "status",
+      label: "Durum",
+      render: (record) => {
+        const overdue = isMaintenanceOverdue(record);
+
+        return (
+          <StatusBadge
+            variant={overdue ? "danger" : getMaintenanceStatusVariant(record)}
+          >
+            {overdue ? "Gecikmiş" : getMaintenanceStatusLabel(record)}
+          </StatusBadge>
+        );
+      },
+    },
+    {
+      key: "performed_at",
+      label: "İşlem Tarihi",
+      sortable: true,
+      sortKey: "performed_at",
+      render: (record) =>
+        formatMaintenanceDate(getMaintenanceRecordDate(record)),
+    },
+    {
+      key: "next_due_date",
+      label: "Sonraki Bakım",
+      sortable: true,
+      sortKey: "next_due_date",
+      render: (record) => formatMaintenanceDate(record.next_due_date),
+    },
+    {
+      key: "performed_by",
+      label: "Firma / İşlem Yapan",
+      sortable: true,
+      sortKey: "performed_by",
+      render: (record) => (
+        <div className="text-text-secondary">
+          <p>{record.vendor || record.performed_by || "-"}</p>
+          {record.vendor && record.performed_by ? (
+            <p className="text-caption">{record.performed_by}</p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: "cost",
+      label: "Maliyet",
+      sortable: true,
+      sortKey: "cost",
+      className: "text-right",
+      render: (record) => formatMaintenanceCost(record.cost),
+    },
+  ];
+}
+
+const maintenanceColumns = buildMaintenanceColumns();
+
 export function MaintenancePage() {
   const { user } = useAuth();
   const userCanManage = canManage(user?.role);
 
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const {
+    state,
+    setSearch,
+    setSort,
+    setPage,
+    setPageSize,
+    setFilter,
+    resetFilters,
+  } = useTableQueryState({
+    page: 1,
+    pageSize: 25,
+    ordering: "-performed_at",
+  });
+
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
 
-  const recordsQuery = useMaintenanceRecords();
+  const recordsQuery = useMaintenanceTable(state);
   const summaryQuery = useMaintenanceSummary();
-  const upcomingQuery = useUpcomingMaintenanceRecords();
-  const overdueQuery = useOverdueMaintenanceRecords();
   const assetsQuery = useAssets({});
   const createRecordMutation = useCreateMaintenanceRecord();
 
-  const records = recordsQuery.data ?? [];
+  const recordTableData = recordsQuery.data;
+  const records = recordTableData?.results ?? [];
   const summary = summaryQuery.data;
-  const upcomingRecords = upcomingQuery.data ?? [];
-  const overdueRecords = overdueQuery.data ?? [];
   const assets = assetsQuery.data ?? [];
 
-  const filteredRecords = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase("tr-TR");
+  const selectedType =
+    typeof state.filters.type === "string" ? state.filters.type : "";
 
-    return records.filter((record) => {
-      const recordType = getMaintenanceRecordType(record);
-
-      if (typeFilter && recordType !== typeFilter) {
-        return false;
-      }
-
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      const values = [
-        getMaintenanceAssetName(record),
-        getMaintenanceAssetCode(record),
-        getMaintenanceTypeLabel(record),
-        getMaintenanceStatusLabel(record),
-        getRecordTitle(record),
-        getRecordDescription(record),
-        record.vendor,
-        record.performed_by,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR");
-
-      return values.includes(normalizedSearch);
-    });
-  }, [records, search, typeFilter]);
+  const selectedOverdue =
+    typeof state.filters.overdue === "string" ? state.filters.overdue : "";
 
   const repairCount = useMemo(
     () =>
@@ -199,24 +302,14 @@ export function MaintenancePage() {
   const isSubmitting = createRecordMutation.isPending;
 
   const isLoading =
-    recordsQuery.isLoading ||
-    summaryQuery.isLoading ||
-    upcomingQuery.isLoading ||
-    overdueQuery.isLoading ||
-    assetsQuery.isLoading;
+    recordsQuery.isLoading || summaryQuery.isLoading || assetsQuery.isLoading;
 
   const hasError =
-    recordsQuery.isError ||
-    summaryQuery.isError ||
-    upcomingQuery.isError ||
-    overdueQuery.isError ||
-    assetsQuery.isError;
+    recordsQuery.isError || summaryQuery.isError || assetsQuery.isError;
 
   function refetchAll() {
     recordsQuery.refetch();
     summaryQuery.refetch();
-    upcomingQuery.refetch();
-    overdueQuery.refetch();
     assetsQuery.refetch();
   }
 
@@ -254,11 +347,12 @@ export function MaintenancePage() {
   if (isLoading) {
     return (
       <AppShell>
-        <div className="grid gap-md md:grid-cols-4">
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
+        <div className="flex flex-wrap gap-sm">
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
+          <Skeleton className="h-14 w-32 rounded-full" />
         </div>
 
         <div className="mt-lg">
@@ -291,8 +385,6 @@ export function MaintenancePage() {
                 disabled={
                   recordsQuery.isFetching ||
                   summaryQuery.isFetching ||
-                  upcomingQuery.isFetching ||
-                  overdueQuery.isFetching ||
                   assetsQuery.isFetching ||
                   isSubmitting
                 }
@@ -300,8 +392,6 @@ export function MaintenancePage() {
               >
                 {recordsQuery.isFetching ||
                 summaryQuery.isFetching ||
-                upcomingQuery.isFetching ||
-                overdueQuery.isFetching ||
                 assetsQuery.isFetching
                   ? "Yenileniyor"
                   : "Veriyi yenile"}
@@ -320,222 +410,128 @@ export function MaintenancePage() {
           }
         />
 
-        <section className="grid gap-md md:grid-cols-2 xl:grid-cols-4">
-          <DataCard className="metric-card-accent p-lg">
-            <IconClipboardList size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {getMaintenanceSummaryTotal(summary) || records.length}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Toplam kayıt
-            </p>
-          </DataCard>
+        <section className="mt-lg flex flex-wrap gap-sm">
+          <MiniMetricCard
+            label="Gösterilen kayıt"
+            value={recordTableData?.count ?? records.length}
+            icon={<IconClipboardList size={15} aria-hidden={true} />}
+            tone="accent"
+          />
 
-          <DataCard className="metric-card-warning p-lg">
-            <IconCalendarDue size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {getMaintenanceSummaryCount(summary, "upcoming_count") ||
-                upcomingRecords.length}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Yaklaşan bakım
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="30 gün içinde"
+            value={summary?.upcoming_30_days ?? 0}
+            icon={<IconCalendarDue size={15} aria-hidden={true} />}
+            tone="warning"
+          />
 
-          <DataCard className="metric-card-danger p-lg">
-            <IconAlertTriangle size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {getMaintenanceSummaryCount(summary, "overdue_count") ||
-                overdueRecords.length}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Gecikmiş bakım
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="Gecikmiş bakım"
+            value={summary?.overdue_next_due ?? 0}
+            icon={<IconAlertTriangle size={15} aria-hidden={true} />}
+            tone="danger"
+          />
 
-          <DataCard className="metric-card-success p-lg">
-            <IconTool size={22} aria-hidden={true} />
-            <p className="mt-md text-[30px] font-medium leading-none">
-              {getMaintenanceSummaryCount(summary, "repair_count") ||
-                repairCount}
-            </p>
-            <p className="mt-sm text-caption text-text-secondary">
-              Onarım kaydı
-            </p>
-          </DataCard>
+          <MiniMetricCard
+            label="Onarım kaydı"
+            value={getSummaryTypeCount(summary, "repair", repairCount)}
+            icon={<IconTool size={15} aria-hidden={true} />}
+            tone="success"
+          />
+
+          <MiniMetricCard
+            label="İmha kaydı"
+            value={getSummaryTypeCount(summary, "disposal", disposalCount)}
+            icon={<IconTrash size={15} aria-hidden={true} />}
+            tone="danger"
+          />
         </section>
 
-        <section className="mt-lg grid gap-md lg:grid-cols-[1fr_320px]">
-          <DataCard className="p-lg">
-            <div className="grid gap-md lg:grid-cols-[1fr_220px]">
-              <label className="flex items-center gap-sm rounded-app border border-border bg-surface-1 px-md py-sm shadow-panel">
-                <IconSearch
-                  size={18}
-                  className="text-text-secondary"
-                  aria-hidden={true}
-                />
+        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+          <div className="grid gap-md lg:grid-cols-[1fr_220px_220px_auto]">
+            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
+              <IconSearch
+                size={18}
+                className="text-text-secondary"
+                aria-hidden={true}
+              />
 
-                <input
-                  className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
-                  placeholder="Varlık, açıklama, firma, işlem yapan veya durum ara..."
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </label>
+              <input
+                className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+                placeholder="Varlık, açıklama, firma veya işlem yapan ara..."
+                value={state.search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
 
-              <select
-                className="rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
-                value={typeFilter}
-                onChange={(event) => setTypeFilter(event.target.value)}
-              >
-                {typeFilterOptions.map((option) => (
-                  <option key={option.value || "all"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </DataCard>
+            <select
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedType}
+              onChange={(event) => setFilter("type", event.target.value || null)}
+              aria-label="Tür filtresi"
+            >
+              {typeFilterOptions.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
-          <DataCard className="p-lg">
-            <div className="flex items-center gap-sm">
-              <div className="flex h-10 w-10 items-center justify-center rounded-app bg-danger-bg text-danger">
-                <IconTrash size={20} aria-hidden={true} />
-              </div>
+            <select
+              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              value={selectedOverdue}
+              onChange={(event) =>
+                setFilter("overdue", event.target.value || null)
+              }
+              aria-label="Gecikme filtresi"
+            >
+              {overdueFilterOptions.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
-              <div>
-                <p className="text-h3 text-text-primary">{disposalCount}</p>
-                <p className="text-caption text-text-secondary">
-                  İmha geçmişi kaydı
-                </p>
-              </div>
-            </div>
-          </DataCard>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+            >
+              Temizle
+            </button>
+          </div>
         </section>
 
         {!userCanManage && (
-          <DataCard className="mt-lg border-warning bg-warning-bg p-md">
+          <section className="mt-lg rounded-panel border border-warning bg-warning-bg p-md">
             <p className="text-body text-warning">
               Viewer rolündesin. Bakım / onarım / imha kayıtlarını
               görüntüleyebilirsin; yeni kayıt oluşturma ve güncelleme işlemleri
               admin veya technician rolü gerektirir.
             </p>
-          </DataCard>
+          </section>
         )}
 
-        <section className="mt-lg">
+        <section className="mt-lg flex flex-col gap-md">
           <DataTable
-            title="Bakım / Onarım / İmha kayıtları"
-            description={`${filteredRecords.length} kayıt görüntüleniyor.`}
-          >
-            {!filteredRecords.length ? (
-              <div className="rounded-app border border-border bg-surface-1 p-lg text-center text-text-secondary">
-                Kayıt bulunamadı.
-              </div>
-            ) : (
-              <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-left text-body">
-                <thead>
-                  <tr className="text-caption text-text-secondary">
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Varlık
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Kayıt
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Tür
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Durum
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Tarih
-                    </th>
-                    <th className="border-b border-border px-md py-sm font-normal">
-                      Firma / İşlem yapan
-                    </th>
-                    <th className="border-b border-border px-md py-sm text-right font-normal">
-                      Maliyet
-                    </th>
-                  </tr>
-                </thead>
+            columns={maintenanceColumns}
+            data={records}
+            getRowKey={(record) => record.id}
+            ordering={state.ordering}
+            onSortChange={setSort}
+            isLoading={recordsQuery.isLoading}
+            emptyMessage="Bakım / onarım / imha kaydı bulunamadı."
+          />
 
-                <tbody>
-                  {filteredRecords.map((record) => {
-                    const overdue = isMaintenanceOverdue(record);
-
-                    return (
-                      <tr
-                        key={record.id}
-                        className="transition hover:bg-surface-1"
-                      >
-                        <td className="border-b border-border px-md py-md">
-                          <p className="text-text-primary">
-                            {getMaintenanceAssetName(record)}
-                          </p>
-                          <p className="text-caption text-text-secondary">
-                            {getMaintenanceAssetCode(record) ?? "-"}
-                          </p>
-                        </td>
-
-                        <td className="border-b border-border px-md py-md">
-                          <p className="text-text-primary">
-                            {getRecordTitle(record)}
-                          </p>
-                          <p className="line-clamp-2 max-w-[320px] text-caption text-text-secondary">
-                            {getRecordDescription(record)}
-                          </p>
-                        </td>
-
-                        <td className="border-b border-border px-md py-md">
-                          <StatusBadge
-                            variant={getMaintenanceTypeVariant(record)}
-                          >
-                            {getMaintenanceTypeLabel(record)}
-                          </StatusBadge>
-                        </td>
-
-                        <td className="border-b border-border px-md py-md">
-                          <div className="flex flex-col items-start gap-xs">
-                            <StatusBadge
-                              variant={
-                                overdue
-                                  ? "danger"
-                                  : getMaintenanceStatusVariant(record)
-                              }
-                            >
-                              {overdue
-                                ? "Gecikmiş"
-                                : getMaintenanceStatusLabel(record)}
-                            </StatusBadge>
-                          </div>
-                        </td>
-
-                        <td className="border-b border-border px-md py-md text-text-secondary">
-                          {formatMaintenanceDate(
-                            getMaintenanceRecordDate(record)
-                          )}
-                        </td>
-
-                        <td className="border-b border-border px-md py-md text-text-secondary">
-                          <p>{record.vendor || record.performed_by || "-"}</p>
-                          {record.vendor && record.performed_by && (
-                            <p className="text-caption">
-                              {record.performed_by}
-                            </p>
-                          )}
-                        </td>
-
-                        <td className="border-b border-border px-md py-md text-right text-text-secondary">
-                          {formatMaintenanceCost(record.cost)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </DataTable>
+          <TablePagination
+            page={state.page}
+            pageSize={state.pageSize}
+            totalCount={recordTableData?.count ?? 0}
+            hasNext={Boolean(recordTableData?.next)}
+            hasPrevious={Boolean(recordTableData?.previous)}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </section>
 
         <SlideOverPanel

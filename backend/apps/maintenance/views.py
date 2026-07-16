@@ -1,14 +1,19 @@
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
 from apps.audit.models import AuditLog
 from apps.audit.services import create_audit_log, serialize_instance
+from apps.common.pagination import StandardResultsPagination
 from apps.inventory.models import Asset
+from apps.maintenance.filters import MaintenanceRecordFilterSet
 from apps.maintenance.models import MaintenanceRecord
 from apps.maintenance.serializers import MaintenanceRecordSerializer
 
@@ -17,6 +22,15 @@ MAINTENANCE_AUDIT_EXCLUDE_FIELDS = (
     "created_at",
     "updated_at",
 )
+
+
+def maintenance_record_base_queryset():
+    return MaintenanceRecord.objects.select_related(
+        "asset",
+        "asset__category",
+        "created_by",
+        "updated_by",
+    )
 
 
 def get_maintenance_create_audit_action(record):
@@ -39,17 +53,50 @@ def get_maintenance_create_operation(record):
     return "maintenance_record_create"
 
 
+class MaintenanceRecordTableListAPIView(ListAPIView):
+    serializer_class = MaintenanceRecordSerializer
+    permission_classes = [ReadOnlyForViewerWriteForTechnician]
+    pagination_class = StandardResultsPagination
+    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_class = MaintenanceRecordFilterSet
+
+    search_fields = [
+        "asset__name",
+        "asset__inventory_code",
+        "asset__serial_number",
+        "asset__category__name",
+        "performed_by",
+        "description",
+    ]
+
+    ordering_fields = [
+        "asset__name",
+        "asset__inventory_code",
+        "asset__category__name",
+        "type",
+        "performed_at",
+        "next_due_date",
+        "cost",
+        "performed_by",
+        "created_at",
+        "updated_at",
+    ]
+
+    ordering = ["-performed_at", "-created_at"]
+
+    def get_queryset(self):
+        return maintenance_record_base_queryset().order_by("-performed_at", "-created_at")
+
+
 class MaintenanceRecordViewSet(viewsets.ModelViewSet):
     serializer_class = MaintenanceRecordSerializer
     permission_classes = [ReadOnlyForViewerWriteForTechnician]
 
     def get_queryset(self):
-        queryset = MaintenanceRecord.objects.select_related(
-            "asset",
-            "asset__category",
-            "created_by",
-            "updated_by",
-        ).order_by("-performed_at", "-created_at")
+        queryset = maintenance_record_base_queryset().order_by(
+            "-performed_at",
+            "-created_at",
+        )
 
         search = self.request.query_params.get("search")
         asset_id = self.request.query_params.get("asset")

@@ -1,3 +1,5 @@
+import type { PaginatedApiResponse } from "./api";
+
 export type MaintenanceRecordType =
   | "maintenance"
   | "repair"
@@ -97,7 +99,13 @@ export interface MaintenanceSummary {
   completed_count?: number;
   overdue_count?: number;
   upcoming_count?: number;
+  overdue_next_due?: number;
+  upcoming_30_days?: number;
   total_cost?: number | string | null;
+  by_type?: Array<{
+    type?: string;
+    count: number;
+  }>;
 
   [key: string]: unknown;
 }
@@ -108,6 +116,7 @@ export interface MaintenanceFilters {
   record_type?: string;
   status?: string;
   asset?: string | number;
+  overdue?: string;
 }
 
 export interface MaintenanceCreatePayload {
@@ -139,9 +148,4 @@ export interface MaintenanceCreatePayload {
   asset_status_after?: string | null;
 }
 
-export interface PaginatedMaintenanceResponse<T> {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: T[];
-}
+export type PaginatedMaintenanceResponse<T> = PaginatedApiResponse<T>;

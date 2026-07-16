@@ -1,3 +1,5 @@
+import { buildTableApiParams } from "../lib/tableQuery";
+import type { TableQueryState } from "../types/table";
 import { api } from "./http";
 import type {
   MaintenanceCreatePayload,
@@ -44,11 +46,10 @@ function cleanPayload(payload: MaintenanceCreatePayload) {
     cost: payload.cost === "" ? null : payload.cost ?? null,
     performed_by: payload.performed_by?.trim() || null,
     asset_status_after:
-      "asset_status_after" in payload
-        ? String(payload.asset_status_after ?? "")
-        : "",
+      "asset_status_after" in payload ? String(payload.asset_status_after ?? "") : "",
   };
 }
+
 export async function getMaintenanceRecords(filters: MaintenanceFilters = {}) {
   const response = await api.get<
     MaintenanceRecord[] | PaginatedMaintenanceResponse<MaintenanceRecord>
@@ -57,6 +58,17 @@ export async function getMaintenanceRecords(filters: MaintenanceFilters = {}) {
   });
 
   return extractResults(response.data);
+}
+
+export async function getMaintenanceRecordsTable(state: TableQueryState) {
+  const response = await api.get<PaginatedMaintenanceResponse<MaintenanceRecord>>(
+    `${MAINTENANCE_RECORDS_ENDPOINT}table/`,
+    {
+      params: buildTableApiParams(state),
+    }
+  );
+
+  return response.data;
 }
 
 export async function getMaintenanceSummary() {

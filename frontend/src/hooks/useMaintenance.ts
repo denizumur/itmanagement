@@ -1,12 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   createMaintenanceRecord,
   getMaintenanceRecords,
   getMaintenanceRecordsByAsset,
+  getMaintenanceRecordsTable,
   getMaintenanceSummary,
   getOverdueMaintenanceRecords,
   getUpcomingMaintenanceRecords,
 } from "../api/maintenance";
+import type { TableQueryState } from "../types/table";
 import type {
   MaintenanceCreatePayload,
   MaintenanceFilters,
@@ -16,6 +23,15 @@ export function useMaintenanceRecords(filters: MaintenanceFilters = {}) {
   return useQuery({
     queryKey: ["maintenance", "records", filters],
     queryFn: () => getMaintenanceRecords(filters),
+    staleTime: 45_000,
+  });
+}
+
+export function useMaintenanceTable(state: TableQueryState) {
+  return useQuery({
+    queryKey: ["maintenance", "records-table", state],
+    queryFn: () => getMaintenanceRecordsTable(state),
+    placeholderData: keepPreviousData,
     staleTime: 45_000,
   });
 }
