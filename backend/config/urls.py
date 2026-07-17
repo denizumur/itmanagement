@@ -22,7 +22,7 @@ urlpatterns = [
     path("api/health/", health_check),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/inventory/", include("apps.inventory.urls")),
-    path("api/", include("apps.assignments.urls")),
+    path("api/notifications/", include("apps.notifications.urls")),path("api/", include("apps.assignments.urls")),
     path("api/maintenance/", include("apps.maintenance.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/licensing/", include("apps.licensing.urls")),

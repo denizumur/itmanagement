@@ -1,10 +1,15 @@
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ReadOnlyForViewerWriteForTechnician
+from apps.common.pagination import StandardResultsPagination
+from apps.reminders.filters import ReminderFilterSet
 from apps.reminders.models import Reminder
 from apps.reminders.serializers import ReminderGenerateSerializer, ReminderSerializer
 from apps.reminders.services import ReminderGenerationService
@@ -14,6 +19,52 @@ from drf_spectacular.utils import (
     extend_schema,
     extend_schema_view,
 )
+
+
+def not_snoozed_today_filter(today):
+    return Q(snoozed_until__isnull=True) | Q(snoozed_until__lt=today)
+
+
+def reminder_base_queryset():
+    return Reminder.objects.select_related("created_by")
+
+
+class ReminderTableListAPIView(ListAPIView):
+    serializer_class = ReminderSerializer
+    permission_classes = [ReadOnlyForViewerWriteForTechnician]
+    pagination_class = StandardResultsPagination
+    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_class = ReminderFilterSet
+
+    search_fields = [
+        "title",
+        "message",
+        "created_by__username",
+    ]
+
+    ordering_fields = [
+        "source_type",
+        "source_id",
+        "title",
+        "due_date",
+        "scheduled_for",
+        "threshold_days",
+        "channel",
+        "status",
+        "created_at",
+        "updated_at",
+    ]
+
+    ordering = ["scheduled_for", "due_date", "threshold_days"]
+
+    def get_queryset(self):
+        return reminder_base_queryset().order_by(
+            "scheduled_for",
+            "due_date",
+            "threshold_days",
+        )
+
+
 @extend_schema_view(
     list=extend_schema(
         parameters=[
@@ -39,7 +90,10 @@ from drf_spectacular.utils import (
                 name="visible",
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
-                description="true verilirse bugün gösterilmesi gereken pending hatırlatıcıları getirir.",
+                description=(
+                    "true verilirse bugün gösterilmesi gereken ve bugün gizlenmemiş "
+                    "pending hatırlatıcıları getirir."
+                ),
             ),
             OpenApiParameter(
                 name="due_before",
@@ -61,7 +115,7 @@ class ReminderViewSet(viewsets.ModelViewSet):
     permission_classes = [ReadOnlyForViewerWriteForTechnician]
 
     def get_queryset(self):
-        queryset = Reminder.objects.select_related("created_by").order_by(
+        queryset = reminder_base_queryset().order_by(
             "scheduled_for",
             "due_date",
             "threshold_days",
@@ -84,10 +138,12 @@ class ReminderViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(channel=channel)
 
         if visible == "true":
+            today = timezone.localdate()
+
             queryset = queryset.filter(
-                scheduled_for__lte=timezone.localdate(),
+                scheduled_for__lte=today,
                 status=Reminder.Status.PENDING,
-            )
+            ).filter(not_snoozed_today_filter(today))
 
         if due_before:
             queryset = queryset.filter(due_date__lte=due_before)
@@ -126,32 +182,34 @@ class ReminderViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset()
         today = timezone.localdate()
 
+        visible_pending_queryset = queryset.filter(
+            status=Reminder.Status.PENDING,
+            scheduled_for__lte=today,
+        ).filter(not_snoozed_today_filter(today))
+
         data = {
             "total": queryset.count(),
             "pending": queryset.filter(status=Reminder.Status.PENDING).count(),
-            "visible_pending": queryset.filter(
-                status=Reminder.Status.PENDING,
-                scheduled_for__lte=today,
-            ).count(),
             "sent": queryset.filter(status=Reminder.Status.SENT).count(),
             "dismissed": queryset.filter(status=Reminder.Status.DISMISSED).count(),
             "cancelled": queryset.filter(status=Reminder.Status.CANCELLED).count(),
-            "overdue_due_date": queryset.filter(
+            "visible_pending": visible_pending_queryset.count(),
+            "snoozed_today": queryset.filter(
                 status=Reminder.Status.PENDING,
+                snoozed_until__gte=today,
+            ).count(),
+            "overdue_due_date": visible_pending_queryset.filter(
                 due_date__lt=today,
             ).count(),
-            "due_today": queryset.filter(
-                status=Reminder.Status.PENDING,
+            "due_today": visible_pending_queryset.filter(
                 due_date=today,
             ).count(),
-            "upcoming_7_days": queryset.filter(
-                status=Reminder.Status.PENDING,
-                due_date__gte=today,
+            "upcoming_7_days": visible_pending_queryset.filter(
+                due_date__gt=today,
                 due_date__lte=today + timezone.timedelta(days=7),
             ).count(),
-            "upcoming_30_days": queryset.filter(
-                status=Reminder.Status.PENDING,
-                due_date__gte=today,
+            "upcoming_30_days": visible_pending_queryset.filter(
+                due_date__gt=today + timezone.timedelta(days=7),
                 due_date__lte=today + timezone.timedelta(days=30),
             ).count(),
             "by_source_type": list(
@@ -184,6 +242,15 @@ class ReminderViewSet(viewsets.ModelViewSet):
     def dismiss(self, request, pk=None):
         reminder = self.get_object()
         reminder.dismiss()
+
+        serializer = self.get_serializer(reminder)
+
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def snooze_today(self, request, pk=None):
+        reminder = self.get_object()
+        reminder.snooze_today()
 
         serializer = self.get_serializer(reminder)
 

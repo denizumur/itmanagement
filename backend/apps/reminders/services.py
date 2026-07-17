@@ -9,7 +9,7 @@ from apps.licensing.models import LicenseSubscription
 from apps.reminders.models import Reminder
 
 
-DEFAULT_THRESHOLDS = [30, 15, 7, 1]
+DEFAULT_THRESHOLDS = [30, 7, 1]
 
 
 @dataclass

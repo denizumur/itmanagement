@@ -146,9 +146,29 @@ class Ticket(models.Model):
         blank=True,
     )
 
+    resolution_note = models.TextField(blank=True)
+
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="resolved_tickets",
+        null=True,
+        blank=True,
+    )
     resolved_at = models.DateTimeField(null=True, blank=True)
+
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="closed_tickets",
+        null=True,
+        blank=True,
+    )
     closed_at = models.DateTimeField(null=True, blank=True)
 
+
+
+   
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

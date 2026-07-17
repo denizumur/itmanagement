@@ -62,6 +62,12 @@ class Reminder(TimeStampedModel):
 
     notified_at = models.DateTimeField(null=True, blank=True)
     dismissed_at = models.DateTimeField(null=True, blank=True)
+    snoozed_until = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Bugün gizle gibi geçici erteleme tarihi. Bu tarih geçince pending reminder tekrar görünür.",
+    )
+    snoozed_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
 
     metadata = models.JSONField(
@@ -85,6 +91,7 @@ class Reminder(TimeStampedModel):
         indexes = [
             models.Index(fields=["source_type"]),
             models.Index(fields=["source_id"]),
+            models.Index(fields=["snoozed_until"]),
             models.Index(fields=["due_date"]),
             models.Index(fields=["scheduled_for"]),
             models.Index(fields=["threshold_days"]),
@@ -115,7 +122,19 @@ class Reminder(TimeStampedModel):
     @property
     def days_until_due(self):
         return (self.due_date - timezone.localdate()).days
+    @property
+    def is_snoozed_today(self):
+        today = timezone.localdate()
 
+        return self.snoozed_until is not None and self.snoozed_until >= today
+
+    @property
+    def is_visible_today(self):
+        return (
+            self.status == self.Status.PENDING
+            and self.is_due_to_show
+            and not self.is_snoozed_today
+        )
     def clean(self):
         if self.threshold_days not in [30, 15, 7, 1]:
             raise ValidationError(
@@ -153,6 +172,21 @@ class Reminder(TimeStampedModel):
         self.status = self.Status.DISMISSED
         self.dismissed_at = timezone.now()
         self.save(update_fields=["status", "dismissed_at", "updated_at"])
+
+
+    def snooze_today(self):
+        self.status = self.Status.PENDING
+        self.snoozed_until = timezone.localdate()
+        self.snoozed_at = timezone.now()
+        self.save(
+            update_fields=[
+                "status",
+                "snoozed_until",
+                "snoozed_at",
+                "updated_at",
+            ]
+        )
+
 
     def cancel(self):
         self.status = self.Status.CANCELLED

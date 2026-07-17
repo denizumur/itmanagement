@@ -18,6 +18,8 @@ class ReminderSerializer(serializers.ModelSerializer):
     )
     is_due_to_show = serializers.BooleanField(read_only=True)
     days_until_due = serializers.IntegerField(read_only=True)
+    is_snoozed_today = serializers.BooleanField(read_only=True)
+    is_visible_today = serializers.BooleanField(read_only=True)
     created_by_username = serializers.CharField(
         source="created_by.username",
         read_only=True,
@@ -43,6 +45,10 @@ class ReminderSerializer(serializers.ModelSerializer):
             "notified_at",
             "dismissed_at",
             "cancelled_at",
+            "snoozed_until",
+            "snoozed_at",
+            "is_snoozed_today",
+            "is_visible_today",
             "metadata",
             "is_due_to_show",
             "days_until_due",
@@ -58,6 +64,10 @@ class ReminderSerializer(serializers.ModelSerializer):
             "status_label",
             "scheduled_for",
             "notified_at",
+            "snoozed_until",
+            "snoozed_at",
+            "is_snoozed_today",
+            "is_visible_today",
             "dismissed_at",
             "cancelled_at",
             "is_due_to_show",

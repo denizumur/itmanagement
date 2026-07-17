@@ -12,6 +12,7 @@ class AuditLog(models.Model):
         RETURN = "return", "İade Alma"
         DISPOSE = "dispose", "İmha"
         STATUS_CHANGE = "status_change", "Durum Değişikliği"
+        EXPORT = "export", "Dışa Aktarma"
         LOGIN = "login", "Giriş"
         LOGOUT = "logout", "Çıkış"
         OTHER = "other", "Diğer"

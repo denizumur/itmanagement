@@ -209,6 +209,7 @@ function TicketInboxList({
           <div className="space-y-xs">
             {tickets.map((ticket) => {
               const priorityMeta = getTicketPriorityMeta(ticket.priority);
+               const statusMeta = getTicketStatusMeta(ticket.status);
               const selected = selectedTicketId === ticket.id;
 
               return (
@@ -227,10 +228,21 @@ function TicketInboxList({
                     <div className="min-w-0">
                       <p className="truncate text-body font-semibold text-text-primary">
                         #{ticket.id} {ticket.title}
-                      </p>
-                      <p className="mt-1 truncate text-caption text-text-secondary">
-                        {ticket.employee_name}
-                      </p>
+                        </p>
+                        <p className="mt-1 truncate text-caption text-text-secondary">
+                          {ticket.employee_name}
+                          </p>
+                    </div>
+                    
+                    <div className="flex shrink-0 flex-col items-end gap-xs">
+                      <StatusBadge variant={priorityMeta.variant}>
+                        {priorityMeta.label}
+                        </StatusBadge>
+                        
+                        <StatusBadge variant={statusMeta.variant}>
+                          {statusMeta.label}
+                          </StatusBadge>
+                          </div>
                     </div>
 
                     <StatusBadge variant={priorityMeta.variant}>
