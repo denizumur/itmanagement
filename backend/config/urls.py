@@ -8,6 +8,7 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+
 def health_check(request):
     return JsonResponse(
         {
@@ -21,23 +22,25 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", health_check),
     path("api/auth/", include("apps.accounts.urls")),
+    path("api/audit/", include("apps.audit.urls")),
     path("api/inventory/", include("apps.inventory.urls")),
-    path("api/notifications/", include("apps.notifications.urls")),path("api/", include("apps.assignments.urls")),
+    path("api/notifications/", include("apps.notifications.urls")),
+    path("api/", include("apps.assignments.urls")),
     path("api/maintenance/", include("apps.maintenance.urls")),
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/licensing/", include("apps.licensing.urls")),
     path("api/reminders/", include("apps.reminders.urls")),
     path("api/dashboard/", include("apps.dashboard.urls")),
     path("api/employees/", include("apps.employees.urls")),
     path("api/tickets/", include("apps.tickets.urls")),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/docs/",
         SpectacularSwaggerView.as_view(url_name="schema"),
         name="swagger-ui",
-        ),
-        path(
-            "api/redoc/",
-            SpectacularRedocView.as_view(url_name="schema"),
-            name="redoc",
-            ),
+    ),
+    path(
+        "api/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc",
+    ),
 ]
