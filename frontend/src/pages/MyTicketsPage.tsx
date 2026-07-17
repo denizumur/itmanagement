@@ -235,10 +235,11 @@ function TicketChatDrawer({
           <TicketChatPanel
             ticket={ticket}
             open={Boolean(ticket)}
-            canUseInternalNotes={false}
+            allowInternalNotes={false}
+            defaultMode="public_reply"
             onClose={onClose}
             onCommentCreated={onCommentCreated}
-          />
+          />  
         </div>
       </div>
     </div>

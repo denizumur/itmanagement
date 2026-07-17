@@ -943,13 +943,14 @@ export function TicketsQueuePage() {
               <TicketChatPanel
                 ticket={resolvedTicket}
                 open={Boolean(resolvedTicket)}
-                canUseInternalNotes={Boolean(context?.actions.can_add_internal_note)}
+                allowInternalNotes={Boolean(context?.actions.can_add_internal_note)}
+                defaultMode="public_reply"
                 onClose={handleCloseSelectedTicket}
                 onCommentCreated={refetchAll}
                 variant="workspace"
                 descriptionAsFirstMessage
                 className="h-full"
-                headerSlot={
+               headerSlot={
                   <WorkspaceChatHeader
                     ticket={resolvedTicket}
                     context={context}

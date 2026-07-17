@@ -18,10 +18,13 @@ import type {
 } from "../../types/tickets";
 import { StatusBadge } from "../ui/StatusBadge";
 
+export type TicketChatMode = "public_reply" | "internal_note";
+
 type TicketChatPanelProps = {
   ticket: Ticket | null;
   open: boolean;
-  canUseInternalNotes: boolean;
+  allowInternalNotes?: boolean;
+  defaultMode?: TicketChatMode;
   onClose: () => void;
   onCommentCreated?: () => void;
   variant?: "panel" | "workspace";
@@ -130,10 +133,25 @@ function getErrorMessage(error: unknown) {
   return "Mesaj gönderilemedi. Lütfen tekrar dene.";
 }
 
+function normalizeChatMode({
+  requestedMode,
+  allowInternalNotes,
+}: {
+  requestedMode: TicketChatMode;
+  allowInternalNotes: boolean;
+}): TicketChatMode {
+  if (!allowInternalNotes) {
+    return "public_reply";
+  }
+
+  return requestedMode;
+}
+
 export function TicketChatPanel({
   ticket,
   open,
-  canUseInternalNotes,
+  allowInternalNotes = false,
+  defaultMode = "public_reply",
   onClose,
   onCommentCreated,
   variant = "panel",
@@ -148,10 +166,16 @@ export function TicketChatPanel({
   const commentsQuery = useTicketComments(ticketId, open);
 
   const [body, setBody] = useState("");
-  const [isInternal, setIsInternal] = useState(false);
+  const [mode, setMode] = useState<TicketChatMode>(() =>
+    normalizeChatMode({
+      requestedMode: defaultMode,
+      allowInternalNotes,
+    })
+  );
   const [error, setError] = useState<string | null>(null);
 
   const comments = commentsQuery.data ?? [];
+  const isInternalMode = mode === "internal_note";
 
   const sortedComments = useMemo(
     () =>
@@ -164,16 +188,19 @@ export function TicketChatPanel({
   );
 
   useEffect(() => {
-    if (!canUseInternalNotes) {
-      setIsInternal(false);
-    }
-  }, [canUseInternalNotes]);
+    setMode(
+      normalizeChatMode({
+        requestedMode: defaultMode,
+        allowInternalNotes,
+      })
+    );
+  }, [defaultMode, allowInternalNotes, ticketId]);
 
   useEffect(() => {
     if (!open) {
       setBody("");
       setError(null);
-      setIsInternal(false);
+      setMode("public_reply");
     }
   }, [open]);
 
@@ -250,6 +277,7 @@ export function TicketChatPanel({
           )
       );
 
+      setMode("public_reply");
       onCommentCreated?.();
     },
     onSettled: async () => {
@@ -274,7 +302,7 @@ export function TicketChatPanel({
 
     const payload: TicketCommentCreatePayload = {
       body: trimmedBody,
-      is_internal: canUseInternalNotes ? isInternal : false,
+      is_internal: allowInternalNotes && mode === "internal_note",
     };
 
     setError(null);
@@ -439,8 +467,10 @@ export function TicketChatPanel({
                     </div>
 
                     {comment.is_internal ? (
-                      <StatusBadge variant="warning">İç not</StatusBadge>
-                    ) : null}
+                      <StatusBadge variant="warning">Dahili IT notu</StatusBadge>
+                    ) : (
+                      <StatusBadge variant="accent">Talep edene yanıt</StatusBadge>
+                    )}
                   </div>
 
                   <p className="mt-sm whitespace-pre-wrap text-body text-text-secondary">
@@ -465,17 +495,22 @@ export function TicketChatPanel({
         ) : null}
 
         <form
-          className="sticky bottom-0 border-t border-border bg-surface-1 p-md"
+          className={cn(
+            "sticky bottom-0 border-t p-md",
+            isInternalMode
+              ? "border-warning/40 bg-warning-bg"
+              : "border-border bg-surface-1"
+          )}
           onSubmit={handleSubmit}
         >
-          {canUseInternalNotes ? (
+          {allowInternalNotes ? (
             <div className="mb-sm grid grid-cols-2 gap-xs rounded-app border border-border bg-surface-2 p-xs">
               <button
                 type="button"
-                onClick={() => setIsInternal(false)}
+                onClick={() => setMode("public_reply")}
                 className={cn(
                   "rounded-app px-sm py-xs text-caption transition",
-                  !isInternal
+                  mode === "public_reply"
                     ? "bg-accent text-white"
                     : "text-text-secondary hover:text-text-primary"
                 )}
@@ -485,40 +520,61 @@ export function TicketChatPanel({
 
               <button
                 type="button"
-                onClick={() => setIsInternal(true)}
+                onClick={() => setMode("internal_note")}
                 className={cn(
                   "rounded-app px-sm py-xs text-caption transition",
-                  isInternal
+                  mode === "internal_note"
                     ? "bg-warning text-white"
                     : "text-text-secondary hover:text-text-primary"
                 )}
               >
-                Dahili not
+                Dahili IT notu
               </button>
             </div>
           ) : null}
 
+          {isInternalMode ? (
+            <div className="mb-sm rounded-app border border-warning/40 bg-surface-1 px-md py-sm text-caption text-warning">
+              Bu not sadece Admin/Technician kullanıcıları tarafından görülür.
+              Talep sahibi bu mesajı görmez.
+            </div>
+          ) : (
+            <div className="mb-sm rounded-app border border-accent/30 bg-accent-bg px-md py-sm text-caption text-accent">
+              Bu mesaj talep sahibine görünür.
+            </div>
+          )}
+
           <label className="text-caption text-text-secondary">
-            {isInternal ? "Dahili not" : "Mesaj"}
+            {isInternalMode ? "Dahili IT notu" : "Talep edene yanıt"}
           </label>
 
           <textarea
             value={body}
             onChange={(event) => setBody(event.target.value)}
-            className="mt-xs min-h-[96px] w-full rounded-app border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
+            className={cn(
+              "mt-xs min-h-[96px] w-full rounded-app border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent",
+              isInternalMode ? "border-warning/50" : "border-border"
+            )}
             placeholder={
-              isInternal
-                ? "Sadece IT ekibinin göreceği dahili not yaz..."
-                : "Talep edene yanıt yaz..."
+              isInternalMode
+                ? "Sadece IT ekibinin göreceği dahili not yaz. Örn: Loglar kontrol edildi, kullanıcıya henüz bilgi verilmedi."
+                : "Talep sahibine görünecek yanıtı yaz. Örn: Kontrol ettik, VPN profilinizi yeniledik."
             }
           />
 
           <button
             type="submit"
             disabled={!body.trim() || createCommentMutation.isPending}
-            className="mt-sm w-full rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className={cn(
+              "mt-sm w-full rounded-app px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+              isInternalMode ? "bg-warning" : "bg-accent"
+            )}
           >
-            {createCommentMutation.isPending ? "Gönderiliyor..." : "Gönder"}
+            {createCommentMutation.isPending
+              ? "Gönderiliyor..."
+              : isInternalMode
+                ? "Dahili notu kaydet"
+                : "Yanıtı gönder"}
           </button>
         </form>
       </div>
