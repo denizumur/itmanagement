@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AssetsPage } from "./pages/AssetsPage";
 import { AssignmentsPage } from "./pages/AssignmentsPage";
+import { AuditLogsPage } from "./pages/AuditLogsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
@@ -14,8 +15,8 @@ import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { TicketsQueuePage } from "./pages/TicketsQueuePage";
 import { PersonnelPage } from "./pages/PersonnelPage";
 
-
 const operationalRoles = ["admin", "technician", "viewer"] as const;
+const adminRoles = ["admin"] as const;
 const requesterRoles = ["requester"] as const;
 const approverRoles = ["approver"] as const;
 
@@ -41,6 +42,18 @@ export default function App() {
         <Route path="/reminders" element={<RemindersPage />} />
         <Route path="/personnel" element={<PersonnelPage />} />
         <Route path="/tickets" element={<TicketsQueuePage />} />
+      </Route>
+
+      <Route
+        path="/audit"
+        element={
+          <ProtectedRoute
+            allowedRoles={[...adminRoles]}
+            fallbackPath="/"
+          />
+        }
+      >
+        <Route index element={<AuditLogsPage />} />
       </Route>
 
       <Route
