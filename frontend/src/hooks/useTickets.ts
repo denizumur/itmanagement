@@ -14,6 +14,7 @@ import {
   fetchTicketAttachments,
   fetchTicketComments,
   fetchTicketContext,
+  fetchTicketTimeline,
   fetchTicketQueue,
   fetchTicketSummary,
   fetchTicketsTable,
@@ -41,7 +42,9 @@ export function ticketAttachmentsQueryKey(ticketId?: number | null) {
 export function ticketContextQueryKey(ticketId?: number | null) {
   return ["tickets", "context", ticketId] as const;
 }
-
+export function ticketTimelineQueryKey(ticketId?: number | null) {
+  return ["tickets", "timeline", ticketId] as const;
+}
 export function useMyTickets() {
   return useQuery({
     queryKey: ["tickets", "mine"],
@@ -79,6 +82,15 @@ export function useTicketContext(ticketId?: number | null, enabled = true) {
   return useQuery({
     queryKey: ticketContextQueryKey(ticketId),
     queryFn: () => fetchTicketContext(Number(ticketId)),
+    enabled: enabled && Boolean(ticketId),
+    staleTime: 15_000,
+  });
+}
+
+export function useTicketTimeline(ticketId?: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ticketTimelineQueryKey(ticketId),
+    queryFn: () => fetchTicketTimeline(Number(ticketId)),
     enabled: enabled && Boolean(ticketId),
     staleTime: 15_000,
   });
@@ -145,6 +157,9 @@ export function useUploadTicketAttachment() {
       await queryClient.invalidateQueries({
         queryKey: ticketContextQueryKey(variables.ticketId),
       });
+      await queryClient.invalidateQueries({
+        queryKey: ticketTimelineQueryKey(variables.ticketId),
+      });
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
     },
   });
@@ -162,6 +177,7 @@ export function useUpdateTicketStatus() {
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ticketTimelineQueryKey(variables.ticketId) });
     },
   });
 }

@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
-
+from django.utils import timezone
 from apps.accounts.models import UserProfile
 from apps.assignments.models import Assignment
 from apps.employees.models import Employee
@@ -980,6 +980,8 @@ class TicketApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+
+
     def test_technician_can_download_ticket_attachment(self):
         ticket = Ticket.objects.create(
             employee=self.employee,
@@ -1005,3 +1007,300 @@ class TicketApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_technician_can_read_ticket_context(self):
+        asset = self.create_asset(
+            name="Context Laptop",
+            inventory_code="IT-CTX-001",
+        )
+        Assignment.objects.create(
+            asset=asset,
+            employee=self.employee,
+            assigned_by=self.admin,
+        )
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            asset=asset,
+            title="Context ticket",
+            description="Teknisyen workspace context endpoint testi.",
+            category=Ticket.Category.HARDWARE,
+            priority=Ticket.Priority.HIGH,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=self.requester,
+        )
+        TicketComment.objects.create(
+            ticket=ticket,
+            author=self.technician,
+            body="Public reply",
+            is_internal=False,
+        )
+        TicketComment.objects.create(
+            ticket=ticket,
+            author=self.technician,
+            body="Internal note",
+            is_internal=True,
+        )
+        TicketAttachment.objects.create(
+            ticket=ticket,
+            file=self.create_pdf_file(),
+            original_filename="context.pdf",
+            mime_type="application/pdf",
+            size_bytes=100,
+            uploaded_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.get(f"/api/tickets/{ticket.id}/context/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["ticket"]["id"], ticket.id)
+        self.assertEqual(response.data["requester"]["id"], self.employee.id)
+        self.assertEqual(response.data["asset"]["id"], asset.id)
+        self.assertEqual(len(response.data["active_assignments"]), 1)
+        self.assertEqual(response.data["comments_summary"]["total"], 2)
+        self.assertEqual(response.data["comments_summary"]["public"], 1)
+        self.assertEqual(response.data["comments_summary"]["internal"], 1)
+        self.assertEqual(response.data["attachments_summary"]["total"], 1)
+        self.assertTrue(response.data["actions"]["can_update_status"])
+        self.assertTrue(response.data["actions"]["can_add_internal_note"])
+        self.assertIn(
+            Ticket.Status.RESOLVED,
+            response.data["transition_rules"]["requires_solution_note_for"],
+        )
+
+    def test_viewer_can_read_ticket_context_but_actions_are_read_only(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Viewer context ticket",
+            description="Viewer context okuyabilir ama aksiyon alamaz.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.viewer)
+
+        response = self.client.get(f"/api/tickets/{ticket.id}/context/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["actions"]["can_view_context"])
+        self.assertTrue(response.data["actions"]["is_read_only"])
+        self.assertFalse(response.data["actions"]["can_update_status"])
+        self.assertFalse(response.data["actions"]["can_assign_ticket"])
+        self.assertFalse(response.data["actions"]["can_add_internal_note"])
+
+    def test_requester_cannot_read_technician_ticket_context(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Requester context forbidden",
+            description="Requester teknisyen context endpointine erişmemeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.get(f"/api/tickets/{ticket.id}/context/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_ticket_context_for_pending_approval_blocks_it_actions(self):
+        self.employee.manager = self.approver_employee
+        self.employee.save(update_fields=["manager"])
+
+        self.client.force_authenticate(user=self.requester)
+
+        create_response = self.client.post(
+            "/api/tickets/",
+            {
+                "title": "Pending context ticket",
+                "description": "Onay bekleyen ticket context aksiyonları kapalı olmalı.",
+                "category": Ticket.Category.ACCESS,
+                "priority": Ticket.Priority.HIGH,
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        ticket = Ticket.objects.get(id=create_response.data["id"])
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.get(f"/api/tickets/{ticket.id}/context/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["actions"]["can_update_status"])
+        self.assertFalse(response.data["actions"]["can_assign_ticket"])
+        self.assertIsNotNone(response.data["actions"]["blocked_reason"])
+
+    def test_resolved_status_requires_solution_note(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Resolve note required",
+            description="Resolved durumunda çözüm notu zorunlu olmalı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/status/",
+            {
+                "status": Ticket.Status.RESOLVED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("solution_note", response.data)
+
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, Ticket.Status.OPEN)
+        self.assertEqual(ticket.resolution_note, "")
+
+    def test_technician_can_resolve_ticket_with_solution_note(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Resolve with note",
+            description="Çözüm notuyla resolved yapılmalı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/status/",
+            {
+                "status": Ticket.Status.RESOLVED,
+                "solution_note": "Kullanıcının VPN profili yenilendi.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.RESOLVED)
+        self.assertEqual(ticket.resolution_note, "Kullanıcının VPN profili yenilendi.")
+        self.assertEqual(ticket.resolved_by, self.technician)
+        self.assertIsNotNone(ticket.resolved_at)
+        self.assertIsNone(ticket.closed_at)
+
+        solution_comment = TicketComment.objects.get(
+            ticket=ticket,
+            body="Çözüm notu: Kullanıcının VPN profili yenilendi.",
+        )
+
+        self.assertFalse(solution_comment.is_internal)
+        self.assertEqual(solution_comment.author, self.technician)
+
+    def test_closed_status_requires_solution_note_when_ticket_has_no_existing_note(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Close note required",
+            description="Closed durumunda çözüm notu zorunlu olmalı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/status/",
+            {
+                "status": Ticket.Status.CLOSED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("solution_note", response.data)
+
+    def test_technician_can_close_resolved_ticket_without_new_solution_note(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Close existing resolved ticket",
+            description="Çözüm notu olan ticket kapatılabilir.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Önceden çözüm notu girildi.",
+            resolved_by=self.technician,
+            resolved_at=timezone.now(),
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/status/",
+            {
+                "status": Ticket.Status.CLOSED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.CLOSED)
+        self.assertEqual(ticket.resolution_note, "Önceden çözüm notu girildi.")
+        self.assertEqual(ticket.closed_by, self.technician)
+        self.assertIsNotNone(ticket.closed_at)
+
+    def test_reopening_ticket_clears_resolution_fields(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Reopen ticket",
+            description="Yeniden açılan ticket çözüm alanlarını temizlemeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Eski çözüm.",
+            resolved_by=self.technician,
+            resolved_at=timezone.now(),
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.technician)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/status/",
+            {
+                "status": Ticket.Status.IN_PROGRESS,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.IN_PROGRESS)
+        self.assertEqual(ticket.resolution_note, "")
+        self.assertIsNone(ticket.resolved_by)
+        self.assertIsNone(ticket.resolved_at)
+        self.assertIsNone(ticket.closed_by)
+        self.assertIsNone(ticket.closed_at)    

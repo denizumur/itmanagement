@@ -15,6 +15,7 @@ import type {
   TicketRequesterContext,
   TicketStatusUpdatePayload,
   TicketSummary,
+  TicketTimelineResponse,
 } from "../types/tickets";
 
 const TICKETS_ENDPOINT = "/api/tickets/";
@@ -51,6 +52,14 @@ export async function fetchRequesterContext() {
 export async function fetchTicketContext(ticketId: number) {
   const response = await api.get<TicketContext>(
     `${TICKETS_ENDPOINT}${ticketId}/context/`
+  );
+
+  return response.data;
+}
+
+export async function fetchTicketTimeline(ticketId: number) {
+  const response = await api.get<TicketTimelineResponse>(
+    `${TICKETS_ENDPOINT}${ticketId}/timeline/`
   );
 
   return response.data;

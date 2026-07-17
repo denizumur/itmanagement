@@ -308,5 +308,39 @@ export interface TicketContext {
   };
   actions: TicketContextActions;
 }
+export type TicketTimelineItemType =
+  | "ticket_created"
+  | "approval_requested"
+  | "approval_approved"
+  | "approval_rejected"
+  | "status_changed"
+  | "assigned_changed"
+  | "public_comment_added"
+  | "internal_note_added"
+  | "solution_note_added"
+  | "attachment_uploaded";
 
+export type TicketTimelineTone =
+  | "neutral"
+  | "accent"
+  | "success"
+  | "warning"
+  | "danger";
+
+export interface TicketTimelineItem {
+  id: string;
+  type: TicketTimelineItemType;
+  title: string;
+  description: string;
+  actor_name: string;
+  created_at: string;
+  tone: TicketTimelineTone;
+  source: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface TicketTimelineResponse {
+  ticket: number;
+  items: TicketTimelineItem[];
+}
 export type PaginatedTicketResponse<T> = PaginatedApiResponse<T>;
