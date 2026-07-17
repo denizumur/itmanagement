@@ -3,12 +3,14 @@ import {
   IconClipboardList,
   IconDashboard,
   IconDevices,
+  IconHistory,
   IconLicense,
   IconSparkles,
   IconTool,
   IconUsers,
 } from "@tabler/icons-react";
 import { NavLink } from "react-router";
+import { useAuth } from "../../auth/AuthContext";
 import { cn } from "../../lib/cn";
 
 const items = [
@@ -20,10 +22,26 @@ const items = [
   { to: "/licenses", label: "Lisanslar", icon: IconLicense },
   { to: "/maintenance", label: "Bakım", icon: IconTool },
   { to: "/reminders", label: "Hatırlatıcılar", icon: IconBell },
-    { to: "/personnel", label: "Personel", icon: IconUsers },
+  { to: "/personnel", label: "Personel", icon: IconUsers },
+  {
+    to: "/audit",
+    label: "İşlem Geçmişi",
+    icon: IconHistory,
+    roles: ["admin"],
+  },
 ];
 
 export function Sidebar() {
+  const { user } = useAuth();
+
+  const visibleItems = items.filter((item) => {
+    if (!("roles" in item) || !item.roles) {
+      return true;
+    }
+
+    return item.roles.includes(user?.role ?? "");
+  });
+
   return (
     <aside className="sidebar-glass hidden min-h-screen w-[230px] p-md md:block">
       <div className="mb-xl rounded-panel border border-border bg-surface-1 p-md shadow-panel">
@@ -40,7 +58,7 @@ export function Sidebar() {
       </div>
 
       <nav className="space-y-sm">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const Icon = item.icon;
 
           return (
