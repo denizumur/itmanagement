@@ -24,6 +24,8 @@ class TicketSerializer(serializers.ModelSerializer):
 
     assigned_to_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    resolved_by_name = serializers.SerializerMethodField()
+    closed_by_name = serializers.SerializerMethodField()
     pending_approver_name = serializers.SerializerMethodField()
 
     status_label = serializers.CharField(source="get_status_display", read_only=True)
@@ -64,10 +66,15 @@ class TicketSerializer(serializers.ModelSerializer):
             "assigned_to_name",
             "created_by",
             "created_by_name",
+            "resolution_note",
+            "resolved_by",
+            "resolved_by_name",
+            "resolved_at",
+            "closed_by",
+            "closed_by_name",
+            "closed_at",
             "comments_count",
             "attachments_count",
-            "resolved_at",
-            "closed_at",
             "created_at",
             "updated_at",
         ]
@@ -79,7 +86,12 @@ class TicketSerializer(serializers.ModelSerializer):
             "status",
             "assigned_to",
             "created_by",
+            "resolution_note",
+            "resolved_by",
+            "resolved_by_name",
             "resolved_at",
+            "closed_by",
+            "closed_by_name",
             "closed_at",
             "created_at",
             "updated_at",
@@ -92,18 +104,16 @@ class TicketSerializer(serializers.ModelSerializer):
         return str(obj.asset)
 
     def get_assigned_to_name(self, obj):
-        if not obj.assigned_to:
-            return None
-
-        full_name = obj.assigned_to.get_full_name()
-        return full_name or obj.assigned_to.username
+        return get_user_display_name(obj.assigned_to)
 
     def get_created_by_name(self, obj):
-        if not obj.created_by:
-            return None
+        return get_user_display_name(obj.created_by)
 
-        full_name = obj.created_by.get_full_name()
-        return full_name or obj.created_by.username
+    def get_resolved_by_name(self, obj):
+        return get_user_display_name(obj.resolved_by)
+
+    def get_closed_by_name(self, obj):
+        return get_user_display_name(obj.closed_by)
 
     def get_pending_approver_name(self, obj):
         approval = next(
@@ -153,6 +163,31 @@ class TicketCreateSerializer(serializers.Serializer):
 
 class TicketStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Ticket.Status.choices)
+    solution_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=2000,
+        trim_whitespace=True,
+    )
+
+    def validate(self, attrs):
+        ticket = self.context.get("ticket")
+        new_status = attrs.get("status")
+        solution_note = (attrs.get("solution_note") or "").strip()
+
+        if new_status in {Ticket.Status.RESOLVED, Ticket.Status.CLOSED}:
+            existing_note = getattr(ticket, "resolution_note", "") if ticket else ""
+
+            if not solution_note and not existing_note:
+                raise serializers.ValidationError(
+                    {
+                        "solution_note": (
+                            "Ticket çözüldü veya kapandı yapılırken çözüm notu zorunludur."
+                        )
+                    }
+                )
+
+        return attrs
 
 
 class TicketAssignSerializer(serializers.Serializer):
@@ -255,11 +290,7 @@ class TicketCommentSerializer(serializers.ModelSerializer):
         return value
 
     def get_author_name(self, obj):
-        if not obj.author:
-            return None
-
-        full_name = obj.author.get_full_name()
-        return full_name or obj.author.username
+        return get_user_display_name(obj.author)
 
 
 class TicketAttachmentSerializer(serializers.ModelSerializer):
@@ -282,11 +313,7 @@ class TicketAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_uploaded_by_name(self, obj):
-        if not obj.uploaded_by:
-            return None
-
-        full_name = obj.uploaded_by.get_full_name()
-        return full_name or obj.uploaded_by.username
+        return get_user_display_name(obj.uploaded_by)
 
     def get_download_url(self, obj):
         return f"/api/tickets/attachments/{obj.id}/download/"
@@ -307,6 +334,14 @@ class RequesterContextSerializer(serializers.Serializer):
     """
 
 
+def get_user_display_name(user):
+    if not user:
+        return None
+
+    full_name = user.get_full_name()
+    return full_name or user.username
+
+
 def serialize_assignment_for_requester_context(assignment):
     asset = assignment.asset
 
@@ -321,6 +356,145 @@ def serialize_assignment_for_requester_context(assignment):
         "asset_status_label": asset.get_status_display(),
         "asset_display_identifier": asset.display_identifier,
         "assigned_at": assignment.assigned_at,
+    }
+
+
+def serialize_assignment_for_ticket_context(assignment):
+    asset = assignment.asset
+
+    return {
+        "id": assignment.id,
+        "asset": {
+            "id": asset.id,
+            "name": asset.name,
+            "inventory_code": asset.inventory_code,
+            "serial_number": asset.serial_number,
+            "display_identifier": asset.display_identifier,
+            "category": asset.category.name if asset.category_id else None,
+            "status": asset.status,
+            "status_label": asset.get_status_display(),
+            "location": asset.location,
+        },
+        "employee": {
+            "id": assignment.employee_id,
+            "full_name": assignment.employee.full_name,
+            "email": assignment.employee.email,
+        },
+        "assigned_at": assignment.assigned_at,
+        "returned_at": assignment.returned_at,
+        "is_active": assignment.is_active,
+    }
+
+
+def serialize_employee_for_ticket_context(employee):
+    return {
+        "id": employee.id,
+        "full_name": employee.full_name,
+        "email": employee.email,
+        "phone": getattr(employee, "phone", ""),
+        "employee_code": getattr(employee, "employee_code", ""),
+        "department": (
+            {
+                "id": employee.department_id,
+                "name": employee.department.name,
+            }
+            if employee.department
+            else None
+        ),
+        "job_title": (
+            {
+                "id": employee.job_title_id,
+                "name": employee.job_title.name,
+            }
+            if employee.job_title
+            else None
+        ),
+        "manager": (
+            {
+                "id": employee.manager_id,
+                "full_name": employee.manager.full_name,
+                "email": employee.manager.email,
+            }
+            if employee.manager
+            else None
+        ),
+        "is_active": employee.is_active,
+    }
+
+
+def serialize_asset_for_ticket_context(asset):
+    if not asset:
+        return None
+
+    return {
+        "id": asset.id,
+        "name": asset.name,
+        "brand": asset.brand,
+        "model": asset.model,
+        "inventory_code": asset.inventory_code,
+        "serial_number": asset.serial_number,
+        "display_identifier": asset.display_identifier,
+        "category": asset.category.name if asset.category_id else None,
+        "status": asset.status,
+        "status_label": asset.get_status_display(),
+        "location": asset.location,
+        "ip_address": asset.ip_address,
+        "mac_address": asset.mac_address,
+        "warranty_end_date": asset.warranty_end_date,
+        "next_maintenance_due_date": asset.next_maintenance_due_date,
+    }
+
+
+def serialize_recent_ticket_for_context(ticket):
+    return {
+        "id": ticket.id,
+        "title": ticket.title,
+        "status": ticket.status,
+        "status_label": ticket.get_status_display(),
+        "priority": ticket.priority,
+        "priority_label": ticket.get_priority_display(),
+        "approval_status": ticket.approval_status,
+        "approval_status_label": ticket.get_approval_status_display(),
+        "category": ticket.category,
+        "category_label": ticket.get_category_display(),
+        "created_at": ticket.created_at,
+        "updated_at": ticket.updated_at,
+        "resolved_at": ticket.resolved_at,
+        "closed_at": ticket.closed_at,
+    }
+
+
+def serialize_approval_for_ticket_context(approval):
+    return {
+        "id": approval.id,
+        "approver": {
+            "id": approval.approver_id,
+            "full_name": approval.approver.full_name,
+            "email": approval.approver.email,
+        },
+        "approver_user": (
+            {
+                "id": approval.approver_user_id,
+                "username": approval.approver_user.username,
+                "display_name": get_user_display_name(approval.approver_user),
+            }
+            if approval.approver_user
+            else None
+        ),
+        "requested_by": (
+            {
+                "id": approval.requested_by_id,
+                "username": approval.requested_by.username,
+                "display_name": get_user_display_name(approval.requested_by),
+            }
+            if approval.requested_by
+            else None
+        ),
+        "status": approval.status,
+        "status_label": approval.get_status_display(),
+        "decision_note": approval.decision_note,
+        "requested_at": approval.requested_at,
+        "decided_at": approval.decided_at,
     }
 
 
@@ -357,36 +531,7 @@ def build_requester_context(employee):
     )
 
     return {
-        "employee": {
-            "id": employee.id,
-            "full_name": employee.full_name,
-            "email": employee.email,
-            "department": (
-                {
-                    "id": employee.department_id,
-                    "name": employee.department.name,
-                }
-                if employee.department
-                else None
-            ),
-            "job_title": (
-                {
-                    "id": employee.job_title_id,
-                    "name": employee.job_title.name,
-                }
-                if employee.job_title
-                else None
-            ),
-            "manager": (
-                {
-                    "id": manager.id,
-                    "full_name": manager.full_name,
-                    "email": manager.email,
-                }
-                if manager
-                else None
-            ),
-        },
+        "employee": serialize_employee_for_ticket_context(employee),
         "active_assignments": [
             serialize_assignment_for_requester_context(assignment)
             for assignment in active_assignments
@@ -398,4 +543,114 @@ def build_requester_context(employee):
             "approver_role": manager_role if requires_approval else None,
         },
         "limits": get_ticket_attachment_limits(),
+    }
+
+
+def build_ticket_context(ticket, *, action_permissions):
+    employee = ticket.employee
+    asset = ticket.asset
+
+    active_assignments = (
+        Assignment.objects.select_related(
+            "asset",
+            "asset__category",
+            "employee",
+        )
+        .filter(
+            employee=employee,
+            returned_at__isnull=True,
+            asset__is_deleted=False,
+        )
+        .order_by("-assigned_at")
+    )
+
+    requester_recent_tickets = (
+        Ticket.objects.select_related("asset", "employee")
+        .filter(employee=employee)
+        .exclude(id=ticket.id)
+        .order_by("-created_at")[:5]
+    )
+
+    asset_recent_tickets = []
+    if asset:
+        asset_recent_tickets = (
+            Ticket.objects.select_related("asset", "employee")
+            .filter(asset=asset)
+            .exclude(id=ticket.id)
+            .order_by("-created_at")[:5]
+        )
+
+    approvals = ticket.approvals.select_related(
+        "approver",
+        "approver_user",
+        "requested_by",
+    ).order_by("-requested_at")
+
+    pending_approval = next(
+        (
+            approval
+            for approval in approvals
+            if approval.status == TicketApproval.Status.PENDING
+        ),
+        None,
+    )
+
+    comments_queryset = ticket.comments.all()
+    attachments_queryset = ticket.attachments.all()
+
+    return {
+        "ticket": TicketSerializer(ticket).data,
+        "requester": serialize_employee_for_ticket_context(employee),
+        "asset": serialize_asset_for_ticket_context(asset),
+        "active_assignments": [
+            serialize_assignment_for_ticket_context(assignment)
+            for assignment in active_assignments
+        ],
+        "requester_recent_tickets": [
+            serialize_recent_ticket_for_context(recent_ticket)
+            for recent_ticket in requester_recent_tickets
+        ],
+        "asset_recent_tickets": [
+            serialize_recent_ticket_for_context(recent_ticket)
+            for recent_ticket in asset_recent_tickets
+        ],
+        "approval": {
+            "status": ticket.approval_status,
+            "status_label": ticket.get_approval_status_display(),
+            "pending": (
+                serialize_approval_for_ticket_context(pending_approval)
+                if pending_approval
+                else None
+            ),
+            "history": [
+                serialize_approval_for_ticket_context(approval)
+                for approval in approvals
+            ],
+        },
+        "comments_summary": {
+            "total": comments_queryset.count(),
+            "public": comments_queryset.filter(is_internal=False).count(),
+            "internal": comments_queryset.filter(is_internal=True).count(),
+        },
+        "attachments_summary": {
+            "total": attachments_queryset.count(),
+            "latest": [
+                TicketAttachmentSerializer(attachment).data
+                for attachment in attachments_queryset.select_related("uploaded_by")[:5]
+            ],
+            "limits": get_ticket_attachment_limits(),
+        },
+        "transition_rules": {
+            "allowed_statuses": [
+                Ticket.Status.OPEN,
+                Ticket.Status.IN_PROGRESS,
+                Ticket.Status.RESOLVED,
+                Ticket.Status.CLOSED,
+            ],
+            "requires_solution_note_for": [
+                Ticket.Status.RESOLVED,
+                Ticket.Status.CLOSED,
+            ],
+        },
+        "actions": action_permissions,
     }
