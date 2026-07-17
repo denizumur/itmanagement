@@ -13,7 +13,6 @@ import {
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { Skeleton } from "../components/common/Skeleton";
 import { TablePagination } from "../components/common/TablePagination";
@@ -37,6 +36,7 @@ import {
   getTicketPriorityMeta,
   getTicketStatusMeta,
 } from "../lib/ticketLabels";
+import type { TableQueryState } from "../types/table";
 import type {
   Ticket,
   TicketContext,
@@ -255,6 +255,89 @@ function TicketInboxList({
   );
 }
 
+function ResolvedTicketsList({
+  tickets,
+  selectedTicketId,
+  isLoading,
+  isFetching,
+  isError,
+  onSelectTicket,
+}: {
+  tickets: Ticket[];
+  selectedTicketId?: number | null;
+  isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  onSelectTicket: (ticket: Ticket) => void;
+}) {
+  return (
+    <section className="mt-md rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+      <div className="flex items-center justify-between gap-sm">
+        <div>
+          <p className="text-caption font-semibold uppercase tracking-wide text-success">
+            Çözülenler
+          </p>
+          <h2 className="text-h3 text-text-primary">Çözülen ticketlar</h2>
+        </div>
+
+        {isFetching ? (
+          <span className="text-caption text-text-secondary">Yenileniyor</span>
+        ) : null}
+      </div>
+
+      <div className="mt-sm space-y-xs">
+        {isLoading ? (
+          <div className="rounded-2xl border border-border bg-surface-2 p-sm text-caption text-text-secondary">
+            Çözülen ticketlar yükleniyor...
+          </div>
+        ) : isError ? (
+          <div className="rounded-2xl border border-warning/30 bg-warning-bg p-sm text-caption text-warning">
+            Çözülen ticket listesi alınamadı.
+          </div>
+        ) : tickets.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-surface-2 p-sm text-caption text-text-secondary">
+            Henüz çözülen ticket yok.
+          </div>
+        ) : (
+          tickets.map((ticket) => {
+            const priorityMeta = getTicketPriorityMeta(ticket.priority);
+            const selected = selectedTicketId === ticket.id;
+
+            return (
+              <button
+                key={ticket.id}
+                type="button"
+                onClick={() => onSelectTicket(ticket)}
+                className={cn(
+                  "w-full rounded-2xl border-l-4 p-sm text-left transition",
+                  selected
+                    ? "border-l-success bg-success-bg"
+                    : "border-l-transparent bg-surface-2 hover:border-l-success hover:bg-success-bg"
+                )}
+              >
+                <div className="flex items-start justify-between gap-sm">
+                  <div className="min-w-0">
+                    <p className="truncate text-caption font-semibold text-text-primary">
+                      #{ticket.id} {ticket.title}
+                    </p>
+                    <p className="mt-1 truncate text-[11px] text-text-secondary">
+                      {ticket.employee_name} · {formatDate(ticket.created_at)}
+                    </p>
+                  </div>
+
+                  <StatusBadge variant={priorityMeta.variant}>
+                    {priorityMeta.label}
+                  </StatusBadge>
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
+
 function EmptyChatState() {
   return (
     <section className="flex min-h-[560px] flex-col items-center justify-center rounded-panel border border-border bg-surface-1 p-lg text-center shadow-panel">
@@ -317,13 +400,6 @@ function WorkspaceChatHeader({
           <h2 className="mt-xs truncate text-h2 text-text-primary">
             #{resolvedTicket.id} {resolvedTicket.title}
           </h2>
-
-          <div className="mt-sm">
-            <AuditHistoryLink
-              entityType="tickets.Ticket"
-              entityId={resolvedTicket.id}
-            />
-          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-xs">
@@ -677,7 +753,21 @@ export function TicketsQueuePage() {
     ordering: "-created_at",
   });
 
+  const resolvedTicketsState = useMemo<TableQueryState>(
+    () => ({
+      page: 1,
+      pageSize: 5,
+      ordering: "-updated_at",
+      search: "",
+      filters: {
+        status: "resolved",
+      },
+    }),
+    []
+  );
+
   const ticketsQuery = useTicketsTable(state);
+  const resolvedTicketsQuery = useTicketsTable(resolvedTicketsState);
   const summaryQuery = useTicketSummary();
   const updateStatusMutation = useUpdateTicketStatus();
 
@@ -692,6 +782,7 @@ export function TicketsQueuePage() {
 
   const tableData = ticketsQuery.data;
   const tickets = tableData?.results ?? [];
+  const resolvedTickets = resolvedTicketsQuery.data?.results ?? [];
   const summary = summaryQuery.data;
   const context = ticketContextQuery.data;
   const resolvedTicket = context?.ticket ?? selectedTicket;
@@ -709,6 +800,7 @@ export function TicketsQueuePage() {
   async function refetchAll() {
     await Promise.all([
       ticketsQuery.refetch(),
+      resolvedTicketsQuery.refetch(),
       summaryQuery.refetch(),
       selectedTicketId ? ticketContextQuery.refetch() : Promise.resolve(),
     ]);
@@ -951,6 +1043,15 @@ export function TicketsQueuePage() {
                 onPageSizeChange={setPageSize}
               />
             </div>
+
+            <ResolvedTicketsList
+              tickets={resolvedTickets}
+              selectedTicketId={selectedTicketId}
+              isLoading={resolvedTicketsQuery.isLoading}
+              isFetching={resolvedTicketsQuery.isFetching}
+              isError={resolvedTicketsQuery.isError}
+              onSelectTicket={handleSelectTicket}
+            />
           </div>
 
           <div className="min-h-0">

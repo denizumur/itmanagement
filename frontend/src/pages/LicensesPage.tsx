@@ -11,7 +11,6 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
@@ -59,10 +58,10 @@ const billingCycleOptions: Array<{
   value: LicenseBillingCycle;
   label: string;
 }> = [
-  { value: "yearly", label: "Y─▒ll─▒k" },
-  { value: "monthly", label: "Ayl─▒k" },
+  { value: "yearly", label: "Yıllık" },
+  { value: "monthly", label: "Aylık" },
   { value: "one_time", label: "Tek seferlik" },
-  { value: "other", label: "Di─şer" },
+  { value: "other", label: "Diğer" },
 ];
 
 function formatDate(value?: string | null) {
@@ -85,7 +84,7 @@ function formatDate(value?: string | null) {
 
 function formatCurrency(value?: string | number | null) {
   if (value === undefined || value === null || value === "") {
-    return "Ôé║0";
+    return "₺0";
   }
 
   const numericValue =
@@ -104,7 +103,7 @@ function formatCurrency(value?: string | number | null) {
 
 function getMutationErrorMessage(error: unknown) {
   const fallback =
-    "─░┼şlem tamamlanamad─▒. L├╝tfen alanlar─▒ kontrol edip tekrar dene.";
+    "İşlem tamamlanamadı. Lütfen alanları kontrol edip tekrar dene.";
 
   if (!error || typeof error !== "object" || !("response" in error)) {
     return fallback;
@@ -156,7 +155,7 @@ function getMutationErrorMessage(error: unknown) {
 }
 
 function hasMaskingCharacter(value: string) {
-  return ["*", "X", "x", "ÔÇó"].some((marker) => value.includes(marker));
+  return ["*", "X", "x", "•"].some((marker) => value.includes(marker));
 }
 
 function getLicenseStatusVariant(
@@ -183,7 +182,7 @@ function getLicenseStatusVariant(
 
 function getLicenseStatusLabel(license: LicenseSubscription) {
   if (license.is_deleted) {
-    return "Silinmi┼ş";
+    return "Silinmiş";
   }
 
   if (!license.is_active) {
@@ -191,11 +190,11 @@ function getLicenseStatusLabel(license: LicenseSubscription) {
   }
 
   if (license.is_expired) {
-    return "S├╝resi doldu";
+    return "Süresi doldu";
   }
 
   if (license.is_expiring_soon_30_days) {
-    return "Yakla┼ş─▒yor";
+    return "Yaklaşıyor";
   }
 
   return "Aktif";
@@ -292,7 +291,7 @@ function buildLicenseColumns({
     },
     {
       key: "vendor",
-      label: "Tedarik├ği",
+      label: "Tedarikçi",
       sortable: true,
       sortKey: "vendor",
       render: (license) => license.vendor || "-",
@@ -311,7 +310,7 @@ function buildLicenseColumns({
     },
     {
       key: "assigned_asset",
-      label: "Ba─şl─▒ Varl─▒k",
+      label: "Bağlı Varlık",
       sortable: true,
       sortKey: "assigned_asset__name",
       render: (license) =>
@@ -330,7 +329,7 @@ function buildLicenseColumns({
     },
     {
       key: "end_date",
-      label: "Biti┼ş",
+      label: "Bitiş",
       sortable: true,
       sortKey: "end_date",
       render: (license) => <DateCell value={license.end_date} />,
@@ -346,7 +345,7 @@ function buildLicenseColumns({
     },
     {
       key: "actions",
-      label: "─░┼şlem",
+      label: "İşlem",
       className: "text-right",
       render: (license) => (
         <div className="flex justify-end gap-sm">
@@ -366,7 +365,7 @@ function buildLicenseColumns({
                 disabled={isSubmitting}
                 icon={<IconRefresh size={16} aria-hidden={true} />}
               >
-                Geri Y├╝kle
+                Geri Yükle
               </GlowButton>
             ) : (
               <>
@@ -375,7 +374,7 @@ function buildLicenseColumns({
                   onClick={() => onEditLicense(license)}
                   icon={<IconEdit size={16} aria-hidden={true} />}
                 >
-                  D├╝zenle
+                  Düzenle
                 </GlowButton>
 
                 <GlowButton
@@ -452,12 +451,12 @@ function LicenseForm({
     event.preventDefault();
 
     if (!form.name.trim()) {
-      setError("Lisans/abonelik ad─▒ zorunludur.");
+      setError("Lisans/abonelik adı zorunludur.");
       return;
     }
 
     if (!form.seat_count || Number(form.seat_count) < 1) {
-      setError("Kullan─▒c─▒/koltuk say─▒s─▒ en az 1 olmal─▒d─▒r.");
+      setError("Kullanıcı/koltuk sayısı en az 1 olmalıdır.");
       return;
     }
 
@@ -466,13 +465,13 @@ function LicenseForm({
       !hasMaskingCharacter(String(form.license_key_masked))
     ) {
       setError(
-        "Tam lisans anahtar─▒ saklama. Maskeli format kullan: XXXX-XXXX-1234."
+        "Tam lisans anahtarı saklama. Maskeli format kullan: XXXX-XXXX-1234."
       );
       return;
     }
 
     if (form.start_date && form.end_date && form.end_date < form.start_date) {
-      setError("Biti┼ş tarihi ba┼şlang─▒├ğ tarihinden ├Ânce olamaz.");
+      setError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
       return;
     }
 
@@ -507,7 +506,7 @@ function LicenseForm({
       <div className="grid gap-md sm:grid-cols-2">
         <label className="space-y-xs sm:col-span-2">
           <span className="text-caption text-text-secondary">
-            Lisans / abonelik ad─▒ *
+            Lisans / abonelik adı *
           </span>
           <input
             className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
@@ -547,7 +546,7 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Tedarik├ği</span>
+          <span className="text-caption text-text-secondary">Tedarikçi</span>
           <input
             className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
             value={form.vendor ?? ""}
@@ -558,7 +557,7 @@ function LicenseForm({
 
         <label className="space-y-xs">
           <span className="text-caption text-text-secondary">
-            Maskeli lisans anahtar─▒
+            Maskeli lisans anahtarı
           </span>
           <input
             className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
@@ -569,13 +568,13 @@ function LicenseForm({
             placeholder="XXXX-XXXX-1234"
           />
           <p className="text-caption text-text-secondary">
-            Tam anahtar girme. Sadece maskeli de─şer saklan─▒r.
+            Tam anahtar girme. Sadece maskeli değer saklanır.
           </p>
         </label>
 
         <label className="space-y-xs">
           <span className="text-caption text-text-secondary">
-            Kullan─▒c─▒ / koltuk say─▒s─▒ *
+            Kullanıcı / koltuk sayısı *
           </span>
           <input
             type="number"
@@ -589,7 +588,7 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Ba─şl─▒ varl─▒k</span>
+          <span className="text-caption text-text-secondary">Bağlı varlık</span>
           <select
             className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
             value={form.assigned_asset ? String(form.assigned_asset) : ""}
@@ -600,7 +599,7 @@ function LicenseForm({
               )
             }
           >
-            <option value="">Varl─▒─şa ba─şl─▒ de─şil</option>
+            <option value="">Varlığa bağlı değil</option>
             {assets.map((asset) => (
               <option key={asset.id} value={String(asset.id)}>
                 {getAssetLabel(asset)}
@@ -611,7 +610,7 @@ function LicenseForm({
 
         <label className="space-y-xs">
           <span className="text-caption text-text-secondary">
-            Faturalama d├Âng├╝s├╝
+            Faturalama döngüsü
           </span>
           <select
             className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
@@ -633,7 +632,7 @@ function LicenseForm({
 
         <label className="space-y-xs">
           <span className="text-caption text-text-secondary">
-            Ba┼şlang─▒├ğ tarihi
+            Başlangıç tarihi
           </span>
           <input
             type="date"
@@ -645,7 +644,7 @@ function LicenseForm({
 
         <label className="space-y-xs">
           <span className="text-caption text-text-secondary">
-            Biti┼ş / yenileme tarihi
+            Bitiş / yenileme tarihi
           </span>
           <input
             type="date"
@@ -694,7 +693,7 @@ function LicenseForm({
                 updateField("is_active", event.target.checked)
               }
             />
-            <span className="text-body text-text-primary">Aktif kay─▒t</span>
+            <span className="text-body text-text-primary">Aktif kayıt</span>
           </label>
         </div>
 
@@ -704,22 +703,22 @@ function LicenseForm({
             className="min-h-28 w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
             value={form.notes ?? ""}
             onChange={(event) => updateField("notes", event.target.value)}
-            placeholder="Sat─▒n alma, yenileme, kullan─▒c─▒ da─ş─▒l─▒m─▒ veya operasyonel notlar..."
+            placeholder="Satın alma, yenileme, kullanıcı dağılımı veya operasyonel notlar..."
           />
         </label>
       </div>
 
       <div className="flex justify-end gap-sm border-t border-border pt-md">
         <GlowButton type="button" variant="ghost" onClick={onCancel}>
-          Vazge├ğ
+          Vazgeç
         </GlowButton>
 
         <GlowButton type="submit" disabled={isSubmitting}>
           {isSubmitting
             ? "Kaydediliyor"
             : mode === "create"
-              ? "Lisans olu┼ştur"
-              : "De─şi┼şiklikleri kaydet"}
+              ? "Lisans oluştur"
+              : "Değişiklikleri kaydet"}
         </GlowButton>
       </div>
     </form>
@@ -855,7 +854,7 @@ export function LicensesPage() {
 
         setToast({
           type: "success",
-          message: "Lisans/abonelik ba┼şar─▒yla olu┼şturuldu.",
+          message: "Lisans/abonelik başarıyla oluşturuldu.",
         });
       } else if (formMode === "edit" && editingLicense) {
         await updateMutation.mutateAsync({
@@ -865,7 +864,7 @@ export function LicensesPage() {
 
         setToast({
           type: "success",
-          message: "Lisans/abonelik ba┼şar─▒yla g├╝ncellendi.",
+          message: "Lisans/abonelik başarıyla güncellendi.",
         });
       }
 
@@ -882,7 +881,7 @@ export function LicensesPage() {
 
   async function handleDelete(license: LicenseSubscription) {
     const confirmed = window.confirm(
-      `"${license.name}" kayd─▒ pasife/silinmi┼ş duruma al─▒nacak. Devam edilsin mi?`
+      `"${license.name}" kaydı pasife/silinmiş duruma alınacak. Devam edilsin mi?`
     );
 
     if (!confirmed) {
@@ -894,7 +893,7 @@ export function LicensesPage() {
 
       setToast({
         type: "success",
-        message: "Lisans/abonelik kayd─▒ silindi.",
+        message: "Lisans/abonelik kaydı silindi.",
       });
 
       refetchAll();
@@ -908,7 +907,7 @@ export function LicensesPage() {
 
   async function handleRestore(license: LicenseSubscription) {
     const confirmed = window.confirm(
-      `"${license.name}" kayd─▒ geri y├╝klenecek. Devam edilsin mi?`
+      `"${license.name}" kaydı geri yüklenecek. Devam edilsin mi?`
     );
 
     if (!confirmed) {
@@ -920,7 +919,7 @@ export function LicensesPage() {
 
       setToast({
         type: "success",
-        message: "Lisans/abonelik kayd─▒ geri y├╝klendi.",
+        message: "Lisans/abonelik kaydı geri yüklendi.",
       });
 
       if (selectedLicense?.id === license.id) {
@@ -970,7 +969,7 @@ export function LicensesPage() {
   if (hasError) {
     return (
       <AppShell>
-        <ErrorState message="Lisans/abonelik verisi al─▒namad─▒. API endpointlerini ve yetki durumunu kontrol et." />
+        <ErrorState message="Lisans/abonelik verisi alınamadı. API endpointlerini ve yetki durumunu kontrol et." />
       </AppShell>
     );
   }
@@ -979,9 +978,9 @@ export function LicensesPage() {
     <AppShell>
       <PageTransition>
         <PageHeader
-          eyebrow="Lisans ve Abonelik Y├Ânetimi"
+          eyebrow="Lisans ve Abonelik Yönetimi"
           title="Lisanslar"
-          description="Lisanslar─▒, abonelikleri, yenileme tarihlerini, koltuk say─▒lar─▒n─▒ ve yenileme maliyetlerini tek ekrandan takip et."
+          description="Lisansları, abonelikleri, yenileme tarihlerini, koltuk sayılarını ve yenileme maliyetlerini tek ekrandan takip et."
           actions={
             <>
               <GlowButton
@@ -1015,28 +1014,28 @@ export function LicensesPage() {
           />
 
           <MiniMetricCard
-            label="aktif lisans say─▒s─▒"
+            label="aktif lisans sayısı"
             value={summary?.active ?? 0}
             icon={<IconKey size={15} aria-hidden={true} />}
             tone="success"
           />
 
           <MiniMetricCard
-            label="lisanslar─▒n toplam kullan─▒c─▒ say─▒s─▒"
+            label="lisansların toplam kullanıcı sayısı"
             value={summary?.total_seats ?? 0}
             icon={<IconUsers size={15} aria-hidden={true} />}
             tone="success"
           />
 
           <MiniMetricCard
-            label="30 g├╝n i├ğinde bitecek"
+            label="30 gün içinde bitecek"
             value={summary?.upcoming_30_days ?? 0}
             icon={<IconCalendar size={15} aria-hidden={true} />}
             tone="warning"
           />
 
           <MiniMetricCard
-            label="S├╝resi dolan"
+            label="Süresi dolan"
             value={summary?.expired ?? 0}
             icon={<IconKey size={15} aria-hidden={true} />}
             tone="danger"
@@ -1053,7 +1052,7 @@ export function LicensesPage() {
 
               <input
                 className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
-                placeholder="Lisans ad─▒, takip kodu, tedarik├ği ara..."
+                placeholder="Lisans adı, takip kodu, tedarikçi ara..."
                 value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -1065,7 +1064,7 @@ export function LicensesPage() {
               onChange={(event) => setFilter("type", event.target.value || null)}
               aria-label="Tip filtresi"
             >
-              <option value="">T├╝m tipler</option>
+              <option value="">Tüm tipler</option>
               <option value="subscription">Abonelik</option>
               <option value="license">Lisans</option>
             </select>
@@ -1077,11 +1076,11 @@ export function LicensesPage() {
               aria-label="Durum filtresi"
               disabled={showDeleted}
             >
-              <option value="">T├╝m durumlar</option>
+              <option value="">Tüm durumlar</option>
               <option value="active">Aktif</option>
               <option value="inactive">Pasif</option>
-              <option value="upcoming">30 g├╝n i├ğinde yenilenecek</option>
-              <option value="expired">S├╝resi dolan</option>
+              <option value="upcoming">30 gün içinde yenilenecek</option>
+              <option value="expired">Süresi dolan</option>
             </select>
 
             <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel">
@@ -1090,7 +1089,7 @@ export function LicensesPage() {
                 checked={showDeleted}
                 onChange={(event) => applyDeletedFilter(event.target.checked)}
               />
-              <span>Silinenleri g├Âster</span>
+              <span>Silinenleri göster</span>
             </label>
 
             <button
@@ -1113,8 +1112,8 @@ export function LicensesPage() {
             isLoading={licensesQuery.isLoading}
             emptyMessage={
               showDeleted
-                ? "Silinen lisans veya abonelik bulunamad─▒."
-                : "Filtrelere uygun lisans veya abonelik bulunamad─▒."
+                ? "Silinen lisans veya abonelik bulunamadı."
+                : "Filtrelere uygun lisans veya abonelik bulunamadı."
             }
           />
 
@@ -1131,7 +1130,7 @@ export function LicensesPage() {
 
         <SlideOverPanel
           open={Boolean(selectedLicense)}
-          title={selectedLicense?.name ?? "Lisans detay─▒"}
+          title={selectedLicense?.name ?? "Lisans detayı"}
           description={selectedLicense?.tracking_code ?? undefined}
           onClose={() => setSelectedLicense(null)}
         >
@@ -1147,32 +1146,25 @@ export function LicensesPage() {
                   </StatusBadge>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-sm">
-                  <AuditHistoryLink
-                    entityType="licensing.LicenseSubscription"
-                    entityId={selectedLicense.id}
-                  />
-
-                  {userCanManage &&
-                    (selectedLicense.is_deleted ? (
-                      <GlowButton
-                        variant="ghost"
-                        icon={<IconRefresh size={16} aria-hidden={true} />}
-                        onClick={() => handleRestore(selectedLicense)}
-                        disabled={isSubmitting}
-                      >
-                        Geri Y├╝kle
-                      </GlowButton>
-                    ) : (
-                      <GlowButton
-                        variant="ghost"
-                        icon={<IconEdit size={16} aria-hidden={true} />}
-                        onClick={() => openEditForm(selectedLicense)}
-                      >
-                        D├╝zenle
-                      </GlowButton>
-                    ))}
-                </div>
+                {userCanManage &&
+                  (selectedLicense.is_deleted ? (
+                    <GlowButton
+                      variant="ghost"
+                      icon={<IconRefresh size={16} aria-hidden={true} />}
+                      onClick={() => handleRestore(selectedLicense)}
+                      disabled={isSubmitting}
+                    >
+                      Geri Yükle
+                    </GlowButton>
+                  ) : (
+                    <GlowButton
+                      variant="ghost"
+                      icon={<IconEdit size={16} aria-hidden={true} />}
+                      onClick={() => openEditForm(selectedLicense)}
+                    >
+                      Düzenle
+                    </GlowButton>
+                  ))}
               </div>
 
               <div className="grid gap-md sm:grid-cols-2">
@@ -1191,20 +1183,20 @@ export function LicensesPage() {
                   }
                 />
 
-                <DetailRow label="Tedarik├ği" value={selectedLicense.vendor} />
+                <DetailRow label="Tedarikçi" value={selectedLicense.vendor} />
 
                 <DetailRow
-                  label="Maskeli lisans anahtar─▒"
+                  label="Maskeli lisans anahtarı"
                   value={selectedLicense.license_key_masked}
                 />
 
                 <DetailRow
-                  label="Koltuk say─▒s─▒"
+                  label="Koltuk sayısı"
                   value={selectedLicense.seat_count}
                 />
 
                 <DetailRow
-                  label="Ba─şl─▒ varl─▒k"
+                  label="Bağlı varlık"
                   value={
                     selectedLicense.assigned_asset_name
                       ? `${selectedLicense.assigned_asset_inventory_code ?? ""} ${selectedLicense.assigned_asset_name}`
@@ -1213,17 +1205,17 @@ export function LicensesPage() {
                 />
 
                 <DetailRow
-                  label="Ba┼şlang─▒├ğ tarihi"
+                  label="Başlangıç tarihi"
                   value={formatDate(selectedLicense.start_date)}
                 />
 
                 <DetailRow
-                  label="Biti┼ş / yenileme tarihi"
+                  label="Bitiş / yenileme tarihi"
                   value={formatDate(selectedLicense.end_date)}
                 />
 
                 <DetailRow
-                  label="Kalan g├╝n"
+                  label="Kalan gün"
                   value={
                     selectedLicense.days_until_end === null ||
                     selectedLicense.days_until_end === undefined
@@ -1247,7 +1239,7 @@ export function LicensesPage() {
 
                 <DetailRow
                   label="Otomatik yenileme"
-                  value={selectedLicense.auto_renew ? "Evet" : "Hay─▒r"}
+                  value={selectedLicense.auto_renew ? "Evet" : "Hayır"}
                 />
 
                 <DetailRow
@@ -1267,13 +1259,13 @@ export function LicensesPage() {
 
         <SlideOverPanel
           open={Boolean(formMode)}
-          title={formMode === "create" ? "Yeni Lisans" : "Lisans D├╝zenle"}
+          title={formMode === "create" ? "Yeni Lisans" : "Lisans Düzenle"}
           description={
             formMode === "create"
-              ? "Yeni lisans veya abonelik kayd─▒ olu┼ştur."
+              ? "Yeni lisans veya abonelik kaydı oluştur."
               : editingLicense
-                ? `${editingLicense.name} kayd─▒n─▒ g├╝ncelle.`
-                : "Lisans kayd─▒n─▒ g├╝ncelle."
+                ? `${editingLicense.name} kaydını güncelle.`
+                : "Lisans kaydını güncelle."
           }
           onClose={closeForm}
         >
