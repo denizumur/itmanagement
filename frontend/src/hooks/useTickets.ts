@@ -13,6 +13,7 @@ import {
   fetchTicketApprovals,
   fetchTicketAttachments,
   fetchTicketComments,
+  fetchTicketContext,
   fetchTicketQueue,
   fetchTicketSummary,
   fetchTicketsTable,
@@ -26,7 +27,7 @@ import type {
   TicketAttachmentUploadPayload,
   TicketCommentCreatePayload,
   TicketCreatePayload,
-  TicketStatus,
+  TicketStatusUpdatePayload,
 } from "../types/tickets";
 
 export function ticketCommentsQueryKey(ticketId?: number | null) {
@@ -35,6 +36,10 @@ export function ticketCommentsQueryKey(ticketId?: number | null) {
 
 export function ticketAttachmentsQueryKey(ticketId?: number | null) {
   return ["tickets", "attachments", ticketId] as const;
+}
+
+export function ticketContextQueryKey(ticketId?: number | null) {
+  return ["tickets", "context", ticketId] as const;
 }
 
 export function useMyTickets() {
@@ -67,6 +72,15 @@ export function useRequesterContext() {
     queryKey: ["tickets", "requester-context"],
     queryFn: fetchRequesterContext,
     staleTime: 60_000,
+  });
+}
+
+export function useTicketContext(ticketId?: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ticketContextQueryKey(ticketId),
+    queryFn: () => fetchTicketContext(Number(ticketId)),
+    enabled: enabled && Boolean(ticketId),
+    staleTime: 15_000,
   });
 }
 
@@ -128,6 +142,9 @@ export function useUploadTicketAttachment() {
       await queryClient.invalidateQueries({
         queryKey: ticketAttachmentsQueryKey(variables.ticketId),
       });
+      await queryClient.invalidateQueries({
+        queryKey: ticketContextQueryKey(variables.ticketId),
+      });
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
     },
   });
@@ -137,14 +154,11 @@ export function useUpdateTicketStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      ticketId,
-      status,
-    }: {
-      ticketId: number;
-      status: TicketStatus;
-    }) => updateTicketStatus(ticketId, status),
-    onSuccess: async () => {
+    mutationFn: (payload: TicketStatusUpdatePayload) => updateTicketStatus(payload),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ticketContextQueryKey(variables.ticketId),
+      });
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -167,6 +181,9 @@ export function useCreateTicketComment() {
       await queryClient.invalidateQueries({
         queryKey: ticketCommentsQueryKey(variables.ticketId),
       });
+      await queryClient.invalidateQueries({
+        queryKey: ticketContextQueryKey(variables.ticketId),
+      });
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
     },
   });
@@ -183,7 +200,10 @@ export function useApproveTicket() {
       ticketId: number;
       payload: TicketApprovalDecisionPayload;
     }) => approveTicket(ticketId, payload),
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ticketContextQueryKey(variables.ticketId),
+      });
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
@@ -201,7 +221,10 @@ export function useRejectTicket() {
       ticketId: number;
       payload: TicketApprovalDecisionPayload;
     }) => rejectTicket(ticketId, payload),
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ticketContextQueryKey(variables.ticketId),
+      });
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },

@@ -10,9 +10,10 @@ import type {
   TicketAttachmentUploadPayload,
   TicketComment,
   TicketCommentCreatePayload,
+  TicketContext,
   TicketCreatePayload,
   TicketRequesterContext,
-  TicketStatus,
+  TicketStatusUpdatePayload,
   TicketSummary,
 } from "../types/tickets";
 
@@ -47,6 +48,14 @@ export async function fetchRequesterContext() {
   return response.data;
 }
 
+export async function fetchTicketContext(ticketId: number) {
+  const response = await api.get<TicketContext>(
+    `${TICKETS_ENDPOINT}${ticketId}/context/`
+  );
+
+  return response.data;
+}
+
 export async function createTicket(payload: TicketCreatePayload) {
   const response = await api.post<Ticket>(TICKETS_ENDPOINT, {
     ...payload,
@@ -75,6 +84,7 @@ export async function approveTicket(
     `${TICKETS_ENDPOINT}${ticketId}/approve/`,
     payload
   );
+
   return response.data;
 }
 
@@ -86,13 +96,20 @@ export async function rejectTicket(
     `${TICKETS_ENDPOINT}${ticketId}/reject/`,
     payload
   );
+
   return response.data;
 }
 
-export async function updateTicketStatus(ticketId: number, status: TicketStatus) {
+export async function updateTicketStatus({
+  ticketId,
+  status,
+  solution_note,
+}: TicketStatusUpdatePayload) {
   const response = await api.post<Ticket>(`${TICKETS_ENDPOINT}${ticketId}/status/`, {
     status,
+    solution_note,
   });
+
   return response.data;
 }
 
@@ -100,6 +117,7 @@ export async function fetchTicketComments(ticketId: number) {
   const response = await api.get<TicketComment[]>(
     `${TICKETS_ENDPOINT}${ticketId}/comments/`
   );
+
   return response.data;
 }
 

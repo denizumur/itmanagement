@@ -1,10 +1,11 @@
 import { IconMessageCircle, IconRefresh, IconX } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { createTicketComment } from "../../api/tickets";
 import { useAuth } from "../../auth/AuthContext";
 import { useTicketComments, ticketCommentsQueryKey } from "../../hooks/useTickets";
+import { cn } from "../../lib/cn";
 import {
   getTicketApprovalMeta,
   getTicketPriorityMeta,
@@ -23,6 +24,10 @@ type TicketChatPanelProps = {
   canUseInternalNotes: boolean;
   onClose: () => void;
   onCommentCreated?: () => void;
+  variant?: "panel" | "workspace";
+  headerSlot?: ReactNode;
+  descriptionAsFirstMessage?: boolean;
+  className?: string;
 };
 
 type OptimisticContext = {
@@ -131,6 +136,10 @@ export function TicketChatPanel({
   canUseInternalNotes,
   onClose,
   onCommentCreated,
+  variant = "panel",
+  headerSlot,
+  descriptionAsFirstMessage = false,
+  className,
 }: TicketChatPanelProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -229,7 +238,7 @@ export function TicketChatPanel({
       setError(getErrorMessage(mutationError));
     },
     onSuccess: (createdComment, _variables, context) => {
-      if (!ticketId) {
+      if (!ticketId || !context) {
         return;
       }
 
@@ -275,14 +284,20 @@ export function TicketChatPanel({
 
   if (!open || !ticket) {
     return (
-      <aside className="rounded-panel border border-border bg-surface-1 p-lg shadow-panel">
+      <aside
+        className={cn(
+          "rounded-panel border border-border bg-surface-1 p-lg shadow-panel",
+          variant === "workspace" && "flex h-full min-h-[520px] flex-col",
+          className
+        )}
+      >
         <div className="flex h-full min-h-[360px] flex-col items-center justify-center text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-text-secondary">
             <IconMessageCircle size={22} aria-hidden={true} />
           </div>
           <h2 className="mt-md text-h3 text-text-primary">Mesajlar</h2>
           <p className="mt-sm max-w-sm text-body text-text-secondary">
-            Talep detayını ve yazışmaları görmek için listeden bir talep seç.
+            Görüntülemek için bir ticket seçin.
           </p>
         </div>
       </aside>
@@ -294,46 +309,65 @@ export function TicketChatPanel({
   const approvalMeta = getTicketApprovalMeta(ticket.approval_status);
 
   return (
-    <aside className="rounded-panel border border-border bg-surface-1 p-lg shadow-panel">
-      <div className="flex min-h-[640px] flex-col">
-        <div className="flex items-start justify-between gap-md border-b border-border pb-md">
-          <div>
-            <p className="text-caption text-text-secondary">Talep Mesajları</p>
-            <h2 className="mt-xs text-h3 text-text-primary">
-              #{ticket.id} {ticket.title}
-            </h2>
-            <p className="mt-xs text-caption text-text-secondary">
-              {ticket.employee_name} · {formatDateTime(ticket.created_at)}
+    <aside
+      className={cn(
+        "rounded-panel border border-border bg-surface-1 shadow-panel",
+        variant === "workspace"
+          ? "flex h-full min-h-0 flex-col overflow-hidden"
+          : "p-lg",
+        className
+      )}
+    >
+      <div
+        className={cn(
+          "flex min-h-0 flex-col",
+          variant === "workspace" ? "h-full" : "min-h-[640px]"
+        )}
+      >
+        {headerSlot ? (
+          headerSlot
+        ) : (
+          <div className="flex items-start justify-between gap-md border-b border-border pb-md">
+            <div>
+              <p className="text-caption text-text-secondary">Talep Mesajları</p>
+              <h2 className="mt-xs text-h3 text-text-primary">
+                #{ticket.id} {ticket.title}
+              </h2>
+              <p className="mt-xs text-caption text-text-secondary">
+                {ticket.employee_name} · {formatDateTime(ticket.created_at)}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-border p-xs text-text-secondary transition hover:border-accent hover:text-accent"
+              aria-label="Mesaj panelini kapat"
+            >
+              <IconX size={18} aria-hidden={true} />
+            </button>
+          </div>
+        )}
+
+        {!headerSlot && !descriptionAsFirstMessage ? (
+          <div className="mt-md rounded-2xl bg-surface-2 p-md">
+            <div className="flex flex-wrap gap-sm">
+              <StatusBadge variant={statusMeta.variant}>{statusMeta.label}</StatusBadge>
+              <StatusBadge variant={priorityMeta.variant}>
+                {priorityMeta.requesterLabel}
+              </StatusBadge>
+              <StatusBadge variant={approvalMeta.variant}>
+                {approvalMeta.requesterLabel}
+              </StatusBadge>
+            </div>
+
+            <p className="mt-md line-clamp-4 text-body text-text-secondary">
+              {ticket.description}
             </p>
           </div>
+        ) : null}
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-border p-xs text-text-secondary transition hover:border-accent hover:text-accent"
-            aria-label="Mesaj panelini kapat"
-          >
-            <IconX size={18} aria-hidden={true} />
-          </button>
-        </div>
-
-        <div className="mt-md rounded-2xl bg-surface-2 p-md">
-          <div className="flex flex-wrap gap-sm">
-            <StatusBadge variant={statusMeta.variant}>{statusMeta.label}</StatusBadge>
-            <StatusBadge variant={priorityMeta.variant}>
-              {priorityMeta.requesterLabel}
-            </StatusBadge>
-            <StatusBadge variant={approvalMeta.variant}>
-              {approvalMeta.requesterLabel}
-            </StatusBadge>
-          </div>
-
-          <p className="mt-md line-clamp-4 text-body text-text-secondary">
-            {ticket.description}
-          </p>
-        </div>
-
-        <div className="mt-md flex items-center justify-between gap-md">
+        <div className="flex items-center justify-between gap-md border-b border-border px-md py-sm">
           <p className="text-caption text-text-secondary">
             Panel açıkken mesajlar 5 saniyede bir yenilenir.
           </p>
@@ -349,25 +383,50 @@ export function TicketChatPanel({
           </button>
         </div>
 
-        <div className="mt-md min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-surface-0 p-md">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-surface-0 p-md">
           {commentsQuery.isLoading ? (
             <p className="text-body text-text-secondary">Mesajlar yükleniyor...</p>
-          ) : sortedComments.length === 0 ? (
-            <p className="text-body text-text-secondary">
-              Henüz mesaj yok. İlk mesajı buradan yazabilirsin.
-            </p>
           ) : (
             <div className="space-y-sm">
+              {descriptionAsFirstMessage ? (
+                <div className="rounded-2xl border border-border bg-surface-1 p-md">
+                  <div className="flex items-center justify-between gap-md">
+                    <div>
+                      <p className="text-body font-semibold text-text-primary">
+                        {ticket.employee_name}
+                      </p>
+                      <p className="text-caption text-text-secondary">
+                        {formatDateTime(ticket.created_at)}
+                      </p>
+                    </div>
+                    <StatusBadge variant="neutral">İlk talep</StatusBadge>
+                  </div>
+
+                  <p className="mt-sm whitespace-pre-wrap text-body text-text-secondary">
+                    {ticket.description}
+                  </p>
+                </div>
+              ) : null}
+
+              {sortedComments.length === 0 && !descriptionAsFirstMessage ? (
+                <p className="text-body text-text-secondary">
+                  Henüz mesaj yok. İlk mesajı buradan yazabilirsin.
+                </p>
+              ) : null}
+
               {sortedComments.map((comment) => (
                 <div
                   key={comment.id}
-                  className={`rounded-2xl border p-md ${
-                    comment.id < 0
-                      ? "border-accent/40 bg-accent/10"
-                      : comment.is_internal
-                        ? "border-warning/40 bg-warning-bg"
-                        : "border-border bg-surface-1"
-                  }`}
+                  className={cn(
+                    "rounded-2xl border p-md",
+                    comment.id < 0 && "border-accent/40 bg-accent/10",
+                    comment.id >= 0 &&
+                      comment.is_internal &&
+                      "border-warning/40 bg-warning-bg",
+                    comment.id >= 0 &&
+                      !comment.is_internal &&
+                      "border-border bg-surface-1"
+                  )}
                 >
                   <div className="flex items-center justify-between gap-md">
                     <div>
@@ -400,39 +459,66 @@ export function TicketChatPanel({
         </div>
 
         {error ? (
-          <div className="mt-md rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
+          <div className="mx-md mt-md rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
             {error}
           </div>
         ) : null}
 
-        <form className="mt-md space-y-md" onSubmit={handleSubmit}>
-          <div>
-            <label className="text-caption text-text-secondary">Mesaj</label>
-            <textarea
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-              className="mt-xs min-h-[110px] w-full rounded-app border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
-              placeholder="Talebin hakkında mesaj yaz..."
-            />
-          </div>
-
+        <form
+          className="sticky bottom-0 border-t border-border bg-surface-1 p-md"
+          onSubmit={handleSubmit}
+        >
           {canUseInternalNotes ? (
-            <label className="flex items-center gap-sm text-body text-text-secondary">
-              <input
-                type="checkbox"
-                checked={isInternal}
-                onChange={(event) => setIsInternal(event.target.checked)}
-              />
-              IT iç notu olarak ekle
-            </label>
+            <div className="mb-sm grid grid-cols-2 gap-xs rounded-app border border-border bg-surface-2 p-xs">
+              <button
+                type="button"
+                onClick={() => setIsInternal(false)}
+                className={cn(
+                  "rounded-app px-sm py-xs text-caption transition",
+                  !isInternal
+                    ? "bg-accent text-white"
+                    : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                Talep edene yanıt
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsInternal(true)}
+                className={cn(
+                  "rounded-app px-sm py-xs text-caption transition",
+                  isInternal
+                    ? "bg-warning text-white"
+                    : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                Dahili not
+              </button>
+            </div>
           ) : null}
+
+          <label className="text-caption text-text-secondary">
+            {isInternal ? "Dahili not" : "Mesaj"}
+          </label>
+
+          <textarea
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            className="mt-xs min-h-[96px] w-full rounded-app border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
+            placeholder={
+              isInternal
+                ? "Sadece IT ekibinin göreceği dahili not yaz..."
+                : "Talep edene yanıt yaz..."
+            }
+          />
 
           <button
             type="submit"
             disabled={!body.trim() || createCommentMutation.isPending}
-            className="w-full rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-sm w-full rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {createCommentMutation.isPending ? "Gönderiliyor..." : "Mesaj Gönder"}
+            {createCommentMutation.isPending ? "Gönderiliyor..." : "Gönder"}
           </button>
         </form>
       </div>

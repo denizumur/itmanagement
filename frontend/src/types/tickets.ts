@@ -39,10 +39,15 @@ export interface Ticket {
   assigned_to_name: string | null;
   created_by: number | null;
   created_by_name: string | null;
+  resolution_note: string;
+  resolved_by: number | null;
+  resolved_by_name: string | null;
+  resolved_at: string | null;
+  closed_by: number | null;
+  closed_by_name: string | null;
+  closed_at: string | null;
   comments_count: number;
   attachments_count: number;
-  resolved_at: string | null;
-  closed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +58,12 @@ export interface TicketCreatePayload {
   category: TicketCategory;
   priority: TicketPriority;
   asset?: number | null;
+}
+
+export interface TicketStatusUpdatePayload {
+  ticketId: number;
+  status: TicketStatus;
+  solution_note?: string;
 }
 
 export interface TicketApproval {
@@ -134,16 +145,19 @@ export interface RequesterContextNamedObject {
   id: number;
   name?: string;
   full_name?: string;
-  email?: string;
+  email?: string | null;
 }
 
 export interface RequesterContextEmployee {
   id: number;
   full_name: string;
   email: string | null;
+  phone?: string | null;
+  employee_code?: string | null;
   department: RequesterContextNamedObject | null;
   job_title: RequesterContextNamedObject | null;
   manager: RequesterContextNamedObject | null;
+  is_active?: boolean;
 }
 
 export interface RequesterContextAssignment {
@@ -178,6 +192,121 @@ export interface TicketRequesterContext {
   active_assignments: RequesterContextAssignment[];
   approval_preview: TicketRequesterApprovalPreview;
   limits: TicketAttachmentLimits;
+}
+
+export interface TicketContextAsset {
+  id: number;
+  name: string;
+  brand?: string | null;
+  model?: string | null;
+  inventory_code: string | null;
+  serial_number: string | null;
+  display_identifier: string | null;
+  category: string | null;
+  status: string | null;
+  status_label: string | null;
+  location?: string | null;
+  ip_address?: string | null;
+  mac_address?: string | null;
+  warranty_end_date?: string | null;
+  next_maintenance_due_date?: string | null;
+}
+
+export interface TicketContextAssignment {
+  id: number;
+  asset: TicketContextAsset;
+  employee: {
+    id: number;
+    full_name: string;
+    email: string | null;
+  };
+  assigned_at: string;
+  returned_at: string | null;
+  is_active: boolean;
+}
+
+export interface TicketContextRecentTicket {
+  id: number;
+  title: string;
+  status: TicketStatus;
+  status_label: string;
+  priority: TicketPriority;
+  priority_label: string;
+  approval_status: TicketApprovalStatus;
+  approval_status_label: string;
+  category: TicketCategory;
+  category_label: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  closed_at: string | null;
+}
+
+export interface TicketContextApprovalItem {
+  id: number;
+  approver: {
+    id: number;
+    full_name: string;
+    email: string | null;
+  };
+  approver_user: {
+    id: number;
+    username: string;
+    display_name: string | null;
+  } | null;
+  requested_by: {
+    id: number;
+    username: string;
+    display_name: string | null;
+  } | null;
+  status: "pending" | "approved" | "rejected";
+  status_label: string;
+  decision_note: string;
+  requested_at: string;
+  decided_at: string | null;
+}
+
+export interface TicketContextActions {
+  can_view_context: boolean;
+  can_update_status: boolean;
+  can_assign_ticket: boolean;
+  can_add_public_reply: boolean;
+  can_add_internal_note: boolean;
+  can_upload_attachment: boolean;
+  can_download_attachment: boolean;
+  can_view_internal_notes: boolean;
+  is_read_only: boolean;
+  blocked_reason: string | null;
+}
+
+export interface TicketContext {
+  ticket: Ticket;
+  requester: RequesterContextEmployee;
+  asset: TicketContextAsset | null;
+  active_assignments: TicketContextAssignment[];
+  requester_recent_tickets: TicketContextRecentTicket[];
+  asset_recent_tickets: TicketContextRecentTicket[];
+  approval: {
+    status: TicketApprovalStatus;
+    status_label: string;
+    pending: TicketContextApprovalItem | null;
+    history: TicketContextApprovalItem[];
+  };
+  comments_summary: {
+    total: number;
+    public: number;
+    internal: number;
+  };
+  attachments_summary: {
+    total: number;
+    latest: TicketAttachment[];
+    limits: TicketAttachmentLimits;
+  };
+  transition_rules: {
+    allowed_statuses: TicketStatus[];
+    requires_solution_note_for: TicketStatus[];
+  };
+  actions: TicketContextActions;
 }
 
 export type PaginatedTicketResponse<T> = PaginatedApiResponse<T>;
