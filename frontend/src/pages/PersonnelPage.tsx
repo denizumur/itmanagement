@@ -12,6 +12,7 @@ import {
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { TablePagination } from "../components/common/TablePagination";
@@ -139,7 +140,7 @@ function displayValue(value?: string | number | boolean | null) {
   }
 
   if (typeof value === "boolean") {
-    return value ? "Evet" : "Hayır";
+    return value ? "Evet" : "Hay─▒r";
   }
 
   return value;
@@ -230,7 +231,7 @@ function EmployeeAssignmentCard({
             {assignment.asset_display_identifier ||
               assignment.asset_inventory_code ||
               assignment.asset_serial_number ||
-              "Varlık kodu yok"}
+              "Varl─▒k kodu yok"}
           </p>
         </div>
 
@@ -256,7 +257,7 @@ function EmployeeTicketCard({ ticket }: { ticket: EmployeeRecentTicket }) {
         <div>
           <p className="font-semibold text-text-primary">{ticket.title}</p>
           <p className="mt-xs text-caption text-text-secondary">
-            #{ticket.id} · {ticket.category_label || ticket.category || "Kategori yok"} ·{" "}
+            #{ticket.id} ┬À {ticket.category_label || ticket.category || "Kategori yok"} ┬À{" "}
             {formatDateTime(ticket.created_at)}
           </p>
         </div>
@@ -266,16 +267,16 @@ function EmployeeTicketCard({ ticket }: { ticket: EmployeeRecentTicket }) {
             {ticket.status_label || ticket.status || "Durum yok"}
           </StatusPill>
           <StatusPill tone={getTicketPriorityTone(ticket.priority)}>
-            {ticket.priority_label || ticket.priority || "Öncelik yok"}
+            {ticket.priority_label || ticket.priority || "├ûncelik yok"}
           </StatusPill>
         </div>
       </div>
 
       <div className="mt-sm grid gap-sm sm:grid-cols-2">
         <DetailRow label="Onay Durumu" value={ticket.approval_status_label} />
-        <DetailRow label="Bağlı Varlık" value={ticket.asset_name} />
+        <DetailRow label="Ba─şl─▒ Varl─▒k" value={ticket.asset_name} />
         <DetailRow label="Atanan" value={ticket.assigned_to_username} />
-        <DetailRow label="Güncellenme" value={formatDateTime(ticket.updated_at)} />
+        <DetailRow label="G├╝ncellenme" value={formatDateTime(ticket.updated_at)} />
       </div>
     </article>
   );
@@ -303,7 +304,7 @@ function EmployeeDetailPanel({
           <div>
             <div className="flex flex-wrap items-center gap-xs">
               <span className="rounded-full border border-border bg-surface-2 px-sm py-1 text-caption text-text-secondary">
-                Personel Detayı
+                Personel Detay─▒
               </span>
 
               {employee ? (
@@ -314,12 +315,21 @@ function EmployeeDetailPanel({
             </div>
 
             <h2 className="mt-sm text-h2">
-              {employee?.full_name || "Personel detayı"}
+              {employee?.full_name || "Personel detay─▒"}
             </h2>
 
             <p className="mt-xs text-body text-text-secondary">
               {employee?.employee_code || "Personel kodu yok"}
             </p>
+
+            {employee ? (
+              <div className="mt-sm">
+                <AuditHistoryLink
+                  entityType="employees.Employee"
+                  entityId={employee.id}
+                />
+              </div>
+            ) : null}
           </div>
 
           <button
@@ -335,13 +345,13 @@ function EmployeeDetailPanel({
         <div className="flex-1 overflow-y-auto p-lg">
           {isLoading ? (
             <div className="rounded-panel border border-border bg-surface-1 p-lg text-body text-text-secondary">
-              Personel detayı yükleniyor...
+              Personel detay─▒ y├╝kleniyor...
             </div>
           ) : null}
 
           {isError ? (
             <div className="rounded-panel border border-danger/30 bg-danger/10 p-lg text-body text-danger">
-              Personel detayı yüklenemedi.
+              Personel detay─▒ y├╝klenemedi.
             </div>
           ) : null}
 
@@ -359,7 +369,7 @@ function EmployeeDetailPanel({
                   icon={<IconBriefcase size={15} aria-hidden={true} />}
                 />
                 <MiniMetricCard
-                  label="Açık ticket"
+                  label="A├ğ─▒k ticket"
                   value={
                     summary.open_ticket_count + summary.in_progress_ticket_count
                   }
@@ -373,10 +383,10 @@ function EmployeeDetailPanel({
               </section>
 
               <section className="rounded-panel border border-border bg-surface-1 p-md">
-                <h3 className="text-h3">Kullanıcı & Rol</h3>
+                <h3 className="text-h3">Kullan─▒c─▒ & Rol</h3>
 
                 <div className="mt-md grid gap-sm sm:grid-cols-2">
-                  <DetailRow label="Sistem Kullanıcısı" value={user?.username} />
+                  <DetailRow label="Sistem Kullan─▒c─▒s─▒" value={user?.username} />
                   <DetailRow label="User E-posta" value={user?.email} />
                   <DetailRow label="Rol" value={user?.role_label || user?.role} />
                   <DetailRow
@@ -384,11 +394,11 @@ function EmployeeDetailPanel({
                     value={user ? user.is_active : null}
                   />
                   <DetailRow
-                    label="Son Giriş"
+                    label="Son Giri┼ş"
                     value={formatDateTime(user?.last_login)}
                   />
                   <DetailRow
-                    label="Kayıt Tarihi"
+                    label="Kay─▒t Tarihi"
                     value={formatDateTime(user?.date_joined)}
                   />
                 </div>
@@ -405,15 +415,15 @@ function EmployeeDetailPanel({
                   <DetailRow label="Departman" value={employee.department?.name} />
                   <DetailRow label="Unvan" value={employee.job_title?.name} />
                   <DetailRow
-                    label="Yönetici"
+                    label="Y├Ânetici"
                     value={employee.manager?.full_name}
                   />
                   <DetailRow
-                    label="Yönetici E-posta"
+                    label="Y├Ânetici E-posta"
                     value={employee.manager?.email}
                   />
                   <DetailRow
-                    label="Veri Kaynağı"
+                    label="Veri Kayna─ş─▒"
                     value={employee.sync_source_label || employee.sync_source}
                   />
                   <DetailRow
@@ -421,11 +431,11 @@ function EmployeeDetailPanel({
                     value={employee.external_hr_id}
                   />
                   <DetailRow
-                    label="Oluşturulma"
+                    label="Olu┼şturulma"
                     value={formatDateTime(employee.created_at)}
                   />
                   <DetailRow
-                    label="Güncellenme"
+                    label="G├╝ncellenme"
                     value={formatDateTime(employee.updated_at)}
                   />
                 </div>
@@ -445,7 +455,7 @@ function EmployeeDetailPanel({
                   <div>
                     <h3 className="text-h3">Aktif Zimmetler</h3>
                     <p className="mt-xs text-caption text-text-secondary">
-                      Personelin iade edilmemiş zimmet kayıtları.
+                      Personelin iade edilmemi┼ş zimmet kay─▒tlar─▒.
                     </p>
                   </div>
                 </div>
@@ -460,7 +470,7 @@ function EmployeeDetailPanel({
                     ))
                   ) : (
                     <div className="rounded-app border border-border bg-surface-2 p-md text-body text-text-secondary">
-                      Aktif zimmet kaydı bulunamadı.
+                      Aktif zimmet kayd─▒ bulunamad─▒.
                     </div>
                   )}
                 </div>
@@ -469,31 +479,31 @@ function EmployeeDetailPanel({
               <section className="rounded-panel border border-border bg-surface-1 p-md">
                 <div className="flex items-center justify-between gap-md">
                   <div>
-                    <h3 className="text-h3">Ticket Geçmişi</h3>
+                    <h3 className="text-h3">Ticket Ge├ğmi┼şi</h3>
                     <p className="mt-xs text-caption text-text-secondary">
-                      Son 10 ticket kaydı ve operasyonel durum özeti.
+                      Son 10 ticket kayd─▒ ve operasyonel durum ├Âzeti.
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-md grid gap-sm sm:grid-cols-4">
                   <MiniMetricCard
-                    label="Açık"
+                    label="A├ğ─▒k"
                     value={summary.open_ticket_count}
                     icon={<IconTicket size={15} aria-hidden={true} />}
                   />
                   <MiniMetricCard
-                    label="İşlemde"
+                    label="─░┼şlemde"
                     value={summary.in_progress_ticket_count}
                     icon={<IconTicket size={15} aria-hidden={true} />}
                   />
                   <MiniMetricCard
-                    label="Çözüldü"
+                    label="├ç├Âz├╝ld├╝"
                     value={summary.resolved_ticket_count}
                     icon={<IconTicket size={15} aria-hidden={true} />}
                   />
                   <MiniMetricCard
-                    label="Kapandı"
+                    label="Kapand─▒"
                     value={summary.closed_ticket_count}
                     icon={<IconTicket size={15} aria-hidden={true} />}
                   />
@@ -506,7 +516,7 @@ function EmployeeDetailPanel({
                     ))
                   ) : (
                     <div className="rounded-app border border-border bg-surface-2 p-md text-body text-text-secondary">
-                      Ticket kaydı bulunamadı.
+                      Ticket kayd─▒ bulunamad─▒.
                     </div>
                   )}
                 </div>
@@ -522,14 +532,14 @@ function EmployeeDetailPanel({
 const columns: DataTableColumn<Employee>[] = [
   {
     key: "first_name",
-    label: "Adı",
+    label: "Ad─▒",
     sortable: true,
     sortKey: "full_name",
     render: (employee) => getFirstName(employee),
   },
   {
     key: "last_name",
-    label: "Soyadı",
+    label: "Soyad─▒",
     sortable: true,
     sortKey: "full_name",
     render: (employee) => getLastName(employee),
@@ -626,13 +636,13 @@ export function PersonnelPage() {
 
       setToast({
         type: "success",
-        message: "Personel export dosyası indirildi.",
+        message: "Personel export dosyas─▒ indirildi.",
       });
     } catch {
       setToast({
         type: "error",
         message:
-          "Personel export alınamadı. Yetkini veya filtreleri kontrol et.",
+          "Personel export al─▒namad─▒. Yetkini veya filtreleri kontrol et.",
       });
     }
   }
@@ -652,8 +662,8 @@ export function PersonnelPage() {
           <div>
             <h1 className="text-h1">Personel</h1>
             <p className="mt-sm max-w-3xl text-body text-text-secondary">
-              Şirket personel kayıtlarını görüntüle, ara, filtrele, detaylarını
-              incele ve yetkiliysen filtrelenmiş CSV export al.
+              ┼Şirket personel kay─▒tlar─▒n─▒ g├Âr├╝nt├╝le, ara, filtrele, detaylar─▒n─▒
+              incele ve yetkiliysen filtrelenmi┼ş CSV export al.
             </p>
           </div>
 
@@ -667,7 +677,7 @@ export function PersonnelPage() {
               >
                 <IconDownload size={18} aria-hidden={true} />
                 {employeeExportMutation.isPending
-                  ? "Export hazırlanıyor..."
+                  ? "Export haz─▒rlan─▒yor..."
                   : "CSV Export"}
               </button>
             ) : null}
@@ -697,7 +707,7 @@ export function PersonnelPage() {
 
         <section className="flex flex-wrap gap-sm">
           <MiniMetricCard
-            label="Toplam kayıt"
+            label="Toplam kay─▒t"
             value={totalUserCount}
             icon={<IconUsers size={15} aria-hidden={true} />}
           />
@@ -721,7 +731,7 @@ export function PersonnelPage() {
               <input
                 value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Ad, e-posta, kullanıcı, departman..."
+                placeholder="Ad, e-posta, kullan─▒c─▒, departman..."
                 className="w-full bg-transparent py-sm text-body text-text-primary outline-none placeholder:text-text-muted"
               />
             </div>
@@ -736,7 +746,7 @@ export function PersonnelPage() {
               }
               className="rounded-app border border-border bg-surface-2 px-sm py-sm text-body text-text-primary outline-none focus:border-accent"
             >
-              <option value="">Tüm roller</option>
+              <option value="">T├╝m roller</option>
               <option value="admin">Admin</option>
               <option value="technician">Technician</option>
               <option value="viewer">Viewer</option>
@@ -754,7 +764,7 @@ export function PersonnelPage() {
               }
               className="rounded-app border border-border bg-surface-2 px-sm py-sm text-body text-text-primary outline-none focus:border-accent"
             >
-              <option value="">Varsayılan aktifler</option>
+              <option value="">Varsay─▒lan aktifler</option>
               <option value="true">Aktif</option>
               <option value="false">Pasif</option>
             </select>
@@ -771,7 +781,7 @@ export function PersonnelPage() {
 
         {employeesQuery.isError ? (
           <div className="rounded-panel border border-danger/30 bg-danger/10 p-md text-body text-danger">
-            Personel tablosu yüklenemedi.
+            Personel tablosu y├╝klenemedi.
           </div>
         ) : null}
 
@@ -782,7 +792,7 @@ export function PersonnelPage() {
           ordering={state.ordering}
           onSortChange={setSort}
           isLoading={employeesQuery.isLoading}
-          emptyMessage="Personel kaydı bulunamadı."
+          emptyMessage="Personel kayd─▒ bulunamad─▒."
           onRowClick={(employee) => setSelectedEmployeeId(employee.id)}
           getRowClassName={(employee) =>
             selectedEmployeeId === employee.id ? "bg-surface-2" : ""

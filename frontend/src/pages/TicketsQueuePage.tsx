@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { Skeleton } from "../components/common/Skeleton";
 import { TablePagination } from "../components/common/TablePagination";
@@ -316,6 +317,13 @@ function WorkspaceChatHeader({
           <h2 className="mt-xs truncate text-h2 text-text-primary">
             #{resolvedTicket.id} {resolvedTicket.title}
           </h2>
+
+          <div className="mt-sm">
+            <AuditHistoryLink
+              entityType="tickets.Ticket"
+              entityId={resolvedTicket.id}
+            />
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-xs">

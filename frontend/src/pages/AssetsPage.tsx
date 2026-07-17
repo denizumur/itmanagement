@@ -12,6 +12,7 @@ import {
   AssetForm,
   type AssetFormSubmitPayload,
 } from "../components/assets/AssetForm";
+import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
@@ -59,15 +60,15 @@ type ToastState = {
 };
 
 const statusOptions = [
-  { value: "", label: "Tüm durumlar" },
+  { value: "", label: "T├╝m durumlar" },
   { value: "active", label: "Aktif" },
-  { value: "assigned", label: "Zimmetli kayıtlar" },
+  { value: "assigned", label: "Zimmetli kay─▒tlar" },
   { value: "in_stock", label: "Depoda" },
-  { value: "in_repair", label: "Bakımda" },
-  { value: "faulty", label: "Arızalı" },
+  { value: "in_repair", label: "Bak─▒mda" },
+  { value: "faulty", label: "Ar─▒zal─▒" },
   { value: "retired", label: "Emekli" },
-  { value: "disposed", label: "İmha edildi" },
-  { value: "lost", label: "Kayıp" },
+  { value: "disposed", label: "─░mha edildi" },
+  { value: "lost", label: "Kay─▒p" },
 ];
 
 function formatDate(value?: string | null) {
@@ -128,7 +129,7 @@ function getOperationalStatusVariant(
 
 function getMutationErrorMessage(error: unknown) {
   const fallback =
-    "İşlem tamamlanamadı. Lütfen alanları kontrol edip tekrar dene.";
+    "─░┼şlem tamamlanamad─▒. L├╝tfen alanlar─▒ kontrol edip tekrar dene.";
 
   if (!error || typeof error !== "object" || !("response" in error)) {
     return fallback;
@@ -227,7 +228,7 @@ function buildAssetColumns({
   return [
     {
       key: "name",
-      label: "Varlık",
+      label: "Varl─▒k",
       sortable: true,
       sortKey: "name",
       render: (asset) => (
@@ -266,12 +267,12 @@ function buildAssetColumns({
     },
     {
       key: "assigned_employee",
-      label: "Zimmetli Kişi",
+      label: "Zimmetli Ki┼şi",
       render: (asset) => {
         const activeAssignment = activeAssignmentMap.get(asset.id);
         const employeeName = activeAssignment
           ? getAssignmentEmployeeName(activeAssignment)
-          : "Boşta";
+          : "Bo┼şta";
         const departmentName = activeAssignment
           ? getAssignmentDepartmentName(activeAssignment)
           : null;
@@ -304,14 +305,14 @@ function buildAssetColumns({
     },
     {
       key: "next_maintenance_due_date",
-      label: "Sonraki Bakım",
+      label: "Sonraki Bak─▒m",
       sortable: true,
       sortKey: "next_maintenance_due_date",
       render: (asset) => <DateCell value={asset.next_maintenance_due_date} />,
     },
     {
       key: "actions",
-      label: "İşlem",
+      label: "─░┼şlem",
       className: "text-right",
       render: (asset) => (
         <div className="flex justify-end gap-sm">
@@ -329,7 +330,7 @@ function buildAssetColumns({
               onClick={() => onEditAsset(asset)}
               icon={<IconEdit size={16} aria-hidden={true} />}
             >
-              Düzenle
+              D├╝zenle
             </GlowButton>
           ) : null}
         </div>
@@ -450,11 +451,11 @@ export function AssetsPage() {
 
   const inRepairAssets =
     getSummaryStatusCount(summary, "in_repair") ||
-    countAssetsByStatus(assets, ["in_repair", "repair", "bakımda", "bakimda"]);
+    countAssetsByStatus(assets, ["in_repair", "repair", "bak─▒mda", "bakimda"]);
 
   const faultyAssets =
     getSummaryStatusCount(summary, "faulty") ||
-    countAssetsByStatus(assets, ["faulty", "arızalı", "arizali"]);
+    countAssetsByStatus(assets, ["faulty", "ar─▒zal─▒", "arizali"]);
 
   const isInitialLoading =
     assetsQuery.isLoading ||
@@ -491,14 +492,14 @@ export function AssetsPage() {
 
           setToast({
             type: "success",
-            message: "Varlık oluşturuldu ve personele zimmetlendi.",
+            message: "Varl─▒k olu┼şturuldu ve personele zimmetlendi.",
           });
         } else {
           await createAssetMutation.mutateAsync(payload.asset);
 
           setToast({
             type: "success",
-            message: "Varlık başarıyla oluşturuldu.",
+            message: "Varl─▒k ba┼şar─▒yla olu┼şturuldu.",
           });
         }
       } else if (editingAsset) {
@@ -509,7 +510,7 @@ export function AssetsPage() {
 
         setToast({
           type: "success",
-          message: "Varlık başarıyla güncellendi.",
+          message: "Varl─▒k ba┼şar─▒yla g├╝ncellendi.",
         });
       }
 
@@ -544,7 +545,7 @@ export function AssetsPage() {
   if (hasError) {
     return (
       <AppShell>
-        <ErrorState message="Envanter veya aktif zimmet verisi alınamadı. API endpointlerini ve yetki durumunu kontrol et." />
+        <ErrorState message="Envanter veya aktif zimmet verisi al─▒namad─▒. API endpointlerini ve yetki durumunu kontrol et." />
       </AppShell>
     );
   }
@@ -553,9 +554,9 @@ export function AssetsPage() {
     <AppShell>
       <PageTransition>
         <PageHeader
-          eyebrow="Envanter Yönetimi"
+          eyebrow="Envanter Y├Ânetimi"
           title="Envanter"
-          description="Şirket içindeki cihazları, zimmet durumlarını, garanti ve bakım risklerini tek ekrandan takip et."
+          description="┼Şirket i├ğindeki cihazlar─▒, zimmet durumlar─▒n─▒, garanti ve bak─▒m risklerini tek ekrandan takip et."
           actions={
             <>
               <GlowButton
@@ -579,7 +580,7 @@ export function AssetsPage() {
                   onClick={openCreateForm}
                   disabled={isAssetFormSubmitting}
                 >
-                  Yeni Varlık
+                  Yeni Varl─▒k
                 </GlowButton>
               )}
             </>
@@ -588,7 +589,7 @@ export function AssetsPage() {
 
         <section className="mt-lg flex flex-wrap gap-sm">
           <MiniMetricCard
-            label="Varlık sayısı"
+            label="Varl─▒k say─▒s─▒"
             value={totalAssets}
             icon={<IconDeviceDesktop size={15} aria-hidden={true} />}
             tone="accent"
@@ -609,7 +610,7 @@ export function AssetsPage() {
           />
 
           <MiniMetricCard
-            label="Bakım / Arıza"
+            label="Bak─▒m / Ar─▒za"
             value={inRepairAssets + faultyAssets}
             icon={<IconDeviceDesktop size={15} aria-hidden={true} />}
             tone="danger"
@@ -627,7 +628,7 @@ export function AssetsPage() {
 
               <input
                 className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
-                placeholder="Varlık adı, envanter kodu, seri no ara..."
+                placeholder="Varl─▒k ad─▒, envanter kodu, seri no ara..."
                 value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -654,7 +655,7 @@ export function AssetsPage() {
               }
               aria-label="Kategori filtresi"
             >
-              <option value="">Tüm kategoriler</option>
+              <option value="">T├╝m kategoriler</option>
 
               {categories.map((item) => (
                 <option key={item.id} value={String(item.id)}>
@@ -681,7 +682,7 @@ export function AssetsPage() {
             ordering={state.ordering}
             onSortChange={setSort}
             isLoading={assetsQuery.isLoading}
-            emptyMessage="Filtrelere uygun varlık bulunamadı."
+            emptyMessage="Filtrelere uygun varl─▒k bulunamad─▒."
           />
 
           <TablePagination
@@ -697,7 +698,7 @@ export function AssetsPage() {
 
         <SlideOverPanel
           open={Boolean(selectedAsset)}
-          title={selectedAsset?.name ?? "Varlık detayı"}
+          title={selectedAsset?.name ?? "Varl─▒k detay─▒"}
           description={
             selectedAsset ? getAssetPrimaryCode(selectedAsset) : undefined
           }
@@ -716,15 +717,22 @@ export function AssetsPage() {
                   </StatusBadge>
                 </div>
 
-                {userCanManage && (
-                  <GlowButton
-                    variant="ghost"
-                    icon={<IconEdit size={16} aria-hidden={true} />}
-                    onClick={() => openEditForm(selectedAsset)}
-                  >
-                    Düzenle
-                  </GlowButton>
-                )}
+                <div className="flex flex-wrap items-center justify-end gap-sm">
+                  <AuditHistoryLink
+                    entityType="inventory.Asset"
+                    entityId={selectedAsset.id}
+                  />
+
+                  {userCanManage && (
+                    <GlowButton
+                      variant="ghost"
+                      icon={<IconEdit size={16} aria-hidden={true} />}
+                      onClick={() => openEditForm(selectedAsset)}
+                    >
+                      D├╝zenle
+                    </GlowButton>
+                  )}
+                </div>
               </div>
 
               <div className="grid gap-md sm:grid-cols-2">
@@ -734,7 +742,7 @@ export function AssetsPage() {
                 />
 
                 <DetailRow
-                  label="Seri numarası"
+                  label="Seri numaras─▒"
                   value={selectedAsset.serial_number}
                 />
 
@@ -753,12 +761,12 @@ export function AssetsPage() {
                   value={
                     selectedAssetAssignment
                       ? getAssignmentEmployeeName(selectedAssetAssignment)
-                      : "Boşta"
+                      : "Bo┼şta"
                   }
                 />
 
                 <DetailRow
-                  label="Zimmet departmanı"
+                  label="Zimmet departman─▒"
                   value={
                     selectedAssetAssignment
                       ? getAssignmentDepartmentName(selectedAssetAssignment)
@@ -771,27 +779,27 @@ export function AssetsPage() {
                 <DetailRow label="Konum" value={selectedAsset.location} />
 
                 <DetailRow
-                  label="Satın alma tarihi"
+                  label="Sat─▒n alma tarihi"
                   value={formatDate(selectedAsset.purchase_date)}
                 />
 
                 <DetailRow
-                  label="Garanti bitiş tarihi"
+                  label="Garanti biti┼ş tarihi"
                   value={formatDate(selectedAsset.warranty_end_date)}
                 />
 
                 <DetailRow
-                  label="Sonraki bakım tarihi"
+                  label="Sonraki bak─▒m tarihi"
                   value={formatDate(selectedAsset.next_maintenance_due_date)}
                 />
 
                 <DetailRow
-                  label="Oluşturulma tarihi"
+                  label="Olu┼şturulma tarihi"
                   value={formatDateTime(selectedAsset.created_at)}
                 />
 
                 <DetailRow
-                  label="Güncellenme tarihi"
+                  label="G├╝ncellenme tarihi"
                   value={formatDateTime(selectedAsset.updated_at)}
                 />
               </div>
@@ -803,13 +811,13 @@ export function AssetsPage() {
 
         <SlideOverPanel
           open={Boolean(assetFormMode)}
-          title={assetFormMode === "create" ? "Yeni Varlık" : "Varlık Düzenle"}
+          title={assetFormMode === "create" ? "Yeni Varl─▒k" : "Varl─▒k D├╝zenle"}
           description={
             assetFormMode === "create"
-              ? "Yeni bir cihaz veya ekipmanı envantere ekle."
+              ? "Yeni bir cihaz veya ekipman─▒ envantere ekle."
               : editingAsset
-                ? `${editingAsset.name} kaydını güncelle.`
-                : "Varlık kaydını güncelle."
+                ? `${editingAsset.name} kayd─▒n─▒ g├╝ncelle.`
+                : "Varl─▒k kayd─▒n─▒ g├╝ncelle."
           }
           onClose={closeAssetForm}
         >
