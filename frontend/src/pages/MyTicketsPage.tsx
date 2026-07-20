@@ -3,14 +3,17 @@ import {
   IconChevronRight,
   IconClipboardList,
   IconClock,
+  IconFilter,
   IconHistory,
   IconMessageCircle,
   IconPlus,
   IconRefresh,
   IconSearch,
+  IconShieldCheck,
   IconX,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
 import { Skeleton } from "../components/common/Skeleton";
 import { SimplePortalShell } from "../components/layout/SimplePortalShell";
 import { PortalActionGrid } from "../components/portal/PortalActionGrid";
@@ -18,10 +21,7 @@ import { RequesterTicketForm } from "../components/tickets/RequesterTicketForm";
 import { TicketChatPanel } from "../components/tickets/TicketChatPanel";
 import { TicketTimelineIndicator } from "../components/tickets/TicketTimelineIndicator";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import {
-  useMyTickets,
-  useRequesterContext,
-} from "../hooks/useTickets";
+import { useMyTickets, useRequesterContext } from "../hooks/useTickets";
 import { cn } from "../lib/cn";
 import {
   getTicketApprovalMeta,
@@ -31,6 +31,24 @@ import {
 import type { Ticket } from "../types/tickets";
 
 type MyTicketsView = "home" | "create" | "list" | "history";
+type MyTicketsSource = "approvals" | null;
+type TicketListFilter =
+  | "all"
+  | "returned_to_requester"
+  | "open"
+  | "in_progress"
+  | "pending_approval";
+
+const ticketListFilterOptions: Array<{
+  value: TicketListFilter;
+  label: string;
+}> = [
+  { value: "all", label: "Tüm aktif talepler" },
+  { value: "returned_to_requester", label: "Geri gönderilenler" },
+  { value: "open", label: "Açık" },
+  { value: "in_progress", label: "İşlemde" },
+  { value: "pending_approval", label: "Onay bekleyenler" },
+];
 
 function getCurrentView(value: string | null): MyTicketsView {
   if (value === "create" || value === "list" || value === "history") {
@@ -39,17 +57,34 @@ function getCurrentView(value: string | null): MyTicketsView {
 
   return "home";
 }
+
 function getViewFromUrl(): MyTicketsView {
   return getCurrentView(new URLSearchParams(window.location.search).get("view"));
 }
 
-function updateViewInUrl(view: MyTicketsView) {
+function getSourceFromUrl(): MyTicketsSource {
+  const source = new URLSearchParams(window.location.search).get("from");
+
+  if (source === "approvals") {
+    return "approvals";
+  }
+
+  return null;
+}
+
+function updateViewInUrl(view: MyTicketsView, source: MyTicketsSource) {
   const url = new URL(window.location.href);
 
   if (view === "home") {
     url.searchParams.delete("view");
   } else {
     url.searchParams.set("view", view);
+  }
+
+  if (source === "approvals") {
+    url.searchParams.set("from", "approvals");
+  } else {
+    url.searchParams.delete("from");
   }
 
   window.history.pushState({}, "", url);
@@ -78,6 +113,10 @@ function isActiveTicket(ticket: Ticket) {
   return !isHistoryTicket(ticket);
 }
 
+function isReturnedToRequester(ticket: Ticket) {
+  return ticket.status === "returned_to_requester";
+}
+
 function matchesSearch(ticket: Ticket, searchTerm: string) {
   const normalizedSearch = normalizeText(searchTerm);
 
@@ -100,6 +139,47 @@ function matchesSearch(ticket: Ticket, searchTerm: string) {
     .toLocaleLowerCase("tr-TR");
 
   return haystack.includes(normalizedSearch);
+}
+
+function matchesTicketListFilter(ticket: Ticket, filter: TicketListFilter) {
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "returned_to_requester") {
+    return ticket.status === "returned_to_requester";
+  }
+
+  if (filter === "pending_approval") {
+    return ticket.approval_status === "pending";
+  }
+
+  return ticket.status === filter;
+}
+
+function getSortableTime(value: string) {
+  const time = new Date(value).getTime();
+
+  if (Number.isNaN(time)) {
+    return 0;
+  }
+
+  return time;
+}
+
+function sortActiveTicketsForRequester(first: Ticket, second: Ticket) {
+  const firstReturned = isReturnedToRequester(first);
+  const secondReturned = isReturnedToRequester(second);
+
+  if (firstReturned !== secondReturned) {
+    return firstReturned ? -1 : 1;
+  }
+
+  return getSortableTime(second.updated_at) - getSortableTime(first.updated_at);
+}
+
+function sortTicketsByUpdatedDate(first: Ticket, second: Ticket) {
+  return getSortableTime(second.updated_at) - getSortableTime(first.updated_at);
 }
 
 function BackButton({ onClick }: { onClick: () => void }) {
@@ -127,18 +207,32 @@ function TicketCard({
   const statusMeta = getTicketStatusMeta(ticket.status);
   const priorityMeta = getTicketPriorityMeta(ticket.priority);
   const approvalMeta = getTicketApprovalMeta(ticket.approval_status);
+  const returnedToRequester = isReturnedToRequester(ticket);
 
   return (
     <article
       className={cn(
         "rounded-panel border bg-surface-1 p-lg shadow-panel transition hover:border-accent/60",
-        selected ? "border-accent bg-accent/5" : "border-border"
+        selected && returnedToRequester
+          ? "border-danger bg-danger-bg"
+          : selected
+            ? "border-accent bg-accent/5"
+            : returnedToRequester
+              ? "border-danger/50 bg-danger-bg hover:border-danger"
+              : "border-border"
       )}
     >
       <div className="flex flex-col gap-md lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-xs">
-            <span className="rounded-full border border-border bg-surface-2 px-sm py-1 text-caption text-text-secondary">
+            <span
+              className={cn(
+                "rounded-full border px-sm py-1 text-caption",
+                returnedToRequester
+                  ? "border-danger/30 bg-surface-1 text-danger"
+                  : "border-border bg-surface-2 text-text-secondary"
+              )}
+            >
               #{ticket.id}
             </span>
 
@@ -163,6 +257,13 @@ function TicketCard({
           {formatDate(ticket.created_at)}
         </div>
       </div>
+
+      {returnedToRequester ? (
+        <div className="mt-md rounded-app border border-danger/30 bg-surface-1 px-md py-sm text-caption text-danger">
+          Geri gönderildi. Mesajları kontrol edip eksik bilgileri tamamladıktan
+          sonra tekrar gönderebilirsin.
+        </div>
+      ) : null}
 
       <div className="mt-md flex flex-wrap gap-xs text-caption text-text-secondary">
         <span className="rounded-full bg-surface-2 px-sm py-1">
@@ -291,6 +392,8 @@ function TicketListSection({
   tickets,
   searchTerm,
   onSearchChange,
+  filterValue,
+  onFilterChange,
   isFetching,
   selectedTicket,
   onSelectTicket,
@@ -302,6 +405,8 @@ function TicketListSection({
   tickets: Ticket[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
+  filterValue?: TicketListFilter;
+  onFilterChange?: (value: TicketListFilter) => void;
   isFetching: boolean;
   selectedTicket: Ticket | null;
   onSelectTicket: (ticket: Ticket) => void;
@@ -309,6 +414,8 @@ function TicketListSection({
   onBack: () => void;
   onCreate: () => void;
 }) {
+  const hasFilter = filterValue !== undefined && Boolean(onFilterChange);
+
   return (
     <section>
       <div className="mb-lg flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
@@ -332,15 +439,43 @@ function TicketListSection({
         </button>
       </div>
 
-      <label className="mb-md flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md">
-        <IconSearch size={16} className="shrink-0 text-text-secondary" />
-        <input
-          className="w-full min-w-0 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
-          placeholder="Ara..."
-          value={searchTerm}
-          onChange={(event) => onSearchChange(event.target.value)}
-        />
-      </label>
+      <div
+        className={cn(
+          "mb-md grid gap-sm",
+          hasFilter ? "lg:grid-cols-[minmax(0,1fr)_240px]" : "lg:grid-cols-1"
+        )}
+      >
+        <label className="flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md">
+          <IconSearch size={16} className="shrink-0 text-text-secondary" />
+          <input
+            className="w-full min-w-0 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+            placeholder="Başlık, açıklama, durum, öncelik veya cihaz ara..."
+            value={searchTerm}
+            onChange={(event) => onSearchChange(event.target.value)}
+          />
+        </label>
+
+        {hasFilter ? (
+          <label className="flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md">
+            <IconFilter size={16} className="shrink-0 text-text-secondary" />
+
+            <select
+              className="w-full min-w-0 bg-transparent text-body text-text-primary focus:outline-none"
+              value={filterValue}
+              onChange={(event) =>
+                onFilterChange?.(event.target.value as TicketListFilter)
+              }
+              aria-label="Talep filtresi"
+            >
+              {ticketListFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </div>
 
       {isFetching ? (
         <div className="mb-md rounded-panel border border-border bg-surface-1 p-md text-body text-text-secondary">
@@ -367,49 +502,91 @@ function TicketListSection({
 }
 
 export function MyTicketsPage() {
-  const [currentView, setCurrentView] = useState<MyTicketsView>(() => getViewFromUrl());
+  const [currentView, setCurrentView] = useState<MyTicketsView>(() =>
+    getViewFromUrl()
+  );
+  const [source, setSource] = useState<MyTicketsSource>(() =>
+    getSourceFromUrl()
+  );
+
+  const { user } = useAuth();
+  const isApproverPortalUser = user?.role === "approver";
+
   const myTicketsQuery = useMyTickets();
   const requesterContextQuery = useRequesterContext();
 
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [ticketFilter, setTicketFilter] = useState<TicketListFilter>("all");
 
   const allTickets = useMemo(
     () => myTicketsQuery.data ?? [],
     [myTicketsQuery.data]
   );
 
+  const activeTicketCount = useMemo(
+    () => allTickets.filter(isActiveTicket).length,
+    [allTickets]
+  );
+
+  const historyTicketCount = useMemo(
+    () => allTickets.filter(isHistoryTicket).length,
+    [allTickets]
+  );
+
   const activeTickets = useMemo(
     () =>
       allTickets
         .filter(isActiveTicket)
-        .filter((ticket) => matchesSearch(ticket, searchTerm)),
-    [allTickets, searchTerm]
+        .filter((ticket) => matchesTicketListFilter(ticket, ticketFilter))
+        .filter((ticket) => matchesSearch(ticket, searchTerm))
+        .sort(sortActiveTicketsForRequester),
+    [allTickets, searchTerm, ticketFilter]
   );
 
   const historyTickets = useMemo(
     () =>
       allTickets
         .filter(isHistoryTicket)
-        .filter((ticket) => matchesSearch(ticket, searchTerm)),
+        .filter((ticket) => matchesSearch(ticket, searchTerm))
+        .sort(sortTicketsByUpdatedDate),
     [allTickets, searchTerm]
   );
 
   useEffect(() => {
     function handlePopState() {
       setCurrentView(getViewFromUrl());
+      setSource(getSourceFromUrl());
     }
 
     window.addEventListener("popstate", handlePopState);
 
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
-  
+
   function goToView(view: MyTicketsView) {
     setSelectedTicket(null);
     setSearchTerm("");
-    updateViewInUrl(view);
+    setTicketFilter("all");
+    updateViewInUrl(view, source);
     setCurrentView(view);
+  }
+
+  function goBack() {
+    setSelectedTicket(null);
+    setSearchTerm("");
+    setTicketFilter("all");
+
+    if (source === "approvals" || isApproverPortalUser) {
+      window.location.assign("/approvals");
+      return;
+    }
+
+    goToView("home");
+  }
+
+  function goToApprovals() {
+    window.location.assign("/approvals");
   }
 
   async function refetchAll() {
@@ -426,12 +603,23 @@ export function MyTicketsPage() {
 
   const isLoadingHome = myTicketsQuery.isLoading;
 
+  const approverReturnButton = isApproverPortalUser ? (
+    <div className="mb-lg flex justify-end">
+      <button
+        type="button"
+        onClick={goToApprovals}
+        className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+      >
+        <IconShieldCheck size={16} aria-hidden={true} />
+        Onay Paneline Dön
+      </button>
+    </div>
+  ) : null;
+
   return (
-    <SimplePortalShell
-      badge="Çalışan Portalı"
-      title="Yardım Merkezi"
-      subtitle=""
-    >
+    <SimplePortalShell badge="Çalışan Portalı" title="Yardım Merkezi" subtitle="">
+      {approverReturnButton}
+
       {currentView === "home" ? (
         <section className="mx-auto max-w-4xl">
           {isLoadingHome ? (
@@ -454,7 +642,7 @@ export function MyTicketsPage() {
                   key: "list",
                   label: "Taleplerim",
                   icon: <IconClipboardList size={34} aria-hidden={true} />,
-                  badge: activeTickets.length,
+                  badge: activeTicketCount,
                   tone: "warning",
                   onClick: () => goToView("list"),
                 },
@@ -462,7 +650,7 @@ export function MyTicketsPage() {
                   key: "history",
                   label: "Geçmiş İşlemler",
                   icon: <IconHistory size={34} aria-hidden={true} />,
-                  badge: historyTickets.length,
+                  badge: historyTicketCount,
                   tone: "neutral",
                   onClick: () => goToView("history"),
                 },
@@ -475,7 +663,7 @@ export function MyTicketsPage() {
       {currentView === "create" ? (
         <section className="mx-auto max-w-3xl">
           <div className="mb-lg">
-            <BackButton onClick={() => goToView("home")} />
+            <BackButton onClick={goBack} />
           </div>
 
           <RequesterTicketForm
@@ -494,11 +682,13 @@ export function MyTicketsPage() {
           tickets={activeTickets}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
+          filterValue={ticketFilter}
+          onFilterChange={setTicketFilter}
           isFetching={myTicketsQuery.isFetching}
           selectedTicket={selectedTicket}
           onSelectTicket={setSelectedTicket}
           onRefresh={refetchAll}
-          onBack={() => goToView("home")}
+          onBack={goBack}
           onCreate={() => goToView("create")}
         />
       ) : null}
@@ -513,7 +703,7 @@ export function MyTicketsPage() {
           selectedTicket={selectedTicket}
           onSelectTicket={setSelectedTicket}
           onRefresh={refetchAll}
-          onBack={() => goToView("home")}
+          onBack={goBack}
           onCreate={() => goToView("create")}
         />
       ) : null}
