@@ -1,10 +1,16 @@
-import { IconMessageCircle, IconRefresh, IconX } from "@tabler/icons-react";
+import {
+  IconLock,
+  IconMessageCircle,
+  IconRefresh,
+  IconSend,
+  IconX,
+} from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import { createTicketComment } from "../../api/tickets";
 import { useAuth } from "../../auth/AuthContext";
-import { useTicketComments, ticketCommentsQueryKey } from "../../hooks/useTickets";
+import { ticketCommentsQueryKey, useTicketComments } from "../../hooks/useTickets";
 import { cn } from "../../lib/cn";
 import {
   getTicketApprovalMeta,
@@ -29,6 +35,7 @@ type TicketChatPanelProps = {
   onCommentCreated?: () => void;
   variant?: "panel" | "workspace";
   headerSlot?: ReactNode;
+  composerTopSlot?: ReactNode;
   descriptionAsFirstMessage?: boolean;
   className?: string;
 };
@@ -37,6 +44,17 @@ type OptimisticContext = {
   previousComments?: TicketComment[];
   optimisticId: number;
   body: string;
+};
+
+type ChatItem = {
+  id: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  isInternal: boolean;
+  isOptimistic: boolean;
+  isInitial: boolean;
+  isOwn: boolean;
 };
 
 function formatDateTime(value: string) {
@@ -81,6 +99,48 @@ function getUserDisplayName(user: unknown) {
   }
 
   return "Sen";
+}
+
+function getCurrentUserId(user: unknown) {
+  if (!user || typeof user !== "object") {
+    return null;
+  }
+
+  const id = (user as { id?: unknown }).id;
+
+  if (typeof id === "number") {
+    return id;
+  }
+
+  if (typeof id === "string" && id.trim()) {
+    const parsed = Number(id);
+
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function isOwnComment(comment: TicketComment, user: unknown) {
+  if (comment.id < 0) {
+    return true;
+  }
+
+  const currentUserId = getCurrentUserId(user);
+
+  if (currentUserId && comment.author === currentUserId) {
+    return true;
+  }
+
+  const currentUserName = getUserDisplayName(user);
+
+  return Boolean(
+    comment.author_name &&
+      currentUserName &&
+      comment.author_name.trim() === currentUserName.trim()
+  );
 }
 
 function getErrorMessage(error: unknown) {
@@ -147,6 +207,149 @@ function normalizeChatMode({
   return requestedMode;
 }
 
+function buildChatItems({
+  ticket,
+  comments,
+  descriptionAsFirstMessage,
+  user,
+}: {
+  ticket: Ticket | null;
+  comments: TicketComment[];
+  descriptionAsFirstMessage: boolean;
+  user: unknown;
+}): ChatItem[] {
+  if (!ticket) {
+    return [];
+  }
+
+  const items: ChatItem[] = [];
+
+  if (descriptionAsFirstMessage) {
+    items.push({
+      id: `ticket-description-${ticket.id}`,
+      authorName: ticket.employee_name,
+      body: ticket.description,
+      createdAt: ticket.created_at,
+      isInternal: false,
+      isOptimistic: false,
+      isInitial: true,
+      isOwn: false,
+    });
+  }
+
+  comments.forEach((comment) => {
+    items.push({
+      id: String(comment.id),
+      authorName: comment.author_name ?? "Sistem",
+      body: comment.body,
+      createdAt: comment.created_at,
+      isInternal: comment.is_internal,
+      isOptimistic: comment.id < 0,
+      isInitial: false,
+      isOwn: isOwnComment(comment, user),
+    });
+  });
+
+  return items;
+}
+
+function shouldShowMessageMeta(items: ChatItem[], index: number) {
+  if (index === 0) {
+    return true;
+  }
+
+  const current = items[index];
+  const previous = items[index - 1];
+
+  return (
+    current.authorName !== previous.authorName ||
+    current.isInternal !== previous.isInternal ||
+    current.isInitial !== previous.isInitial ||
+    current.isOwn !== previous.isOwn
+  );
+}
+
+function ChatBubble({
+  item,
+  showMeta,
+}: {
+  item: ChatItem;
+  showMeta: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex w-full flex-col",
+        item.isOwn ? "items-end" : "items-start"
+      )}
+    >
+      {showMeta ? (
+        <div
+          className={cn(
+            "mb-xs flex max-w-[82%] flex-wrap items-center gap-xs text-caption text-text-secondary",
+            item.isOwn && "justify-end text-right"
+          )}
+        >
+          <span className="font-semibold text-text-primary">{item.authorName}</span>
+          <span>·</span>
+          <span>{formatDateTime(item.createdAt)}</span>
+
+          {item.isInitial ? (
+            <span className="rounded-full border border-border bg-surface-1 px-xs py-[2px] text-[10px] text-text-secondary">
+              İlk talep
+            </span>
+          ) : null}
+
+          {item.isInternal ? (
+            <span className="inline-flex items-center gap-[3px] rounded-full border border-warning/30 bg-warning-bg px-xs py-[2px] text-[10px] font-semibold text-warning">
+              <IconLock size={10} aria-hidden={true} />
+              Dahili
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div
+        className={cn(
+          "max-w-[82%] rounded-[22px] border px-md py-sm shadow-sm",
+          item.isOwn && !item.isInternal
+            ? "rounded-br-md border-accent/20 bg-accent text-white"
+            : null,
+          !item.isOwn && !item.isInternal
+            ? "rounded-bl-md border-border bg-surface-1 text-text-primary"
+            : null,
+          item.isInternal
+            ? "rounded-br-md border-warning/35 bg-warning-bg text-text-primary"
+            : null,
+          item.isOptimistic && "opacity-80"
+        )}
+      >
+        <p
+          className={cn(
+            "whitespace-pre-wrap break-words text-body leading-relaxed",
+            item.isOwn && !item.isInternal ? "text-white" : "text-text-primary"
+          )}
+        >
+          {item.body}
+        </p>
+
+        {item.isOptimistic ? (
+          <p
+            className={cn(
+              "mt-xs text-[11px]",
+              item.isOwn && !item.isInternal
+                ? "text-white/80"
+                : "text-text-secondary"
+            )}
+          >
+            Gönderiliyor...
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function TicketChatPanel({
   ticket,
   open,
@@ -156,11 +359,13 @@ export function TicketChatPanel({
   onCommentCreated,
   variant = "panel",
   headerSlot,
+  composerTopSlot,
   descriptionAsFirstMessage = false,
   className,
 }: TicketChatPanelProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const messageListRef = useRef<HTMLDivElement | null>(null);
 
   const ticketId = ticket?.id ?? null;
   const commentsQuery = useTicketComments(ticketId, open);
@@ -187,6 +392,17 @@ export function TicketChatPanel({
     [comments]
   );
 
+  const chatItems = useMemo(
+    () =>
+      buildChatItems({
+        ticket,
+        comments: sortedComments,
+        descriptionAsFirstMessage,
+        user,
+      }),
+    [ticket, sortedComments, descriptionAsFirstMessage, user]
+  );
+
   useEffect(() => {
     setMode(
       normalizeChatMode({
@@ -203,6 +419,19 @@ export function TicketChatPanel({
       setMode("public_reply");
     }
   }, [open]);
+
+  useEffect(() => {
+    const node = messageListRef.current;
+
+    if (!node || !open) {
+      return;
+    }
+
+    node.scrollTo({
+      top: node.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [chatItems.length, open, ticketId]);
 
   const createCommentMutation = useMutation<
     TicketComment,
@@ -291,9 +520,7 @@ export function TicketChatPanel({
     },
   });
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  function submitCurrentMessage() {
     const trimmedBody = body.trim();
 
     if (!ticketId || !trimmedBody || createCommentMutation.isPending) {
@@ -308,6 +535,22 @@ export function TicketChatPanel({
     setError(null);
     setBody("");
     createCommentMutation.mutate(payload);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    submitCurrentMessage();
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      submitCurrentMessage();
+    }
   }
 
   if (!open || !ticket) {
@@ -335,6 +578,7 @@ export function TicketChatPanel({
   const statusMeta = getTicketStatusMeta(ticket.status);
   const priorityMeta = getTicketPriorityMeta(ticket.priority);
   const approvalMeta = getTicketApprovalMeta(ticket.approval_status);
+  const canSubmit = Boolean(body.trim()) && !createCommentMutation.isPending;
 
   return (
     <aside
@@ -357,7 +601,7 @@ export function TicketChatPanel({
         ) : (
           <div className="flex items-start justify-between gap-md border-b border-border pb-md">
             <div>
-              <p className="text-caption text-text-secondary">Talep Mesajları</p>
+              <p className="text-caption text-text-secondary">Talep mesajları</p>
               <h2 className="mt-xs text-h3 text-text-primary">
                 #{ticket.id} {ticket.title}
               </h2>
@@ -395,94 +639,50 @@ export function TicketChatPanel({
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-md border-b border-border px-md py-sm">
-          <p className="text-caption text-text-secondary">
-            Panel açıkken mesajlar 5 saniyede bir yenilenir.
-          </p>
+        <div className="flex items-center justify-between gap-md border-b border-border px-md py-xs">
+          <div className="flex items-center gap-xs text-caption text-text-secondary">
+            <span className="h-2 w-2 rounded-full bg-success" />
+            <span>Canlı sohbet</span>
+          </div>
 
           <button
             type="button"
             onClick={() => commentsQuery.refetch()}
             disabled={commentsQuery.isFetching}
-            className="inline-flex items-center gap-xs rounded-app border border-border px-sm py-xs text-caption text-text-secondary transition hover:border-accent hover:text-accent disabled:opacity-60"
+            className="inline-flex h-8 items-center gap-xs rounded-full border border-border px-sm text-caption text-text-secondary transition hover:border-accent hover:text-accent disabled:opacity-60"
           >
-            <IconRefresh size={14} aria-hidden={true} />
+            <IconRefresh
+              size={14}
+              aria-hidden={true}
+              className={commentsQuery.isFetching ? "animate-spin" : undefined}
+            />
             {commentsQuery.isFetching ? "Yenileniyor" : "Yenile"}
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-surface-0 p-md">
+        <div
+          ref={messageListRef}
+          className="min-h-0 flex-1 overflow-y-auto bg-surface-0 px-md py-lg"
+        >
           {commentsQuery.isLoading ? (
             <p className="text-body text-text-secondary">Mesajlar yükleniyor...</p>
+          ) : chatItems.length === 0 ? (
+            <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-text-secondary">
+                <IconMessageCircle size={20} aria-hidden={true} />
+              </div>
+              <p className="mt-sm text-body text-text-secondary">
+                Henüz mesaj yok. İlk mesajı buradan yazabilirsin.
+              </p>
+            </div>
           ) : (
             <div className="space-y-sm">
-              {descriptionAsFirstMessage ? (
-                <div className="rounded-2xl border border-border bg-surface-1 p-md">
-                  <div className="flex items-center justify-between gap-md">
-                    <div>
-                      <p className="text-body font-semibold text-text-primary">
-                        {ticket.employee_name}
-                      </p>
-                      <p className="text-caption text-text-secondary">
-                        {formatDateTime(ticket.created_at)}
-                      </p>
-                    </div>
-                    <StatusBadge variant="neutral">İlk talep</StatusBadge>
-                  </div>
-
-                  <p className="mt-sm whitespace-pre-wrap text-body text-text-secondary">
-                    {ticket.description}
-                  </p>
-                </div>
-              ) : null}
-
-              {sortedComments.length === 0 && !descriptionAsFirstMessage ? (
-                <p className="text-body text-text-secondary">
-                  Henüz mesaj yok. İlk mesajı buradan yazabilirsin.
-                </p>
-              ) : null}
-
-              {sortedComments.map((comment) => (
-                <div
-                  key={comment.id}
-                  className={cn(
-                    "rounded-2xl border p-md",
-                    comment.id < 0 && "border-accent/40 bg-accent/10",
-                    comment.id >= 0 &&
-                      comment.is_internal &&
-                      "border-warning/40 bg-warning-bg",
-                    comment.id >= 0 &&
-                      !comment.is_internal &&
-                      "border-border bg-surface-1"
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-md">
-                    <div>
-                      <p className="text-body font-semibold text-text-primary">
-                        {comment.author_name ?? "Sistem"}
-                      </p>
-                      <p className="text-caption text-text-secondary">
-                        {formatDateTime(comment.created_at)}
-                      </p>
-                    </div>
-
-                    {comment.is_internal ? (
-                      <StatusBadge variant="warning">Dahili IT notu</StatusBadge>
-                    ) : (
-                      <StatusBadge variant="accent">Talep edene yanıt</StatusBadge>
-                    )}
-                  </div>
-
-                  <p className="mt-sm whitespace-pre-wrap text-body text-text-secondary">
-                    {comment.body}
-                  </p>
-
-                  {comment.id < 0 ? (
-                    <p className="mt-xs text-caption text-text-secondary">
-                      Gönderiliyor...
-                    </p>
-                  ) : null}
-                </div>
+              {chatItems.map((item, index) => (
+                <ChatBubble
+                  key={item.id}
+                  item={item}
+                  showMeta={shouldShowMessageMeta(chatItems, index)}
+                />
               ))}
             </div>
           )}
@@ -503,79 +703,90 @@ export function TicketChatPanel({
           )}
           onSubmit={handleSubmit}
         >
-          {allowInternalNotes ? (
-            <div className="mb-sm grid grid-cols-2 gap-xs rounded-app border border-border bg-surface-2 p-xs">
-              <button
-                type="button"
-                onClick={() => setMode("public_reply")}
-                className={cn(
-                  "rounded-app px-sm py-xs text-caption transition",
-                  mode === "public_reply"
-                    ? "bg-accent text-white"
-                    : "text-text-secondary hover:text-text-primary"
-                )}
-              >
-                Talep edene yanıt
-              </button>
+          {composerTopSlot ? <div className="mb-sm">{composerTopSlot}</div> : null}
 
-              <button
-                type="button"
-                onClick={() => setMode("internal_note")}
-                className={cn(
-                  "rounded-app px-sm py-xs text-caption transition",
-                  mode === "internal_note"
-                    ? "bg-warning text-white"
-                    : "text-text-secondary hover:text-text-primary"
-                )}
-              >
-                Dahili IT notu
-              </button>
-            </div>
-          ) : null}
+          <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
+            {allowInternalNotes ? (
+              <div className="grid grid-cols-2 gap-xs rounded-full border border-border bg-surface-2 p-[3px]">
+                <button
+                  type="button"
+                  onClick={() => setMode("public_reply")}
+                  className={cn(
+                    "rounded-full px-sm py-xs text-caption font-semibold transition",
+                    mode === "public_reply"
+                      ? "bg-accent text-white"
+                      : "text-text-secondary hover:text-text-primary"
+                  )}
+                >
+                  Yanıt
+                </button>
 
-          {isInternalMode ? (
-            <div className="mb-sm rounded-app border border-warning/40 bg-surface-1 px-md py-sm text-caption text-warning">
-              Bu not sadece Admin/Technician kullanıcıları tarafından görülür.
-              Talep sahibi bu mesajı görmez.
-            </div>
-          ) : (
-            <div className="mb-sm rounded-app border border-accent/30 bg-accent-bg px-md py-sm text-caption text-accent">
-              Bu mesaj talep sahibine görünür.
-            </div>
-          )}
-
-          <label className="text-caption text-text-secondary">
-            {isInternalMode ? "Dahili IT notu" : "Talep edene yanıt"}
-          </label>
-
-          <textarea
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            className={cn(
-              "mt-xs min-h-[96px] w-full rounded-app border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent",
-              isInternalMode ? "border-warning/50" : "border-border"
+                <button
+                  type="button"
+                  onClick={() => setMode("internal_note")}
+                  className={cn(
+                    "rounded-full px-sm py-xs text-caption font-semibold transition",
+                    mode === "internal_note"
+                      ? "bg-warning text-white"
+                      : "text-text-secondary hover:text-text-primary"
+                  )}
+                >
+                  Dahili
+                </button>
+              </div>
+            ) : (
+              <span className="text-caption text-text-secondary">
+                Talep yanıtı
+              </span>
             )}
-            placeholder={
-              isInternalMode
-                ? "Sadece IT ekibinin göreceği dahili not yaz. Örn: Loglar kontrol edildi, kullanıcıya henüz bilgi verilmedi."
-                : "Talep sahibine görünecek yanıtı yaz. Örn: Kontrol ettik, VPN profilinizi yeniledik."
-            }
-          />
 
-          <button
-            type="submit"
-            disabled={!body.trim() || createCommentMutation.isPending}
+            <span
+              className={cn(
+                "text-caption",
+                isInternalMode ? "text-warning" : "text-text-secondary"
+              )}
+            >
+              {isInternalMode
+                ? "Sadece IT ekibi görür"
+                : "Requester tarafından görünür"}
+            </span>
+          </div>
+
+          <div
             className={cn(
-              "mt-sm w-full rounded-app px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
-              isInternalMode ? "bg-warning" : "bg-accent"
+              "flex items-end gap-sm rounded-[24px] border bg-surface-0 p-xs shadow-panel transition focus-within:border-accent",
+              isInternalMode ? "border-warning/45" : "border-border"
             )}
           >
-            {createCommentMutation.isPending
-              ? "Gönderiliyor..."
-              : isInternalMode
-                ? "Dahili notu kaydet"
-                : "Yanıtı gönder"}
-          </button>
+            <textarea
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              rows={1}
+              className="max-h-36 min-h-[44px] flex-1 resize-none bg-transparent px-sm py-[11px] text-body text-text-primary outline-none placeholder:text-text-secondary"
+              placeholder={
+                isInternalMode
+                  ? "Dahili not yaz..."
+                  : "Mesaj yaz..."
+              }
+            />
+
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+                isInternalMode ? "bg-warning" : "bg-accent"
+              )}
+              aria-label={isInternalMode ? "Dahili notu kaydet" : "Mesaj gönder"}
+            >
+              <IconSend size={18} aria-hidden={true} />
+            </button>
+          </div>
+
+          <p className="mt-xs text-right text-[11px] text-text-secondary">
+            Enter gönderir · Shift+Enter yeni satır
+          </p>
         </form>
       </div>
     </aside>
