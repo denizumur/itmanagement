@@ -13,6 +13,7 @@ from apps.tickets.models import (
     TicketApproval,
     TicketAttachment,
     TicketComment,
+    TicketITDecision,
 )
 
 User = get_user_model()
@@ -1303,4 +1304,238 @@ class TicketApiTests(APITestCase):
         self.assertIsNone(ticket.resolved_by)
         self.assertIsNone(ticket.resolved_at)
         self.assertIsNone(ticket.closed_by)
-        self.assertIsNone(ticket.closed_at)    
+        self.assertIsNone(ticket.closed_at)
+
+    def get_timeline_stages(self, ticket):
+        response = self.client.get(f"/api/tickets/{ticket.id}/timeline/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("stages", response.data)
+        self.assertIn("items", response.data)
+
+        return response.data["stages"]
+
+    def test_requester_can_read_own_timeline_with_skipped_approval_stage(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Timeline not required ticket",
+            description="Onay gerektirmeyen timeline testi.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        stages = self.get_timeline_stages(ticket)
+
+        self.assertEqual(stages[0]["stage"], "created")
+        self.assertEqual(stages[0]["state"], "done")
+
+        approval_stages = [
+            stage for stage in stages if stage["stage"] == "approval"
+        ]
+        it_stages = [
+            stage for stage in stages if stage["stage"] == "it_review"
+        ]
+        resolved_stages = [
+            stage for stage in stages if stage["stage"] == "resolved"
+        ]
+
+        self.assertEqual(len(approval_stages), 1)
+        self.assertEqual(approval_stages[0]["state"], "skipped")
+        self.assertEqual(len(it_stages), 1)
+        self.assertEqual(it_stages[0]["state"], "pending")
+        self.assertEqual(len(resolved_stages), 1)
+        self.assertEqual(resolved_stages[0]["state"], "pending")
+
+    def test_requester_cannot_read_someone_elses_timeline(self):
+        other_requester = self.create_user_with_role(
+            "timeline-other-requester",
+            UserProfile.Role.REQUESTER,
+        )
+        other_employee = Employee.objects.create(
+            user=other_requester,
+            full_name="Timeline Other Requester",
+            email="timeline.other@example.com",
+            is_active=True,
+        )
+        ticket = Ticket.objects.create(
+            employee=other_employee,
+            title="Başka requester timeline",
+            description="Bu timeline mevcut requester tarafından görülmemeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=other_requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.get(f"/api/tickets/{ticket.id}/timeline/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_approver_can_read_related_ticket_timeline(self):
+        self.employee.manager = self.approver_employee
+        self.employee.save(update_fields=["manager"])
+
+        self.client.force_authenticate(user=self.requester)
+
+        create_response = self.client.post(
+            "/api/tickets/",
+            {
+                "title": "Timeline onaylı talep",
+                "description": "Onay süreci olan ticket timeline testi.",
+                "category": Ticket.Category.ACCESS,
+                "priority": Ticket.Priority.NORMAL,
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        ticket = Ticket.objects.get(id=create_response.data["id"])
+
+        self.client.force_authenticate(user=self.approver)
+
+        stages = self.get_timeline_stages(ticket)
+
+        approval_stages = [
+            stage for stage in stages if stage["stage"] == "approval"
+        ]
+        it_stages = [
+            stage for stage in stages if stage["stage"] == "it_review"
+        ]
+
+        self.assertEqual(len(approval_stages), 1)
+        self.assertEqual(approval_stages[0]["state"], "pending")
+        self.assertEqual(len(it_stages), 1)
+        self.assertEqual(it_stages[0]["state"], "pending")
+
+    def test_timeline_includes_it_return_and_resubmit_second_approval_round(self):
+        self.employee.manager = self.approver_employee
+        self.employee.save(update_fields=["manager"])
+
+        self.client.force_authenticate(user=self.requester)
+
+        create_response = self.client.post(
+            "/api/tickets/",
+            {
+                "title": "Timeline resubmit talebi",
+                "description": "Resubmit sonrası ikinci onay turu timeline testidir.",
+                "category": Ticket.Category.ACCESS,
+                "priority": Ticket.Priority.HIGH,
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        ticket = Ticket.objects.get(id=create_response.data["id"])
+
+        self.client.force_authenticate(user=self.approver)
+
+        approve_response = self.client.post(
+            f"/api/tickets/{ticket.id}/approve/",
+            {
+                "decision_note": "İlk onay verildi.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(approve_response.status_code, status.HTTP_200_OK)
+
+        self.client.force_authenticate(user=self.technician)
+
+        return_response = self.client.post(
+            f"/api/tickets/{ticket.id}/return-to-requester/",
+            {
+                "comment": (
+                    "Talep kapsamı net değil. Hangi erişimlerin gerektiğini "
+                    "açıklayıp tekrar gönderin."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(return_response.status_code, status.HTTP_200_OK)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.RETURNED_TO_REQUESTER)
+        self.assertEqual(TicketITDecision.objects.filter(ticket=ticket).count(), 1)
+
+        self.client.force_authenticate(user=self.requester)
+
+        resubmit_response = self.client.post(
+            f"/api/tickets/{ticket.id}/resubmit/",
+            {
+                "description": (
+                    "ERP içinde cari hesap raporları ve aylık kapanış "
+                    "raporlarına erişim gerekiyor."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(resubmit_response.status_code, status.HTTP_200_OK)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.OPEN)
+        self.assertEqual(ticket.approval_status, Ticket.ApprovalStatus.PENDING)
+
+        stages = self.get_timeline_stages(ticket)
+
+        approval_stages = [
+            stage for stage in stages if stage["stage"] == "approval"
+        ]
+        it_stages = [
+            stage for stage in stages if stage["stage"] == "it_review"
+        ]
+
+        self.assertEqual(len(approval_stages), 2)
+        self.assertEqual(approval_stages[0]["state"], "approved")
+        self.assertEqual(approval_stages[1]["state"], "pending")
+
+        returned_it_stages = [
+            stage for stage in it_stages if stage["state"] == "returned"
+        ]
+        pending_it_stages = [
+            stage for stage in it_stages if stage["state"] == "pending"
+        ]
+
+        self.assertEqual(len(returned_it_stages), 1)
+        self.assertIn("Talep kapsamı net değil", returned_it_stages[0]["comment"])
+        self.assertGreaterEqual(len(pending_it_stages), 1)
+
+    def test_resolved_ticket_timeline_has_done_resolved_stage(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Timeline resolved ticket",
+            description="Çözülmüş ticket timeline testi.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Sorun giderildi.",
+            resolved_by=self.technician,
+            resolved_at=timezone.now(),
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        stages = self.get_timeline_stages(ticket)
+
+        resolved_stages = [
+            stage for stage in stages if stage["stage"] == "resolved"
+        ]
+
+        self.assertEqual(len(resolved_stages), 1)
+        self.assertEqual(resolved_stages[0]["state"], "done")
+        self.assertEqual(resolved_stages[0]["comment"], "Sorun giderildi.") 

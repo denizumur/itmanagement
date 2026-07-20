@@ -543,10 +543,22 @@ class TicketViewSet(ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="timeline")
     def timeline(self, request, pk=None):
-        if not can_view_it_queue(request.user):
-            raise PermissionDenied("Ticket timeline görüntüleme yetkin yok.")
-
         ticket = self.get_object()
+
+        user_can_view_timeline = (
+            can_view_it_queue(request.user)
+            or (
+                is_requester(request.user)
+                and ticket.employee.user_id == request.user.id
+            )
+            or (
+                is_approver(request.user)
+                and ticket.approvals.filter(approver_user=request.user).exists()
+            )
+        )
+
+        if not user_can_view_timeline:
+            raise PermissionDenied("Ticket timeline görüntüleme yetkin yok.")
 
         return Response(build_ticket_timeline(ticket))
 
