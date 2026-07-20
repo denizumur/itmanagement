@@ -1,8 +1,17 @@
 import type { PaginatedApiResponse } from "./api";
 
-export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketStatus =
+  | "open"
+  | "in_progress"
+  | "returned_to_requester"
+  | "resolved"
+  | "closed";
 
-export type TicketPriority = "low" | "normal" | "high" | "urgent";
+export type TicketPriority =
+  | "low"
+  | "normal"
+  | "high"
+  | "urgent";
 
 export type TicketCategory =
   | "hardware"
@@ -85,7 +94,7 @@ export interface TicketApproval {
 }
 
 export interface TicketApprovalDecisionPayload {
-  decision_note?: string;
+  decision_note: string;
 }
 
 export interface TicketComment {
@@ -124,6 +133,7 @@ export interface TicketSummary {
   total: number;
   open: number;
   in_progress: number;
+  returned_to_requester: number;
   resolved: number;
   closed: number;
   urgent: number;
@@ -270,6 +280,7 @@ export interface TicketContextActions {
   can_view_context: boolean;
   can_update_status: boolean;
   can_assign_ticket: boolean;
+  can_return_to_requester: boolean;
   can_add_public_reply: boolean;
   can_add_internal_note: boolean;
   can_upload_attachment: boolean;
@@ -315,6 +326,8 @@ export type TicketTimelineItemType =
   | "approval_rejected"
   | "status_changed"
   | "assigned_changed"
+  | "requester_resubmitted"
+  | "it_returned_to_requester"
   | "public_comment_added"
   | "internal_note_added"
   | "solution_note_added"
@@ -339,8 +352,43 @@ export interface TicketTimelineItem {
   metadata: Record<string, unknown>;
 }
 
+export type TicketTimelineStageName =
+  | "created"
+  | "approval"
+  | "it_review"
+  | "resolved";
+
+export type TicketTimelineStageState =
+  | "done"
+  | "approved"
+  | "rejected"
+  | "pending"
+  | "skipped"
+  | "in_progress"
+  | "returned"
+  | "resolved";
+
+export interface TicketTimelineStage {
+  id: string;
+  stage: TicketTimelineStageName;
+  label: string;
+  state: TicketTimelineStageState;
+  actor: string | null;
+  actor_name: string | null;
+  timestamp: string | null;
+  created_at: string | null;
+  comment: string | null;
+  round: number;
+  metadata: Record<string, unknown>;
+}
+
 export interface TicketTimelineResponse {
   ticket: number;
+  current_status: TicketStatus;
+  current_status_label: string;
+  current_approval_status: TicketApprovalStatus;
+  current_approval_status_label: string;
+  stages: TicketTimelineStage[];
   items: TicketTimelineItem[];
 }
 export type PaginatedTicketResponse<T> = PaginatedApiResponse<T>;
