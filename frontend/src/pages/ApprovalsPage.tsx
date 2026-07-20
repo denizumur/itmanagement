@@ -22,10 +22,13 @@ const statusMeta: Record<
 > = {
   open: { label: "Açık", variant: "accent" },
   in_progress: { label: "İşlemde", variant: "warning" },
+  returned_to_requester: {
+    label: "Geri gönderildi",
+    variant: "danger",
+  },
   resolved: { label: "Çözüldü", variant: "success" },
   closed: { label: "Kapandı", variant: "neutral" },
 };
-
 const priorityMeta: Record<
   TicketPriority,
   {

@@ -29,6 +29,10 @@ export const ticketStatusMeta: Record<
 > = {
   open: { label: "Gönderildi", variant: "accent" },
   in_progress: { label: "IT inceliyor", variant: "warning" },
+  returned_to_requester: {
+    label: "Geri gönderildi",
+    variant: "danger",
+  },
   resolved: { label: "Çözüldü", variant: "success" },
   closed: { label: "Kapandı", variant: "neutral" },
 };
