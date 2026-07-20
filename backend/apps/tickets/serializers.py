@@ -10,6 +10,7 @@ from apps.tickets.models import (
     Ticket,
     TicketApproval,
     TicketAttachment,
+    TicketITDecision,
     TicketComment,
     validate_ticket_attachment_file,
 )
@@ -214,13 +215,81 @@ class TicketAssignSerializer(serializers.Serializer):
         return user
 
 
-class TicketApprovalDecisionSerializer(serializers.Serializer):
-    decision_note = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        max_length=1000,
+class TicketITReturnSerializer(serializers.Serializer):
+    comment = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=2000,
+        trim_whitespace=True,
+        error_messages={
+            "blank": "Geri çevirme açıklaması zorunludur.",
+            "required": "Geri çevirme açıklaması zorunludur.",
+        },
     )
 
+
+class TicketResubmitSerializer(serializers.Serializer):
+    title = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        max_length=180,
+        trim_whitespace=True,
+    )
+    description = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    def validate_title(self, value):
+        value = value.strip()
+
+        if len(value) < 3:
+            raise serializers.ValidationError("Talep başlığı en az 3 karakter olmalı.")
+
+        return value
+
+    def validate_description(self, value):
+        value = value.strip()
+
+        if len(value) < 10:
+            raise serializers.ValidationError("Açıklama en az 10 karakter olmalı.")
+
+        return value
+
+
+class TicketITDecisionSerializer(serializers.ModelSerializer):
+    technician_name = serializers.SerializerMethodField()
+    decision_label = serializers.CharField(source="get_decision_display", read_only=True)
+
+    class Meta:
+        model = TicketITDecision
+        fields = [
+            "id",
+            "ticket",
+            "technician",
+            "technician_name",
+            "decision",
+            "decision_label",
+            "comment",
+            "decided_at",
+        ]
+        read_only_fields = fields
+
+    def get_technician_name(self, obj):
+        return get_user_display_name(obj.technician)
+    
+class TicketApprovalDecisionSerializer(serializers.Serializer):
+    decision_note = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=1000,
+        trim_whitespace=True,
+        error_messages={
+            "blank": "Onay/red açıklaması zorunludur.",
+            "required": "Onay/red açıklaması zorunludur.",
+        },
+    )
 
 class TicketApprovalSerializer(serializers.ModelSerializer):
     ticket = TicketSerializer(read_only=True)

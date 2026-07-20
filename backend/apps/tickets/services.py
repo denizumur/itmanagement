@@ -28,6 +28,10 @@ def get_approval_manager_for_employee(employee: Employee):
     return manager
 
 
+def employee_requires_ticket_approval(employee: Employee):
+    return get_approval_manager_for_employee(employee) is not None
+
+
 def initialize_ticket_approval(ticket: Ticket, *, requested_by):
     approver = get_approval_manager_for_employee(ticket.employee)
 
@@ -55,7 +59,7 @@ def initialize_ticket_approval(ticket: Ticket, *, requested_by):
     return approval
 
 
-def approve_ticket(ticket: Ticket, *, approver_user, decision_note=""):
+def approve_ticket(ticket: Ticket, *, approver_user, decision_note):
     approval = get_pending_approval_for_user(ticket, approver_user)
 
     approval.status = TicketApproval.Status.APPROVED
@@ -69,7 +73,7 @@ def approve_ticket(ticket: Ticket, *, approver_user, decision_note=""):
     return approval
 
 
-def reject_ticket(ticket: Ticket, *, approver_user, decision_note=""):
+def reject_ticket(ticket: Ticket, *, approver_user, decision_note):
     approval = get_pending_approval_for_user(ticket, approver_user)
 
     now = timezone.now()

@@ -70,6 +70,7 @@ class Ticket(models.Model):
     class Status(models.TextChoices):
         OPEN = "open", "Açık"
         IN_PROGRESS = "in_progress", "İşlemde"
+        RETURNED_TO_REQUESTER = "returned_to_requester", "Talep sahibine geri gönderildi"
         RESOLVED = "resolved", "Çözüldü"
         CLOSED = "closed", "Kapandı"
 
@@ -294,7 +295,52 @@ class TicketApproval(models.Model):
     def __str__(self):
         return f"Ticket #{self.ticket_id} - {self.get_status_display()}"
 
+class TicketITDecision(models.Model):
+    class Decision(models.TextChoices):
+        RETURNED = "returned", "Geri Çevrildi"
 
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="it_decisions",
+    )
+    technician = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="ticket_it_decisions",
+    )
+    decision = models.CharField(
+        max_length=30,
+        choices=Decision.choices,
+        default=Decision.RETURNED,
+    )
+    comment = models.TextField()
+    decided_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Ticket IT Kararı"
+        verbose_name_plural = "Ticket IT Kararları"
+        ordering = ["-decided_at"]
+        indexes = [
+            models.Index(fields=["ticket", "decided_at"]),
+            models.Index(fields=["technician", "decided_at"]),
+            models.Index(fields=["decision"]),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if not (self.comment or "").strip():
+            raise ValidationError({"comment": "Geri çevirme açıklaması zorunludur."})
+
+    def save(self, *args, **kwargs):
+        self.comment = (self.comment or "").strip()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Ticket #{self.ticket_id} - {self.get_decision_display()}"
+    
 class TicketComment(models.Model):
     ticket = models.ForeignKey(
         Ticket,

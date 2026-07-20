@@ -12,6 +12,7 @@ URGENCY_SCORE_OVERDUE_REMINDER = 100
 URGENCY_SCORE_URGENT_TICKET = 95
 URGENCY_SCORE_DUE_TODAY_REMINDER = 90
 URGENCY_SCORE_PENDING_APPROVAL = 85
+URGENCY_SCORE_RETURNED_TICKET = 88
 URGENCY_SCORE_HIGH_TICKET = 80
 URGENCY_SCORE_SEVEN_DAY_REMINDER = 60
 URGENCY_SCORE_NORMAL_TICKET = 40
@@ -73,6 +74,9 @@ def ticket_urgency_score(ticket):
 
 
 def requester_ticket_urgency_score(ticket):
+    if ticket.status == Ticket.Status.RETURNED_TO_REQUESTER:
+        return URGENCY_SCORE_RETURNED_TICKET
+
     if ticket.priority == Ticket.Priority.URGENT and ticket.status != Ticket.Status.RESOLVED:
         return URGENCY_SCORE_URGENT_TICKET
 
@@ -139,13 +143,18 @@ def ticket_to_notification(ticket):
 def requester_ticket_to_notification(ticket):
     score = requester_ticket_urgency_score(ticket)
     severity = severity_from_score(score)
-
+    if ticket.status == Ticket.Status.RETURNED_TO_REQUESTER:
+        title = "Ticket geri gönderildi"
+        message = f"#{ticket.id} - {ticket.title}: IT açıklama bekliyor"
+    else:
+        title = "Ticket durumun güncellendi"
+        message = f"#{ticket.id} - {ticket.title}: {ticket.get_status_display()}"
     item = {
         "id": f"ticket:{ticket.id}",
         "type": "ticket",
         "severity": severity,
-        "title": "Ticket durumun güncellendi",
-        "message": f"#{ticket.id} - {ticket.title}: {ticket.get_status_display()}",
+        "title": title,
+        "message": message,
         "url": "/my-tickets",
         "created_at": ticket.updated_at,
         "metadata": {
@@ -353,6 +362,7 @@ def get_requester_ticket_notifications(user):
             employee__user=user,
             status__in=[
                 Ticket.Status.OPEN,
+                Ticket.Status.RETURNED_TO_REQUESTER,
                 Ticket.Status.IN_PROGRESS,
                 Ticket.Status.RESOLVED,
             ],

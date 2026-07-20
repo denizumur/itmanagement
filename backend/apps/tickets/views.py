@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -25,6 +26,7 @@ from apps.tickets.models import (
     TicketApproval,
     TicketAttachment,
     TicketComment,
+    TicketITDecision,
 )
 from apps.tickets.serializers import (
     TicketApprovalDecisionSerializer,
@@ -34,6 +36,8 @@ from apps.tickets.serializers import (
     TicketAttachmentSerializer,
     TicketCommentSerializer,
     TicketCreateSerializer,
+    TicketITReturnSerializer,
+    TicketResubmitSerializer,
     TicketSerializer,
     TicketStatusUpdateSerializer,
     build_requester_context,
@@ -41,6 +45,7 @@ from apps.tickets.serializers import (
 )
 from apps.tickets.services import (
     approve_ticket,
+    employee_requires_ticket_approval,
     get_pending_approval_for_user,
     initialize_ticket_approval,
     reject_ticket,
@@ -85,6 +90,9 @@ def can_view_it_queue(user):
 
 
 def ticket_can_enter_it_queue(ticket):
+    if ticket.status == Ticket.Status.RETURNED_TO_REQUESTER:
+        return False
+
     return ticket.approval_status in {
         Ticket.ApprovalStatus.NOT_REQUIRED,
         Ticket.ApprovalStatus.APPROVED,
@@ -176,10 +184,21 @@ def build_ticket_action_permissions(user, ticket):
     can_enter_it_queue = ticket_can_enter_it_queue(ticket)
     can_change_it_fields = can_manage and can_enter_it_queue
 
+    can_return_to_requester = (
+        can_manage
+        and can_enter_it_queue
+        and ticket.status
+        in {
+            Ticket.Status.OPEN,
+            Ticket.Status.IN_PROGRESS,
+        }
+    )
+
     return {
         "can_view_context": can_view_it_queue(user),
         "can_update_status": can_change_it_fields,
         "can_assign_ticket": can_change_it_fields,
+        "can_return_to_requester": can_return_to_requester,
         "can_add_public_reply": can_manage,
         "can_add_internal_note": can_manage,
         "can_upload_attachment": can_manage,
@@ -189,7 +208,10 @@ def build_ticket_action_permissions(user, ticket):
         "blocked_reason": (
             None
             if can_enter_it_queue
-            else "Onay bekleyen veya reddedilmiş ticket üzerinde IT işlemi yapılamaz."
+            else (
+                "Onay bekleyen, reddedilmiş veya talep sahibine geri gönderilmiş "
+                "ticket üzerinde IT işlemi yapılamaz."
+            )
         ),
     }
 
@@ -241,7 +263,12 @@ def get_ticket_table_queryset(user):
     queryset = get_accessible_ticket_queryset(user)
 
     if can_view_it_queue(user) and not is_requester(user):
-        return queryset.exclude(status=Ticket.Status.CLOSED).filter(
+        return queryset.exclude(
+            status__in=[
+                Ticket.Status.CLOSED,
+                Ticket.Status.RETURNED_TO_REQUESTER,
+            ]
+        ).filter(
             approval_status__in=[
                 Ticket.ApprovalStatus.NOT_REQUIRED,
                 Ticket.ApprovalStatus.APPROVED,
@@ -538,6 +565,9 @@ class TicketViewSet(ModelViewSet):
             "total": queryset.count(),
             "open": queryset.filter(status=Ticket.Status.OPEN).count(),
             "in_progress": queryset.filter(status=Ticket.Status.IN_PROGRESS).count(),
+            "returned_to_requester": queryset.filter(
+                status=Ticket.Status.RETURNED_TO_REQUESTER,
+            ).count(),
             "resolved": queryset.filter(status=Ticket.Status.RESOLVED).count(),
             "closed": queryset.filter(status=Ticket.Status.CLOSED).count(),
             "urgent": queryset.filter(priority=Ticket.Priority.URGENT).count(),
@@ -567,7 +597,12 @@ class TicketViewSet(ModelViewSet):
 
         queryset = self.filter_queryset(
             self.get_queryset()
-            .exclude(status=Ticket.Status.CLOSED)
+            .exclude(
+                status__in=[
+                    Ticket.Status.CLOSED,
+                    Ticket.Status.RETURNED_TO_REQUESTER,
+                ]
+            )
             .filter(
                 approval_status__in=[
                     Ticket.ApprovalStatus.NOT_REQUIRED,
@@ -642,7 +677,7 @@ class TicketViewSet(ModelViewSet):
         approval = approve_ticket(
             ticket,
             approver_user=request.user,
-            decision_note=serializer.validated_data.get("decision_note", ""),
+            decision_note=serializer.validated_data["decision_note"],
         )
 
         approval.refresh_from_db()
@@ -691,7 +726,7 @@ class TicketViewSet(ModelViewSet):
         approval = reject_ticket(
             ticket,
             approver_user=request.user,
-            decision_note=serializer.validated_data.get("decision_note", ""),
+            decision_note=serializer.validated_data["decision_note"],
         )
 
         approval.refresh_from_db()
@@ -718,6 +753,224 @@ class TicketViewSet(ModelViewSet):
 
         return Response(TicketSerializer(ticket, context={"request": request}).data)
 
+    @action(detail=True, methods=["post"], url_path="return-to-requester")
+    def return_to_requester(self, request, pk=None):
+        if not can_manage_tickets(request.user):
+            raise PermissionDenied("Ticket geri çevirme yetkin yok.")
+
+        ticket = self.get_object()
+
+        if not ticket_can_enter_it_queue(ticket):
+            raise PermissionDenied(
+                "Onay bekleyen, reddedilmiş veya zaten requester'a dönmüş ticket geri çevrilemez."
+            )
+
+        if ticket.status not in {Ticket.Status.OPEN, Ticket.Status.IN_PROGRESS}:
+            raise ValidationError(
+                {
+                    "status": (
+                        "Yalnızca açık veya işlemde olan ticketlar requester'a geri gönderilebilir."
+                    )
+                }
+            )
+
+        serializer = TicketITReturnSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            before = serialize_instance(ticket, exclude=TICKET_AUDIT_EXCLUDE_FIELDS)
+            status_before = ticket.status
+            assigned_to_before = ticket.assigned_to
+
+            decision = TicketITDecision.objects.create(
+                ticket=ticket,
+                technician=request.user,
+                decision=TicketITDecision.Decision.RETURNED,
+                comment=serializer.validated_data["comment"],
+            )
+
+            ticket.status = Ticket.Status.RETURNED_TO_REQUESTER
+            ticket.assigned_to = None
+            ticket.resolution_note = ""
+            ticket.resolved_by = None
+            ticket.resolved_at = None
+            ticket.closed_by = None
+            ticket.closed_at = None
+            ticket.save(
+                update_fields=[
+                    "status",
+                    "assigned_to",
+                    "resolution_note",
+                    "resolved_by",
+                    "resolved_at",
+                    "closed_by",
+                    "closed_at",
+                    "updated_at",
+                ]
+            )
+            ticket.refresh_from_db()
+
+            after = serialize_instance(ticket, exclude=TICKET_AUDIT_EXCLUDE_FIELDS)
+
+            create_ticket_audit_log(
+                request=request,
+                action="return",
+                ticket=ticket,
+                operation="it_return_to_requester",
+                before=before,
+                after=after,
+                timeline_type="it_returned_to_requester",
+                metadata={
+                    "decision_id": decision.id,
+                    "comment": decision.comment,
+                    "status_before": status_before,
+                    "status_after": ticket.status,
+                    "status_before_label": get_choice_label(
+                        Ticket.Status.choices,
+                        status_before,
+                    ),
+                    "status_after_label": ticket.get_status_display(),
+                    "assigned_to_before_id": (
+                        assigned_to_before.id if assigned_to_before else None
+                    ),
+                    "assigned_to_before_name": get_display_name(assigned_to_before),
+                },
+            )
+
+            create_audit_log(
+                request=request,
+                action="return",
+                instance=decision,
+                before={},
+                after=serialize_instance(decision, exclude=("decided_at",)),
+                metadata={
+                    "module": "tickets",
+                    "operation": "ticket_it_decision_created",
+                    "ticket_id": ticket.id,
+                    "timeline_type": "it_returned_to_requester",
+                    "decision_id": decision.id,
+                },
+            )
+
+        return Response(TicketSerializer(ticket, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"], url_path="resubmit")
+    def resubmit(self, request, pk=None):
+        ticket = self.get_object()
+
+        if not is_requester(request.user):
+            raise PermissionDenied("Ticket tekrar gönderme yalnızca requester rolü içindir.")
+
+        if ticket.employee.user_id != request.user.id:
+            raise PermissionDenied("Yalnızca kendi ticketınızı tekrar gönderebilirsiniz.")
+
+        if ticket.status != Ticket.Status.RETURNED_TO_REQUESTER:
+            raise ValidationError(
+                {
+                    "status": (
+                        "Yalnızca IT tarafından requester'a geri gönderilmiş ticketlar tekrar gönderilebilir."
+                    )
+                }
+            )
+
+        serializer = TicketResubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            before = serialize_instance(ticket, exclude=TICKET_AUDIT_EXCLUDE_FIELDS)
+            status_before = ticket.status
+            approval_status_before = ticket.approval_status
+
+            if "title" in serializer.validated_data:
+                ticket.title = serializer.validated_data["title"]
+
+            if "description" in serializer.validated_data:
+                ticket.description = serializer.validated_data["description"]
+
+            ticket.status = Ticket.Status.OPEN
+            ticket.assigned_to = None
+            ticket.resolution_note = ""
+            ticket.resolved_by = None
+            ticket.resolved_at = None
+            ticket.closed_by = None
+            ticket.closed_at = None
+
+            if employee_requires_ticket_approval(ticket.employee):
+                ticket.approval_status = Ticket.ApprovalStatus.PENDING
+            else:
+                ticket.approval_status = Ticket.ApprovalStatus.NOT_REQUIRED
+
+            ticket.save(
+                update_fields=[
+                    "title",
+                    "description",
+                    "status",
+                    "approval_status",
+                    "assigned_to",
+                    "resolution_note",
+                    "resolved_by",
+                    "resolved_at",
+                    "closed_by",
+                    "closed_at",
+                    "updated_at",
+                ]
+            )
+
+            approval = None
+
+            if ticket.approval_status == Ticket.ApprovalStatus.PENDING:
+                approval = initialize_ticket_approval(ticket, requested_by=request.user)
+
+            ticket.refresh_from_db()
+            after = serialize_instance(ticket, exclude=TICKET_AUDIT_EXCLUDE_FIELDS)
+
+            create_ticket_audit_log(
+                request=request,
+                action="resubmit",
+                ticket=ticket,
+                operation="requester_resubmitted_ticket",
+                before=before,
+                after=after,
+                timeline_type="requester_resubmitted",
+                metadata={
+                    "status_before": status_before,
+                    "status_after": ticket.status,
+                    "status_before_label": get_choice_label(
+                        Ticket.Status.choices,
+                        status_before,
+                    ),
+                    "status_after_label": ticket.get_status_display(),
+                    "approval_status_before": approval_status_before,
+                    "approval_status_after": ticket.approval_status,
+                    "requires_approval": approval is not None,
+                    "approval_id": approval.id if approval else None,
+                },
+            )
+
+            if approval:
+                create_audit_log(
+                    request=request,
+                    action=AuditLog.Action.CREATE,
+                    instance=approval,
+                    before={},
+                    after=serialize_instance(
+                        approval,
+                        exclude=TICKET_AUDIT_EXCLUDE_FIELDS,
+                    ),
+                    metadata={
+                        "module": "tickets",
+                        "operation": "ticket_approval_requested",
+                        "ticket_id": ticket.id,
+                        "timeline_type": "approval_requested",
+                        "approval_id": approval.id,
+                        "approver_id": approval.approver_id,
+                        "approver_user_id": approval.approver_user_id,
+                        "source": "resubmit",
+                    },
+                )
+
+        return Response(TicketSerializer(ticket, context={"request": request}).data)
+
     @action(detail=True, methods=["post"], url_path="status")
     def update_status(self, request, pk=None):
         if not can_manage_tickets(request.user):
@@ -727,7 +980,7 @@ class TicketViewSet(ModelViewSet):
 
         if not ticket_can_enter_it_queue(ticket):
             raise PermissionDenied(
-                "Onay bekleyen veya reddedilmiş ticket üzerinde IT işlemi yapılamaz."
+                "Onay bekleyen, reddedilmiş veya talep sahibine geri gönderilmiş ticket üzerinde IT işlemi yapılamaz."
             )
 
         serializer = TicketStatusUpdateSerializer(
@@ -743,6 +996,15 @@ class TicketViewSet(ModelViewSet):
         new_status = serializer.validated_data["status"]
         solution_note = (serializer.validated_data.get("solution_note") or "").strip()
         now = timezone.now()
+
+        if new_status == Ticket.Status.RETURNED_TO_REQUESTER:
+            raise ValidationError(
+                {
+                    "status": (
+                        "Requester'a geri gönderme için /return-to-requester/ endpointini kullan."
+                    )
+                }
+            )
 
         ticket.status = new_status
 
@@ -820,7 +1082,7 @@ class TicketViewSet(ModelViewSet):
 
         if not ticket_can_enter_it_queue(ticket):
             raise PermissionDenied(
-                "Onay bekleyen veya reddedilmiş ticket IT personeline atanamaz."
+                "Onay bekleyen, reddedilmiş veya talep sahibine geri gönderilmiş ticket IT personeline atanamaz."
             )
 
         serializer = TicketAssignSerializer(data=request.data)
