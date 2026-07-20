@@ -19,6 +19,7 @@ import {
 } from "../api/tickets";
 import { SimplePortalShell } from "../components/layout/SimplePortalShell";
 import { PortalActionGrid } from "../components/portal/PortalActionGrid";
+import { TicketTimelineIndicator } from "../components/tickets/TicketTimelineIndicator";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { useMyTickets } from "../hooks/useTickets";
 import type {
@@ -244,26 +245,34 @@ function PendingApprovalCard({
         />
       </div>
 
-      <div className="mt-md flex flex-col gap-sm border-t border-border pt-md sm:flex-row sm:justify-end">
-        <button
-          type="button"
-          disabled={isDecisionDisabled}
-          onClick={() => onReject(approval)}
-          className="inline-flex items-center justify-center gap-xs rounded-app border border-danger/40 px-md py-sm text-body font-semibold text-danger transition hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <IconX size={16} aria-hidden={true} />
-          {isActing ? "İşleniyor..." : "Reddet"}
-        </button>
+      <div className="mt-md flex flex-col gap-sm border-t border-border pt-md lg:flex-row lg:items-center lg:justify-between">
+        <TicketTimelineIndicator
+          ticketId={ticket.id}
+          ticketTitle={ticket.title}
+          className="w-full lg:w-auto"
+        />
 
-        <button
-          type="button"
-          disabled={isDecisionDisabled}
-          onClick={() => onApprove(approval)}
-          className="inline-flex items-center justify-center gap-xs rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <IconCheck size={16} aria-hidden={true} />
-          {isActing ? "İşleniyor..." : "Onayla"}
-        </button>
+        <div className="flex flex-col gap-sm sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={isDecisionDisabled}
+            onClick={() => onReject(approval)}
+            className="inline-flex items-center justify-center gap-xs rounded-app border border-danger/40 px-md py-sm text-body font-semibold text-danger transition hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <IconX size={16} aria-hidden={true} />
+            {isActing ? "İşleniyor..." : "Reddet"}
+          </button>
+
+          <button
+            type="button"
+            disabled={isDecisionDisabled}
+            onClick={() => onApprove(approval)}
+            className="inline-flex items-center justify-center gap-xs rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <IconCheck size={16} aria-hidden={true} />
+            {isActing ? "İşleniyor..." : "Onayla"}
+          </button>
+        </div>
       </div>
     </article>
   );
