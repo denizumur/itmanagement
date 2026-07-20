@@ -22,6 +22,7 @@ import {
   updateTicketStatus,
   uploadTicketAttachment,
 } from "../api/tickets";
+import { useAuth } from "../auth/AuthContext";
 import type { TableQueryState } from "../types/table";
 import type {
   TicketApprovalDecisionPayload,
@@ -46,13 +47,15 @@ export function ticketTimelineQueryKey(ticketId?: number | null) {
   return ["tickets", "timeline", ticketId] as const;
 }
 export function useMyTickets() {
+  const { userKey, enabled } = useCurrentUserQueryScope();
+
   return useQuery({
-    queryKey: ["tickets", "mine"],
+    queryKey: ["tickets", "mine", userKey],
     queryFn: fetchMyTickets,
-    staleTime: 45_000,
+    enabled,
+    staleTime: 0,
   });
 }
-
 export function useTicketsTable(state: TableQueryState) {
   return useQuery({
     queryKey: ["tickets", "table", state],
@@ -71,13 +74,15 @@ export function useTicketSummary() {
 }
 
 export function useRequesterContext() {
+  const { userKey, enabled } = useCurrentUserQueryScope();
+
   return useQuery({
-    queryKey: ["tickets", "requester-context"],
+    queryKey: ["tickets", "requester-context", userKey],
     queryFn: fetchRequesterContext,
-    staleTime: 60_000,
+    enabled,
+    staleTime: 0,
   });
 }
-
 export function useTicketContext(ticketId?: number | null, enabled = true) {
   return useQuery({
     queryKey: ticketContextQueryKey(ticketId),
@@ -105,10 +110,13 @@ export function useTicketQueue() {
 }
 
 export function useTicketApprovals() {
+  const { userKey, enabled } = useCurrentUserQueryScope();
+
   return useQuery({
-    queryKey: ["tickets", "approvals"],
+    queryKey: ["tickets", "approvals", userKey],
     queryFn: fetchTicketApprovals,
-    staleTime: 30_000,
+    enabled,
+    staleTime: 0,
   });
 }
 
@@ -245,4 +253,17 @@ export function useRejectTicket() {
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
+}
+
+function useCurrentUserQueryScope() {
+  const { isAuthenticated, user } = useAuth();
+
+  const userKey = isAuthenticated
+    ? `${user?.email ?? user?.username ?? "unknown"}:${user?.role ?? "unknown"}`
+    : "anonymous";
+
+  return {
+    userKey,
+    enabled: isAuthenticated && Boolean(user),
+  };
 }
