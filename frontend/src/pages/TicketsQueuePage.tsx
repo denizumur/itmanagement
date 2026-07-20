@@ -18,6 +18,7 @@ import { Skeleton } from "../components/common/Skeleton";
 import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
 import { TicketChatPanel } from "../components/tickets/TicketChatPanel";
+import { TicketTimelineIndicator } from "../components/tickets/TicketTimelineIndicator";
 import { GlowButton } from "../components/ui/GlowButton";
 import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
@@ -402,7 +403,13 @@ function WorkspaceChatHeader({
           </h2>
         </div>
 
-        <div className="flex shrink-0 items-center gap-xs">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-xs">
+          <TicketTimelineIndicator
+            ticketId={resolvedTicket.id}
+            ticketTitle={resolvedTicket.title}
+            className="h-10"
+          />
+
           <select
             value={resolvedTicket.status}
             disabled={!canUpdateStatus || isUpdating}
