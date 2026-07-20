@@ -16,6 +16,7 @@ import { SimplePortalShell } from "../components/layout/SimplePortalShell";
 import { RequesterTicketForm } from "../components/tickets/RequesterTicketForm";
 import { TicketChatPanel } from "../components/tickets/TicketChatPanel";
 import { TicketProgressStepper } from "../components/tickets/TicketProgressStepper";
+import { TicketTimelineIndicator } from "../components/tickets/TicketTimelineIndicator";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import {
   useRequesterContext,
@@ -39,6 +40,7 @@ const statusFilterOptions: Array<{ value: "" | TicketStatus; label: string }> = 
   { value: "", label: "Tüm durumlar" },
   { value: "open", label: "Gönderildi" },
   { value: "in_progress", label: "IT inceliyor" },
+  { value: "returned_to_requester", label: "Geri gönderildi" },
   { value: "resolved", label: "Çözüldü" },
   { value: "closed", label: "Kapandı" },
 ];
@@ -68,6 +70,10 @@ function getNextActionText(ticket: Ticket) {
 
   if (ticket.approval_status === "pending") {
     return `Şu an ${ticket.pending_approver_name ?? "yöneticin"} onayı bekleniyor. Onaylanınca IT ekibine düşecek.`;
+  }
+  
+  if (ticket.status === "returned_to_requester") {
+    return "IT ekibi talebini sana geri gönderdi. Açıklamayı kontrol edip eksikleri tamamladıktan sonra tekrar gönderebilirsin.";
   }
 
   if (ticket.status === "open") {
@@ -195,6 +201,14 @@ function TicketCard({
           </span>
         </div>
       </button>
+
+      <div className="mt-md border-t border-border pt-md">
+        <TicketTimelineIndicator
+          ticketId={ticket.id}
+          ticketTitle={ticket.title}
+          className="w-full sm:w-auto"
+        />
+      </div>
     </article>
   );
 }
@@ -458,7 +472,7 @@ export function MyTicketsPage() {
                   </p>
                 </div>
               ) : (
-                visibleTickets.map((ticket) => (
+                visibleTickets.map((ticket: Ticket) => (
                   <TicketCard
                     key={ticket.id}
                     ticket={ticket}
