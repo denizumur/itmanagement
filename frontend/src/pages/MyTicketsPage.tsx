@@ -1,60 +1,59 @@
 import {
-  IconAlertTriangle,
+  IconArrowLeft,
   IconChevronRight,
   IconClipboardList,
   IconClock,
+  IconHistory,
   IconMessageCircle,
+  IconPlus,
   IconRefresh,
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
-import { MiniMetricCard } from "../components/common/MiniMetricCard";
+import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "../components/common/Skeleton";
-import { TablePagination } from "../components/common/TablePagination";
 import { SimplePortalShell } from "../components/layout/SimplePortalShell";
+import { PortalActionGrid } from "../components/portal/PortalActionGrid";
 import { RequesterTicketForm } from "../components/tickets/RequesterTicketForm";
 import { TicketChatPanel } from "../components/tickets/TicketChatPanel";
-import { TicketProgressStepper } from "../components/tickets/TicketProgressStepper";
 import { TicketTimelineIndicator } from "../components/tickets/TicketTimelineIndicator";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import {
+  useMyTickets,
   useRequesterContext,
-  useTicketSummary,
-  useTicketsTable,
 } from "../hooks/useTickets";
-import { useTableQueryState } from "../hooks/useTableQueryState";
 import { cn } from "../lib/cn";
 import {
   getTicketApprovalMeta,
   getTicketPriorityMeta,
   getTicketStatusMeta,
 } from "../lib/ticketLabels";
-import type {
-  Ticket,
-  TicketApprovalStatus,
-  TicketStatus,
-} from "../types/tickets";
+import type { Ticket } from "../types/tickets";
 
-const statusFilterOptions: Array<{ value: "" | TicketStatus; label: string }> = [
-  { value: "", label: "Tüm durumlar" },
-  { value: "open", label: "Gönderildi" },
-  { value: "in_progress", label: "IT inceliyor" },
-  { value: "returned_to_requester", label: "Geri gönderildi" },
-  { value: "resolved", label: "Çözüldü" },
-  { value: "closed", label: "Kapandı" },
-];
+type MyTicketsView = "home" | "create" | "list" | "history";
 
-const approvalFilterOptions: Array<{
-  value: "" | TicketApprovalStatus;
-  label: string;
-}> = [
-  { value: "", label: "Tüm onaylar" },
-  { value: "pending", label: "Yönetici onayı bekliyor" },
-  { value: "approved", label: "Onaylandı" },
-  { value: "rejected", label: "Onaylanmadı" },
-  { value: "not_required", label: "IT ekibine iletildi" },
-];
+function getCurrentView(value: string | null): MyTicketsView {
+  if (value === "create" || value === "list" || value === "history") {
+    return value;
+  }
+
+  return "home";
+}
+function getViewFromUrl(): MyTicketsView {
+  return getCurrentView(new URLSearchParams(window.location.search).get("view"));
+}
+
+function updateViewInUrl(view: MyTicketsView) {
+  const url = new URL(window.location.href);
+
+  if (view === "home") {
+    url.searchParams.delete("view");
+  } else {
+    url.searchParams.set("view", view);
+  }
+
+  window.history.pushState({}, "", url);
+}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("tr-TR", {
@@ -63,32 +62,57 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function getNextActionText(ticket: Ticket) {
-  if (ticket.approval_status === "rejected") {
-    return "Bu talep yönetici tarafından onaylanmadı. Detayı açıp yazışmaları kontrol edebilirsin.";
+function normalizeText(value: string) {
+  return value.toLocaleLowerCase("tr-TR").trim();
+}
+
+function isHistoryTicket(ticket: Ticket) {
+  return (
+    ticket.status === "resolved" ||
+    ticket.status === "closed" ||
+    ticket.approval_status === "rejected"
+  );
+}
+
+function isActiveTicket(ticket: Ticket) {
+  return !isHistoryTicket(ticket);
+}
+
+function matchesSearch(ticket: Ticket, searchTerm: string) {
+  const normalizedSearch = normalizeText(searchTerm);
+
+  if (!normalizedSearch) {
+    return true;
   }
 
-  if (ticket.approval_status === "pending") {
-    return `Şu an ${ticket.pending_approver_name ?? "yöneticin"} onayı bekleniyor. Onaylanınca IT ekibine düşecek.`;
-  }
-  
-  if (ticket.status === "returned_to_requester") {
-    return "IT ekibi talebini sana geri gönderdi. Açıklamayı kontrol edip eksikleri tamamladıktan sonra tekrar gönderebilirsin.";
-  }
+  const haystack = [
+    `#${ticket.id}`,
+    String(ticket.id),
+    ticket.title,
+    ticket.description,
+    ticket.category_label,
+    ticket.asset_label ?? "",
+    ticket.status_label,
+    ticket.approval_status_label,
+    ticket.priority_label,
+  ]
+    .join(" ")
+    .toLocaleLowerCase("tr-TR");
 
-  if (ticket.status === "open") {
-    return "Talebin IT ekibine iletildi. İlk inceleme için sırada bekliyor.";
-  }
+  return haystack.includes(normalizedSearch);
+}
 
-  if (ticket.status === "in_progress") {
-    return "IT ekibi talebini inceliyor. Gelişme olursa mesajlardan takip edebilirsin.";
-  }
-
-  if (ticket.status === "resolved" || ticket.status === "closed") {
-    return "Bu talep tamamlandı. Gerekirse mesajlardan geçmişi inceleyebilirsin.";
-  }
-
-  return "Talebinin durumunu buradan takip edebilirsin.";
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+    >
+      <IconArrowLeft size={16} aria-hidden={true} />
+      Geri
+    </button>
+  );
 }
 
 function TicketCard({
@@ -107,102 +131,77 @@ function TicketCard({
   return (
     <article
       className={cn(
-        "rounded-panel border bg-surface-1 p-lg shadow-panel transition hover:border-accent/60 hover:bg-surface-2/40",
+        "rounded-panel border bg-surface-1 p-lg shadow-panel transition hover:border-accent/60",
         selected ? "border-accent bg-accent/5" : "border-border"
       )}
     >
-      <button
-        type="button"
-        onClick={() => onSelect(ticket)}
-        className="w-full text-left"
-      >
-        <div className="flex flex-col gap-md lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-xs">
-              <span className="rounded-full border border-border bg-surface-2 px-sm py-1 text-caption text-text-secondary">
-                #{ticket.id}
-              </span>
-
-              <StatusBadge variant={approvalMeta.variant}>
-                {approvalMeta.requesterLabel}
-              </StatusBadge>
-
-              <StatusBadge variant={statusMeta.variant}>
-                {statusMeta.label}
-              </StatusBadge>
-
-              <StatusBadge variant={priorityMeta.variant}>
-                {priorityMeta.requesterLabel}
-              </StatusBadge>
-            </div>
-
-            <h3 className="mt-sm text-h3 text-text-primary">{ticket.title}</h3>
-
-            <p className="mt-xs line-clamp-2 max-w-3xl text-body text-text-secondary">
-              {ticket.description}
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-xs whitespace-nowrap text-caption text-text-secondary">
-            <IconClock size={14} aria-hidden={true} />
-            {formatDate(ticket.created_at)}
-          </div>
-        </div>
-
-        <TicketProgressStepper ticket={ticket} compact />
-
-        <div className="mt-md rounded-2xl border border-border bg-surface-2 p-md">
-          <p className="text-caption font-semibold text-text-secondary">
-            Şu anda ne oluyor?
-          </p>
-          <p className="mt-xs text-body text-text-primary">
-            {getNextActionText(ticket)}
-          </p>
-        </div>
-
-        <div className="mt-md flex flex-col gap-sm lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-xs text-caption text-text-secondary">
-            <span className="rounded-full bg-surface-2 px-sm py-1">
-              {ticket.category_label}
+      <div className="flex flex-col gap-md lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-xs">
+            <span className="rounded-full border border-border bg-surface-2 px-sm py-1 text-caption text-text-secondary">
+              #{ticket.id}
             </span>
 
-            {ticket.asset_label ? (
-              <span className="rounded-full bg-surface-2 px-sm py-1">
-                Cihaz: {ticket.asset_label}
-              </span>
-            ) : (
-              <span className="rounded-full bg-surface-2 px-sm py-1">
-                Cihaz seçilmedi
-              </span>
-            )}
+            <StatusBadge variant={approvalMeta.variant}>
+              {approvalMeta.requesterLabel}
+            </StatusBadge>
 
-            <span className="rounded-full bg-surface-2 px-sm py-1">
-              {ticket.comments_count} mesaj
-            </span>
+            <StatusBadge variant={statusMeta.variant}>
+              {statusMeta.label}
+            </StatusBadge>
 
-            {ticket.attachments_count > 0 ? (
-              <span className="rounded-full bg-surface-2 px-sm py-1">
-                {ticket.attachments_count} dosya
-              </span>
-            ) : null}
+            <StatusBadge variant={priorityMeta.variant}>
+              {priorityMeta.requesterLabel}
+            </StatusBadge>
           </div>
 
-          <span
-            className={cn(
-              "inline-flex items-center justify-center gap-xs rounded-app border px-md py-sm text-body transition",
-              selected
-                ? "border-accent bg-accent/10 text-accent"
-                : "border-border text-text-primary"
-            )}
-          >
-            <IconMessageCircle size={16} aria-hidden={true} />
-            Mesajları aç
-            <IconChevronRight size={16} aria-hidden={true} />
+          <h3 className="mt-sm text-h3 text-text-primary">{ticket.title}</h3>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-xs whitespace-nowrap text-caption text-text-secondary">
+          <IconClock size={14} aria-hidden={true} />
+          {formatDate(ticket.created_at)}
+        </div>
+      </div>
+
+      <div className="mt-md flex flex-wrap gap-xs text-caption text-text-secondary">
+        <span className="rounded-full bg-surface-2 px-sm py-1">
+          {ticket.category_label}
+        </span>
+
+        {ticket.asset_label ? (
+          <span className="rounded-full bg-surface-2 px-sm py-1">
+            Cihaz: {ticket.asset_label}
           </span>
-        </div>
-      </button>
+        ) : null}
 
-      <div className="mt-md border-t border-border pt-md">
+        <span className="rounded-full bg-surface-2 px-sm py-1">
+          {ticket.comments_count} mesaj
+        </span>
+
+        {ticket.attachments_count > 0 ? (
+          <span className="rounded-full bg-surface-2 px-sm py-1">
+            {ticket.attachments_count} dosya
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-md flex flex-col gap-sm border-t border-border pt-md sm:flex-row sm:items-center sm:justify-end">
+        <button
+          type="button"
+          onClick={() => onSelect(ticket)}
+          className={cn(
+            "inline-flex items-center justify-center gap-xs rounded-app border px-md py-sm text-body transition",
+            selected
+              ? "border-accent bg-accent/10 text-accent"
+              : "border-border text-text-primary hover:border-accent hover:text-accent"
+          )}
+        >
+          <IconMessageCircle size={16} aria-hidden={true} />
+          Mesajlar
+          <IconChevronRight size={16} aria-hidden={true} />
+        </button>
+
         <TicketTimelineIndicator
           ticketId={ticket.id}
           ticketTitle={ticket.title}
@@ -231,8 +230,8 @@ function TicketChatDrawer({
       <div className="flex h-full w-full max-w-[520px] flex-col bg-surface-0 shadow-panel">
         <div className="flex items-center justify-between border-b border-border bg-surface-1 p-md">
           <div>
-            <p className="text-caption text-text-secondary">Talep detayı</p>
-            <h2 className="text-h3 text-text-primary">#{ticket.id} Mesajlar</h2>
+            <p className="text-caption text-text-secondary">Talep</p>
+            <h2 className="text-h3 text-text-primary">#{ticket.id}</h2>
           </div>
 
           <button
@@ -253,81 +252,232 @@ function TicketChatDrawer({
             defaultMode="public_reply"
             onClose={onClose}
             onCommentCreated={onCommentCreated}
-          />  
+          />
         </div>
       </div>
     </div>
   );
 }
 
-export function MyTicketsPage() {
-  const {
-    state,
-    setSearch,
-    setPage,
-    setPageSize,
-    setFilter,
-    resetFilters,
-  } = useTableQueryState({
-    page: 1,
-    pageSize: 10,
-    ordering: "-created_at",
-  });
+function EmptyTicketState({
+  title,
+  onCreate,
+}: {
+  title: string;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="rounded-panel border border-dashed border-border bg-surface-1 p-xl text-center shadow-panel">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-2 text-text-secondary">
+        <IconClipboardList size={24} aria-hidden={true} />
+      </div>
 
-  const ticketsQuery = useTicketsTable(state);
-  const summaryQuery = useTicketSummary();
+      <h3 className="mt-md text-h3 text-text-primary">{title}</h3>
+
+      <button
+        type="button"
+        onClick={onCreate}
+        className="mt-md inline-flex items-center justify-center gap-xs rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90"
+      >
+        <IconPlus size={16} aria-hidden={true} />
+        Talep Oluştur
+      </button>
+    </div>
+  );
+}
+
+function TicketListSection({
+  title,
+  tickets,
+  searchTerm,
+  onSearchChange,
+  isFetching,
+  selectedTicket,
+  onSelectTicket,
+  onRefresh,
+  onBack,
+  onCreate,
+}: {
+  title: string;
+  tickets: Ticket[];
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  isFetching: boolean;
+  selectedTicket: Ticket | null;
+  onSelectTicket: (ticket: Ticket) => void;
+  onRefresh: () => void;
+  onBack: () => void;
+  onCreate: () => void;
+}) {
+  return (
+    <section>
+      <div className="mb-lg flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-sm">
+          <BackButton onClick={onBack} />
+
+          <h2 className="text-h2 text-text-primary">{title}</h2>
+        </div>
+
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+        >
+          <IconRefresh
+            size={16}
+            aria-hidden={true}
+            className={isFetching ? "animate-spin" : undefined}
+          />
+          Yenile
+        </button>
+      </div>
+
+      <label className="mb-md flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md">
+        <IconSearch size={16} className="shrink-0 text-text-secondary" />
+        <input
+          className="w-full min-w-0 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+          placeholder="Ara..."
+          value={searchTerm}
+          onChange={(event) => onSearchChange(event.target.value)}
+        />
+      </label>
+
+      {isFetching ? (
+        <div className="mb-md rounded-panel border border-border bg-surface-1 p-md text-body text-text-secondary">
+          Güncelleniyor...
+        </div>
+      ) : null}
+
+      {tickets.length === 0 ? (
+        <EmptyTicketState title="Kayıt yok" onCreate={onCreate} />
+      ) : (
+        <div className="grid gap-md">
+          {tickets.map((ticket) => (
+            <TicketCard
+              key={ticket.id}
+              ticket={ticket}
+              selected={selectedTicket?.id === ticket.id}
+              onSelect={onSelectTicket}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function MyTicketsPage() {
+  const [currentView, setCurrentView] = useState<MyTicketsView>(() => getViewFromUrl());
+  const myTicketsQuery = useMyTickets();
   const requesterContextQuery = useRequesterContext();
 
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const tableData = ticketsQuery.data;
-  const tickets = tableData?.results ?? [];
-  const summary = summaryQuery.data;
+  const allTickets = useMemo(
+    () => myTicketsQuery.data ?? [],
+    [myTicketsQuery.data]
+  );
 
-  const selectedStatus =
-    typeof state.filters.status === "string" ? state.filters.status : "";
-  const selectedApproval =
-    typeof state.filters.approval_status === "string"
-      ? state.filters.approval_status
-      : "";
+  const activeTickets = useMemo(
+    () =>
+      allTickets
+        .filter(isActiveTicket)
+        .filter((ticket) => matchesSearch(ticket, searchTerm)),
+    [allTickets, searchTerm]
+  );
 
-  const visibleTickets = useMemo(() => tickets, [tickets]);
+  const historyTickets = useMemo(
+    () =>
+      allTickets
+        .filter(isHistoryTicket)
+        .filter((ticket) => matchesSearch(ticket, searchTerm)),
+    [allTickets, searchTerm]
+  );
+
+  useEffect(() => {
+    function handlePopState() {
+      setCurrentView(getViewFromUrl());
+    }
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+  
+  function goToView(view: MyTicketsView) {
+    setSelectedTicket(null);
+    setSearchTerm("");
+    updateViewInUrl(view);
+    setCurrentView(view);
+  }
 
   async function refetchAll() {
     await Promise.all([
-      ticketsQuery.refetch(),
-      summaryQuery.refetch(),
+      myTicketsQuery.refetch(),
       requesterContextQuery.refetch(),
     ]);
   }
 
-  async function handleTicketCreated(ticket: Ticket) {
-    setSelectedTicket(ticket);
+  async function handleTicketCreated() {
     await refetchAll();
+    goToView("list");
   }
 
-  const isInitialLoading = ticketsQuery.isLoading || summaryQuery.isLoading;
+  const isLoadingHome = myTicketsQuery.isLoading;
 
   return (
     <SimplePortalShell
       badge="Çalışan Portalı"
       title="Yardım Merkezi"
-      subtitle="Yeni bir sorun mu var ya da bir şeye mi ihtiyacın var? Buradan kolayca yardım isteyebilir, durumunu takip edebilir ve IT ekibiyle yazışabilirsin."
+      subtitle=""
     >
-      {isInitialLoading ? (
-        <div>
-          <div className="flex flex-wrap gap-sm">
-            <Skeleton className="h-14 w-36 rounded-full" />
-            <Skeleton className="h-14 w-36 rounded-full" />
-            <Skeleton className="h-14 w-36 rounded-full" />
+      {currentView === "home" ? (
+        <section className="mx-auto max-w-4xl">
+          {isLoadingHome ? (
+            <div className="grid gap-md sm:grid-cols-2 lg:grid-cols-3">
+              <Skeleton className="h-[150px] rounded-panel" />
+              <Skeleton className="h-[150px] rounded-panel" />
+              <Skeleton className="h-[150px] rounded-panel" />
+            </div>
+          ) : (
+            <PortalActionGrid
+              actions={[
+                {
+                  key: "create",
+                  label: "Talep Oluştur",
+                  icon: <IconPlus size={34} aria-hidden={true} />,
+                  tone: "accent",
+                  onClick: () => goToView("create"),
+                },
+                {
+                  key: "list",
+                  label: "Taleplerim",
+                  icon: <IconClipboardList size={34} aria-hidden={true} />,
+                  badge: activeTickets.length,
+                  tone: "warning",
+                  onClick: () => goToView("list"),
+                },
+                {
+                  key: "history",
+                  label: "Geçmiş İşlemler",
+                  icon: <IconHistory size={34} aria-hidden={true} />,
+                  badge: historyTickets.length,
+                  tone: "neutral",
+                  onClick: () => goToView("history"),
+                },
+              ]}
+            />
+          )}
+        </section>
+      ) : null}
+
+      {currentView === "create" ? (
+        <section className="mx-auto max-w-3xl">
+          <div className="mb-lg">
+            <BackButton onClick={() => goToView("home")} />
           </div>
 
-          <div className="mt-lg">
-            <Skeleton className="h-[520px]" />
-          </div>
-        </div>
-      ) : (
-        <div className="grid gap-lg 2xl:grid-cols-[520px_minmax(0,1fr)]">
           <RequesterTicketForm
             requesterContext={requesterContextQuery.data}
             isContextLoading={requesterContextQuery.isLoading}
@@ -335,172 +485,44 @@ export function MyTicketsPage() {
             onRefreshContext={() => requesterContextQuery.refetch()}
             onCreated={handleTicketCreated}
           />
+        </section>
+      ) : null}
 
-          <section className="min-w-0">
-            <div className="rounded-panel border border-border bg-surface-1 p-lg shadow-panel">
-              <div className="flex flex-col gap-md lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-caption font-semibold uppercase tracking-wide text-accent">
-                    Taleplerim
-                  </p>
-                  <h2 className="mt-xs text-h2 text-text-primary">
-                    Yardım isteklerini buradan takip et
-                  </h2>
-                  <p className="mt-sm max-w-2xl text-body text-text-secondary">
-                    Her talepte şu an hangi aşamada olduğunu, kimin onayında
-                    beklediğini ve IT ekibinden gelen mesajları tek yerden
-                    görebilirsin.
-                  </p>
-                </div>
+      {currentView === "list" ? (
+        <TicketListSection
+          title="Taleplerim"
+          tickets={activeTickets}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          isFetching={myTicketsQuery.isFetching}
+          selectedTicket={selectedTicket}
+          onSelectTicket={setSelectedTicket}
+          onRefresh={refetchAll}
+          onBack={() => goToView("home")}
+          onCreate={() => goToView("create")}
+        />
+      ) : null}
 
-                <button
-                  type="button"
-                  onClick={refetchAll}
-                  className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-secondary transition hover:border-accent hover:text-accent"
-                >
-                  <IconRefresh size={16} aria-hidden={true} />
-                  Yenile
-                </button>
-              </div>
+      {currentView === "history" ? (
+        <TicketListSection
+          title="Geçmiş İşlemler"
+          tickets={historyTickets}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          isFetching={myTicketsQuery.isFetching}
+          selectedTicket={selectedTicket}
+          onSelectTicket={setSelectedTicket}
+          onRefresh={refetchAll}
+          onBack={() => goToView("home")}
+          onCreate={() => goToView("create")}
+        />
+      ) : null}
 
-              <div className="mt-lg grid gap-sm sm:grid-cols-2 xl:grid-cols-4">
-                <MiniMetricCard
-                  label="Gösterilen talep"
-                  value={tableData?.count ?? tickets.length}
-                  icon={<IconClipboardList size={15} aria-hidden={true} />}
-                  tone="accent"
-                  className="w-full"
-                />
-
-                <MiniMetricCard
-                  label="Açık talepler"
-                  value={summary?.open ?? 0}
-                  icon={<IconClipboardList size={15} aria-hidden={true} />}
-                  tone="accent"
-                  className="w-full"
-                />
-
-                <MiniMetricCard
-                  label="Onay bekleyen"
-                  value={summary?.pending_approval ?? 0}
-                  icon={<IconAlertTriangle size={15} aria-hidden={true} />}
-                  tone="warning"
-                  className="w-full"
-                />
-
-                <MiniMetricCard
-                  label="Tamamlanan"
-                  value={(summary?.resolved ?? 0) + (summary?.closed ?? 0)}
-                  icon={<IconClipboardList size={15} aria-hidden={true} />}
-                  tone="success"
-                  className="w-full"
-                />
-              </div>
-
-              <section className="mt-lg rounded-2xl border border-border bg-surface-2 p-md">
-                <div className="grid gap-md md:grid-cols-2">
-                  <label className="flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md md:col-span-2">
-                    <IconSearch size={16} className="shrink-0 text-text-secondary" />
-                    <input
-                      className="w-full min-w-0 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
-                      placeholder="Konu veya açıklama ara..."
-                      value={state.search}
-                      onChange={(event) => setSearch(event.target.value)}
-                    />
-                  </label>
-
-                  <select
-                    className="h-12 w-full min-w-0 rounded-app border border-border bg-surface-1 px-md text-body text-text-primary focus:outline-none"
-                    value={selectedStatus}
-                    onChange={(event) =>
-                      setFilter("status", event.target.value || null)
-                    }
-                    aria-label="Talep durum filtresi"
-                  >
-                    {statusFilterOptions.map((option) => (
-                      <option key={option.value || "all"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    className="h-12 w-full min-w-0 rounded-app border border-border bg-surface-1 px-md text-body text-text-primary focus:outline-none"
-                    value={selectedApproval}
-                    onChange={(event) =>
-                      setFilter("approval_status", event.target.value || null)
-                    }
-                    aria-label="Onay durumu filtresi"
-                  >
-                    {approvalFilterOptions.map((option) => (
-                      <option key={option.value || "all"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div className="flex justify-end md:col-span-2">
-                    <button
-                      type="button"
-                      onClick={resetFilters}
-                      className="h-11 w-full rounded-app border border-border px-md text-body text-text-primary transition hover:border-accent hover:text-accent sm:w-auto"
-                    >
-                      Temizle
-                    </button>
-                  </div>
-                </div>
-              </section>
-            </div>
-
-            <section className="mt-lg flex min-w-0 flex-col gap-md">
-              {ticketsQuery.isFetching ? (
-                <div className="rounded-panel border border-border bg-surface-1 p-md text-body text-text-secondary">
-                  Talepler güncelleniyor...
-                </div>
-              ) : null}
-
-              {visibleTickets.length === 0 ? (
-                <div className="rounded-panel border border-border bg-surface-1 p-lg text-center shadow-panel">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-text-secondary">
-                    <IconClipboardList size={22} aria-hidden={true} />
-                  </div>
-                  <h3 className="mt-md text-h3 text-text-primary">
-                    Henüz yardım isteği yok
-                  </h3>
-                  <p className="mt-sm text-body text-text-secondary">
-                    Sol taraftaki formdan ilk yardım isteğini oluşturabilirsin.
-                  </p>
-                </div>
-              ) : (
-                visibleTickets.map((ticket: Ticket) => (
-                  <TicketCard
-                    key={ticket.id}
-                    ticket={ticket}
-                    selected={selectedTicket?.id === ticket.id}
-                    onSelect={setSelectedTicket}
-                  />
-                ))
-              )}
-
-              <TablePagination
-                page={state.page}
-                pageSize={state.pageSize}
-                totalCount={tableData?.count ?? 0}
-                hasNext={Boolean(tableData?.next)}
-                hasPrevious={Boolean(tableData?.previous)}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-              />
-            </section>
-          </section>
-
-          <TicketChatDrawer
-            ticket={selectedTicket}
-            onClose={() => setSelectedTicket(null)}
-            onCommentCreated={refetchAll}
-          />
-        </div>
-      )}
+      <TicketChatDrawer
+        ticket={selectedTicket}
+        onClose={() => setSelectedTicket(null)}
+        onCommentCreated={refetchAll}
+      />
     </SimplePortalShell>
   );
 }
