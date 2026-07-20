@@ -7,6 +7,7 @@ import {
 import { useNavigate } from "react-router";
 import { MiniMetricCard } from "../common/MiniMetricCard";
 import { StatusBadge } from "../ui/StatusBadge";
+import { PopupPanel, usePopup } from "../../lib/popupManager";
 import { sortNotificationItems } from "../../lib/urgency";
 import type {
   NotificationItem,
@@ -19,6 +20,16 @@ interface NotificationOverviewPanelProps {
 }
 
 const MAX_PREVIEW_ITEMS = 3;
+
+type AlertVariant = "danger" | "warning" | "accent" | "success";
+
+type MetricPopupGroup = {
+  title: string;
+  items: NotificationItem[];
+  variant: AlertVariant;
+  fallbackUrl: string;
+  emptyText: string;
+};
 
 function metadataString(item: NotificationItem, key: string) {
   const value = item.metadata[key];
@@ -93,7 +104,7 @@ function AlertGroup({
   title: string;
   description: string;
   items: NotificationItem[];
-  variant: "danger" | "warning" | "accent" | "success";
+  variant: AlertVariant;
   fallbackUrl: string;
   emptyText: string;
 }) {
@@ -164,10 +175,90 @@ function AlertGroup({
   );
 }
 
+function MetricPopupContent({
+  groups,
+  onNavigate,
+}: {
+  groups: MetricPopupGroup[];
+  onNavigate: (url: string) => void;
+}) {
+  return (
+    <div className="space-y-md">
+      {groups.map((group) => (
+        <section
+          key={group.title}
+          className="rounded-panel border border-border bg-surface-2 p-md"
+        >
+          <div className="flex items-start justify-between gap-md">
+            <div>
+              <h3 className="text-h3 text-text-primary">{group.title}</h3>
+              <p className="mt-xs text-caption text-text-secondary">
+                {group.items.length > 0
+                  ? `${group.items.length} kayıt listeleniyor.`
+                  : group.emptyText}
+              </p>
+            </div>
+
+            <StatusBadge variant={group.variant}>{group.items.length}</StatusBadge>
+          </div>
+
+          <div className="mt-md space-y-sm">
+            {group.items.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-surface-1 p-md text-body text-text-secondary">
+                {group.emptyText}
+              </div>
+            ) : (
+              group.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onNavigate(item.url || group.fallbackUrl)}
+                  className="block w-full rounded-2xl border border-border bg-surface-1 p-md text-left transition hover:border-accent hover:bg-accent-bg"
+                >
+                  <div className="flex items-start justify-between gap-md">
+                    <div className="min-w-0">
+                      <p className="line-clamp-1 text-body font-semibold text-text-primary">
+                        {item.message}
+                      </p>
+
+                      <p className="mt-xs text-caption text-text-secondary">
+                        {item.title} · {itemMeta(item)}
+                      </p>
+                    </div>
+
+                    <span className="shrink-0 rounded-full border border-border bg-surface-2 px-sm py-[2px] text-[11px] font-semibold text-text-secondary">
+                      {item.urgency_score}
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
+          {group.items.length > 0 ? (
+            <button
+              type="button"
+              onClick={() =>
+                onNavigate(getTargetUrl(group.items, group.fallbackUrl))
+              }
+              className="mt-md w-full rounded-app border border-border px-md py-sm text-caption font-semibold text-text-secondary transition hover:border-accent hover:text-accent"
+            >
+              İlgili ekrana git
+            </button>
+          ) : null}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export function NotificationOverviewPanel({
   overview,
   isLoading,
 }: NotificationOverviewPanelProps) {
+  const navigate = useNavigate();
+  const { openDetail, close } = usePopup();
+
   if (isLoading) {
     return (
       <section className="panel">
@@ -193,10 +284,11 @@ export function NotificationOverviewPanel({
   const sevenDays = sortNotificationItems(overview?.reminders_7_days ?? []);
   const thirtyDays = sortNotificationItems(overview?.reminders_30_days ?? []);
 
-  const criticalActionCount =
-    actionItems.filter((item) => item.severity === "critical").length +
-    dueToday.length;
+  const criticalOnlyActionItems = actionItems.filter(
+    (item) => item.severity === "critical"
+  );
 
+  const criticalActionCount = criticalOnlyActionItems.length + dueToday.length;
   const planningCount = sevenDays.length + thirtyDays.length;
 
   const actionVariant =
@@ -205,6 +297,34 @@ export function NotificationOverviewPanel({
       : actionItems.length > 0
         ? "warning"
         : "success";
+
+  function openMetricPopup({
+    title,
+    description,
+    groups,
+  }: {
+    title: string;
+    description: string;
+    groups: MetricPopupGroup[];
+  }) {
+    let popupId = "";
+
+    function handleNavigate(url: string) {
+      close(popupId);
+      navigate(url);
+    }
+
+    popupId = openDetail(
+      <PopupPanel
+        title={title}
+        description={description}
+        size="lg"
+        onClose={() => close(popupId)}
+      >
+        <MetricPopupContent groups={groups} onNavigate={handleNavigate} />
+      </PopupPanel>
+    );
+  }
 
   return (
     <section className="panel">
@@ -223,6 +343,31 @@ export function NotificationOverviewPanel({
             value={criticalActionCount}
             tone={criticalActionCount > 0 ? "danger" : "success"}
             icon={<IconAlertTriangle size={15} aria-hidden={true} />}
+            ariaLabel="Kritik aksiyon detaylarını aç"
+            onClick={() =>
+              openMetricPopup({
+                title: "Kritik aksiyon detayı",
+                description:
+                  "Kritik ticket/onay aksiyonları ve bugün/gecikmiş hatırlatıcılar.",
+                groups: [
+                  {
+                    title: "Kritik ticket ve onaylar",
+                    items: criticalOnlyActionItems,
+                    variant:
+                      criticalOnlyActionItems.length > 0 ? "danger" : "success",
+                    fallbackUrl: "/tickets",
+                    emptyText: "Kritik ticket veya onay yok.",
+                  },
+                  {
+                    title: "Bugün / gecikmiş hatırlatıcılar",
+                    items: dueToday,
+                    variant: dueToday.length > 0 ? "danger" : "success",
+                    fallbackUrl: "/reminders",
+                    emptyText: "Bugün veya gecikmiş hatırlatıcı yok.",
+                  },
+                ],
+              })
+            }
           />
 
           <MiniMetricCard
@@ -230,6 +375,30 @@ export function NotificationOverviewPanel({
             value={planningCount}
             tone={planningCount > 0 ? "accent" : "success"}
             icon={<IconCalendarDue size={15} aria-hidden={true} />}
+            ariaLabel="Planlanacak kayıt detaylarını aç"
+            onClick={() =>
+              openMetricPopup({
+                title: "Planlanacak işler",
+                description:
+                  "Önümüzdeki 7 ve 30 gün içinde takip edilmesi gereken hatırlatıcılar.",
+                groups: [
+                  {
+                    title: "7 gün içinde",
+                    items: sevenDays,
+                    variant: sevenDays.length > 0 ? "warning" : "success",
+                    fallbackUrl: "/reminders",
+                    emptyText: "7 gün içinde planlanacak kayıt yok.",
+                  },
+                  {
+                    title: "30 gün içinde",
+                    items: thirtyDays,
+                    variant: thirtyDays.length > 0 ? "accent" : "success",
+                    fallbackUrl: "/reminders",
+                    emptyText: "30 gün içinde planlanacak kayıt yok.",
+                  },
+                ],
+              })
+            }
           />
         </div>
       </div>
