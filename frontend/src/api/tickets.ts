@@ -9,6 +9,7 @@ import type {
   TicketAttachment,
   TicketAttachmentUploadPayload,
   TicketComment,
+  TicketResolutionReopenPayload,
   TicketCommentCreatePayload,
   TicketContext,
   TicketCreatePayload,
@@ -131,6 +132,29 @@ export async function returnTicketToRequester(
     `${TICKETS_ENDPOINT}${ticketId}/return-to-requester/`,
     {
       comment: payload.comment.trim(),
+    }
+  );
+
+  return response.data;
+}
+
+export async function confirmTicketResolution(ticketId: number) {
+  const response = await api.post<Ticket>(
+    `${TICKETS_ENDPOINT}${ticketId}/confirm-resolution/`,
+    {}
+  );
+
+  return response.data;
+}
+
+export async function reopenTicketResolution(
+  ticketId: number,
+  payload: TicketResolutionReopenPayload
+) {
+  const response = await api.post<Ticket>(
+    `${TICKETS_ENDPOINT}${ticketId}/reopen-resolution/`,
+    {
+      reason: payload.reason.trim(),
     }
   );
 

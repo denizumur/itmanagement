@@ -16,6 +16,9 @@ TIMELINE_AUDIT_TYPES = {
     "status_changed",
     "assigned_changed",
     "requester_resubmitted",
+    "requester_confirmed_resolution",
+    "requester_reopened_resolution",
+    "system_auto_closed_resolution",
 }
 
 
@@ -487,17 +490,53 @@ def serialize_blocked_it_review_stage(
 
 
 def serialize_resolved_stage(ticket: Ticket) -> dict[str, Any]:
-    is_resolved = ticket.status in {Ticket.Status.RESOLVED, Ticket.Status.CLOSED}
-    timestamp = ticket.resolved_at or ticket.closed_at
+    if ticket.status == Ticket.Status.CLOSED:
+        return make_stage(
+            stage_id=f"stage-resolved-{ticket.id}",
+            stage="resolved",
+            label="Kapatıldı",
+            state="done",
+            actor_name=get_user_display_name(ticket.closed_by),
+            timestamp=ticket.closed_at or ticket.resolved_at,
+            comment=ticket.resolution_note or "Ticket kapatıldı.",
+            round_number=1,
+            metadata={
+                "status": ticket.status,
+                "status_label": ticket.get_status_display(),
+                "resolved_at": ticket.resolved_at,
+                "closed_at": ticket.closed_at,
+                "confirmed_by_id": ticket.closed_by_id,
+                "closed_by_system": ticket.closed_by_id is None,
+            },
+        )
+
+    if ticket.status == Ticket.Status.RESOLVED:
+        return make_stage(
+            stage_id=f"stage-resolved-{ticket.id}",
+            stage="resolved",
+            label="Çözüm sunuldu",
+            state="done",
+            actor_name=get_user_display_name(ticket.resolved_by),
+            timestamp=ticket.resolved_at,
+            comment=ticket.resolution_note or "Requester teyidi bekleniyor.",
+            round_number=1,
+            metadata={
+                "status": ticket.status,
+                "status_label": ticket.get_status_display(),
+                "resolved_at": ticket.resolved_at,
+                "closed_at": ticket.closed_at,
+                "awaiting_requester_confirmation": True,
+            },
+        )
 
     return make_stage(
         stage_id=f"stage-resolved-{ticket.id}",
         stage="resolved",
-        label="Çözüldü",
-        state="done" if is_resolved else "pending",
-        actor_name=current_it_review_actor(ticket) if is_resolved else None,
-        timestamp=timestamp if is_resolved else None,
-        comment=ticket.resolution_note or None,
+        label="Çözüm bekleniyor",
+        state="pending",
+        actor_name=None,
+        timestamp=None,
+        comment=None,
         round_number=1,
         metadata={
             "status": ticket.status,
@@ -563,6 +602,59 @@ def serialize_audit_log(log: AuditLog) -> dict[str, Any] | None:
             source="audit",
             metadata=metadata,
             sort_index=45,
+        )
+
+    if timeline_type == "requester_confirmed_resolution":
+        return make_item(
+            item_id=f"audit-{log.id}",
+            item_type="requester_confirmed_resolution",
+            title="Çözüm onaylandı",
+            description="Talep sahibi çözümü onayladı ve ticket kapandı.",
+            actor_name=get_user_display_name(log.actor),
+            created_at=log.created_at,
+            tone="success",
+            source="audit",
+            metadata=metadata,
+            sort_index=46,
+        )
+
+    if timeline_type == "requester_reopened_resolution":
+        reason = metadata.get("reason") or (
+            "Talep sahibi çözümün yeterli olmadığını bildirdi."
+        )
+
+        return make_item(
+            item_id=f"audit-{log.id}",
+            item_type="requester_reopened_resolution",
+            title="Çözüm yeterli bulunmadı",
+            description=truncate_text(reason),
+            actor_name=get_user_display_name(log.actor),
+            created_at=log.created_at,
+            tone="danger",
+            source="audit",
+            metadata=metadata,
+            sort_index=46,
+        )
+    if timeline_type == "system_auto_closed_resolution":
+        days = metadata.get("auto_closed_after_days")
+
+        description = (
+            f"Talep sahibi {days} gün içinde yanıt vermediği için ticket otomatik kapatıldı."
+            if days
+            else "Talep sahibi yanıt vermediği için ticket otomatik kapatıldı."
+        )
+
+        return make_item(
+            item_id=f"audit-{log.id}",
+            item_type="system_auto_closed_resolution",
+            title="Otomatik kapatıldı",
+            description=description,
+            actor_name=get_user_display_name(log.actor),
+            created_at=log.created_at,
+            tone="neutral",
+            source="audit",
+            metadata=metadata,
+            sort_index=47,
         )
 
     return None

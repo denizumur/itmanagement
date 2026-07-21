@@ -257,6 +257,27 @@ class TicketResubmitSerializer(serializers.Serializer):
 
         return value
 
+class TicketResolutionReopenSerializer(serializers.Serializer):
+    reason = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=2000,
+        trim_whitespace=True,
+        error_messages={
+            "blank": "Çözümün neden yeterli olmadığını açıklamanız zorunludur.",
+            "required": "Çözümün neden yeterli olmadığını açıklamanız zorunludur.",
+        },
+    )
+
+    def validate_reason(self, value):
+        value = value.strip()
+
+        if len(value) < 10:
+            raise serializers.ValidationError(
+                "Açıklama en az 10 karakter olmalıdır."
+            )
+
+        return value
 
 class TicketITDecisionSerializer(serializers.ModelSerializer):
     technician_name = serializers.SerializerMethodField()

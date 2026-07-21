@@ -7,6 +7,10 @@ from apps.accounts.models import UserProfile
 from apps.assignments.models import Assignment
 from apps.employees.models import Employee
 from apps.inventory.models import Asset, AssetCategory
+from datetime import timedelta
+from io import StringIO
+from django.core.management import call_command
+from apps.audit.models import AuditLog
 from apps.tickets.models import (
     TICKET_ATTACHMENT_MAX_FILES_PER_TICKET,
     Ticket,
@@ -1539,3 +1543,367 @@ class TicketApiTests(APITestCase):
         self.assertEqual(len(resolved_stages), 1)
         self.assertEqual(resolved_stages[0]["state"], "done")
         self.assertEqual(resolved_stages[0]["comment"], "Sorun giderildi.") 
+    def test_requester_can_confirm_resolved_ticket_and_close_it(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Requester confirm resolution",
+            description="Requester çözümü onaylayınca ticket kapanmalı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="VPN profili yenilendi.",
+            resolved_by=self.technician,
+            resolved_at=timezone.now(),
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/confirm-resolution/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.CLOSED)
+        self.assertEqual(ticket.closed_by, self.requester)
+        self.assertIsNotNone(ticket.closed_at)
+        self.assertEqual(ticket.resolution_note, "VPN profili yenilendi.")
+        self.assertIsNotNone(ticket.resolved_at)
+
+    def test_requester_can_reopen_resolved_ticket_with_reason(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Requester reopen resolution",
+            description="Requester çözümü yeterli bulmazsa ticket tekrar açılmalı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="VPN profili yenilendi.",
+            resolved_by=self.technician,
+            resolved_at=timezone.now(),
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/reopen-resolution/",
+            {
+                "reason": "VPN hala kopuyor, aynı hata devam ediyor.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.OPEN)
+        self.assertEqual(ticket.resolution_note, "")
+        self.assertIsNone(ticket.resolved_by)
+        self.assertIsNone(ticket.resolved_at)
+        self.assertIsNone(ticket.closed_by)
+        self.assertIsNone(ticket.closed_at)
+
+        comment = TicketComment.objects.get(ticket=ticket)
+
+        self.assertEqual(comment.author, self.requester)
+        self.assertFalse(comment.is_internal)
+        self.assertIn("VPN hala kopuyor", comment.body)
+
+    def test_requester_reopen_resolution_requires_reason(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Requester reopen reason required",
+            description="Açıklamasız yeniden açma engellenmeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Sorun giderildi.",
+            resolved_by=self.technician,
+            resolved_at=timezone.now(),
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/reopen-resolution/",
+            {
+                "reason": "   ",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("reason", response.data)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.RESOLVED)
+
+    def test_requester_cannot_confirm_someone_elses_resolved_ticket(self):
+        other_requester = self.create_user_with_role(
+            "resolution-other-requester",
+            UserProfile.Role.REQUESTER,
+        )
+        other_employee = Employee.objects.create(
+            user=other_requester,
+            full_name="Resolution Other Requester",
+            email="resolution.other@example.com",
+            is_active=True,
+        )
+
+        ticket = Ticket.objects.create(
+            employee=other_employee,
+            title="Other requester resolved ticket",
+            description="Bu ticket başka requester'a ait.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Sorun giderildi.",
+            resolved_by=self.technician,
+            resolved_at=timezone.now(),
+            created_by=other_requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        response = self.client.post(
+            f"/api/tickets/{ticket.id}/confirm-resolution/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.RESOLVED)
+
+    def test_resolution_confirmation_actions_only_work_for_resolved_tickets(self):
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Open ticket cannot be confirmed",
+            description="Açık ticket requester tarafından çözüm onayına gidemez.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.OPEN,
+            created_by=self.requester,
+        )
+
+        self.client.force_authenticate(user=self.requester)
+
+        confirm_response = self.client.post(
+            f"/api/tickets/{ticket.id}/confirm-resolution/",
+            {},
+            format="json",
+        )
+        reopen_response = self.client.post(
+            f"/api/tickets/{ticket.id}/reopen-resolution/",
+            {
+                "reason": "Sorun devam ediyor.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(confirm_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(reopen_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.OPEN)
+
+
+    def test_auto_close_resolved_tickets_command_closes_old_resolved_ticket_and_writes_audit(self):
+        old_resolved_at = timezone.now() - timedelta(days=4)
+        recent_resolved_at = timezone.now() - timedelta(days=1)
+
+        old_ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Old resolved ticket",
+            description="Eski resolved ticket otomatik kapanmalı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Sorun giderildi.",
+            resolved_by=self.technician,
+            resolved_at=old_resolved_at,
+            created_by=self.requester,
+        )
+        recent_ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Recent resolved ticket",
+            description="Yeni resolved ticket kapanmamalı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Yeni çözüm.",
+            resolved_by=self.technician,
+            resolved_at=recent_resolved_at,
+            created_by=self.requester,
+        )
+
+        output = StringIO()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            call_command(
+                "auto_close_resolved_tickets",
+                days=3,
+                stdout=output,
+            )
+
+        old_ticket.refresh_from_db()
+        recent_ticket.refresh_from_db()
+
+        self.assertEqual(old_ticket.status, Ticket.Status.CLOSED)
+        self.assertIsNone(old_ticket.closed_by)
+        self.assertIsNotNone(old_ticket.closed_at)
+        self.assertEqual(old_ticket.resolution_note, "Sorun giderildi.")
+
+        self.assertEqual(recent_ticket.status, Ticket.Status.RESOLVED)
+        self.assertIsNone(recent_ticket.closed_at)
+
+        audit_log = AuditLog.objects.get(
+            metadata__operation="system_auto_closed_resolution",
+            metadata__ticket_id=old_ticket.id,
+        )
+
+        self.assertIsNone(audit_log.actor)
+        self.assertEqual(audit_log.action, AuditLog.Action.STATUS_CHANGE)
+        self.assertEqual(
+            audit_log.metadata["timeline_type"],
+            "system_auto_closed_resolution",
+        )
+        self.assertIn("1 ticket", output.getvalue())
+
+    def test_auto_close_resolved_tickets_dry_run_does_not_change_database(self):
+        old_resolved_at = timezone.now() - timedelta(days=4)
+
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Dry run resolved ticket",
+            description="Dry-run ticket değiştirmemeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Sorun giderildi.",
+            resolved_by=self.technician,
+            resolved_at=old_resolved_at,
+            created_by=self.requester,
+        )
+
+        output = StringIO()
+
+        call_command(
+            "auto_close_resolved_tickets",
+            days=3,
+            dry_run=True,
+            stdout=output,
+        )
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.RESOLVED)
+        self.assertIsNone(ticket.closed_at)
+        self.assertFalse(
+            AuditLog.objects.filter(
+                metadata__operation="system_auto_closed_resolution",
+                metadata__ticket_id=ticket.id,
+            ).exists()
+        )
+        self.assertIn("DRY RUN", output.getvalue())
+
+    def test_auto_close_resolved_tickets_command_is_idempotent(self):
+        old_resolved_at = timezone.now() - timedelta(days=4)
+
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Idempotent auto close ticket",
+            description="İkinci çalıştırmada tekrar kapanmamalı.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Sorun giderildi.",
+            resolved_by=self.technician,
+            resolved_at=old_resolved_at,
+            created_by=self.requester,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            call_command("auto_close_resolved_tickets", days=3)
+
+        ticket.refresh_from_db()
+
+        first_closed_at = ticket.closed_at
+
+        with self.captureOnCommitCallbacks(execute=True):
+            call_command("auto_close_resolved_tickets", days=3)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(ticket.status, Ticket.Status.CLOSED)
+        self.assertEqual(ticket.closed_at, first_closed_at)
+        self.assertEqual(
+            AuditLog.objects.filter(
+                metadata__operation="system_auto_closed_resolution",
+                metadata__ticket_id=ticket.id,
+            ).count(),
+            1,
+        )
+
+    def test_timeline_includes_system_auto_closed_resolution_item(self):
+        old_resolved_at = timezone.now() - timedelta(days=4)
+
+        ticket = Ticket.objects.create(
+            employee=self.employee,
+            title="Timeline auto close ticket",
+            description="Auto close timeline içinde görünmeli.",
+            category=Ticket.Category.OTHER,
+            priority=Ticket.Priority.NORMAL,
+            approval_status=Ticket.ApprovalStatus.NOT_REQUIRED,
+            status=Ticket.Status.RESOLVED,
+            resolution_note="Sorun giderildi.",
+            resolved_by=self.technician,
+            resolved_at=old_resolved_at,
+            created_by=self.requester,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            call_command("auto_close_resolved_tickets", days=3)
+
+        ticket.refresh_from_db()
+
+        self.client.force_authenticate(user=self.requester)
+
+        timeline_response = self.client.get(f"/api/tickets/{ticket.id}/timeline/")
+
+        self.assertEqual(timeline_response.status_code, status.HTTP_200_OK)
+
+        item_types = [item["type"] for item in timeline_response.data["items"]]
+        resolved_stages = [
+            stage
+            for stage in timeline_response.data["stages"]
+            if stage["stage"] == "resolved"
+        ]
+
+        self.assertIn("system_auto_closed_resolution", item_types)
+        self.assertEqual(len(resolved_stages), 1)
+        self.assertEqual(resolved_stages[0]["label"], "Kapatıldı")
+        self.assertEqual(resolved_stages[0]["state"], "done")
+        self.assertEqual(resolved_stages[0]["actor_name"], "Sistem")
+        self.assertTrue(resolved_stages[0]["metadata"]["closed_by_system"])

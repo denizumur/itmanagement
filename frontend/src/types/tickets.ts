@@ -77,6 +77,10 @@ export interface TicketStatusUpdatePayload {
 export interface TicketReturnToRequesterPayload {
   comment: string;
 }
+export interface TicketResolutionReopenPayload {
+  reason: string;
+}
+
 export interface TicketApproval {
   id: number;
   ticket: Ticket;
@@ -326,9 +330,12 @@ export type TicketTimelineItemType =
   | "approval_requested"
   | "approval_approved"
   | "approval_rejected"
+  | "system_auto_closed_resolution"
   | "status_changed"
   | "assigned_changed"
   | "requester_resubmitted"
+  | "requester_confirmed_resolution"
+  | "requester_reopened_resolution"
   | "it_returned_to_requester"
   | "public_comment_added"
   | "internal_note_added"

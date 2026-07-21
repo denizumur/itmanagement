@@ -21,7 +21,12 @@ import { RequesterTicketForm } from "../components/tickets/RequesterTicketForm";
 import { TicketChatPanel } from "../components/tickets/TicketChatPanel";
 import { TicketTimelineIndicator } from "../components/tickets/TicketTimelineIndicator";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { useMyTickets, useRequesterContext } from "../hooks/useTickets";
+import {
+  useConfirmTicketResolution,
+  useMyTickets,
+  useReopenTicketResolution,
+  useRequesterContext,
+} from "../hooks/useTickets";
 import { cn } from "../lib/cn";
 import {
   getTicketApprovalMeta,
@@ -35,6 +40,7 @@ type MyTicketsSource = "approvals" | null;
 type TicketListFilter =
   | "all"
   | "returned_to_requester"
+  | "resolved"
   | "open"
   | "in_progress"
   | "pending_approval";
@@ -45,6 +51,7 @@ const ticketListFilterOptions: Array<{
 }> = [
   { value: "all", label: "Tüm aktif talepler" },
   { value: "returned_to_requester", label: "Geri gönderilenler" },
+  { value: "resolved", label: "Çözüm teyidi bekleyenler" },
   { value: "open", label: "Açık" },
   { value: "in_progress", label: "İşlemde" },
   { value: "pending_approval", label: "Onay bekleyenler" },
@@ -97,16 +104,66 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function getErrorMessage(error: unknown) {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return "İşlem sırasında bir hata oluştu.";
+  }
+
+  const response = (
+    error as {
+      response?: {
+        data?: unknown;
+      };
+    }
+  ).response;
+
+  const data = response?.data;
+
+  if (!data) {
+    return "İşlem sırasında bir hata oluştu.";
+  }
+
+  if (typeof data === "string") {
+    return data;
+  }
+
+  if (typeof data === "object" && "detail" in data) {
+    const detail = (data as { detail?: unknown }).detail;
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+  }
+
+  if (typeof data === "object") {
+    const firstEntry = Object.entries(data as Record<string, unknown>)[0];
+
+    if (firstEntry) {
+      const [, value] = firstEntry;
+
+      if (Array.isArray(value)) {
+        return value.join(", ");
+      }
+
+      if (typeof value === "string") {
+        return value;
+      }
+    }
+  }
+
+  return "İşlem sırasında bir hata oluştu.";
+}
+
 function normalizeText(value: string) {
   return value.toLocaleLowerCase("tr-TR").trim();
 }
 
+function isResolvedAwaitingConfirmation(ticket: Ticket) {
+  return ticket.status === "resolved";
+}
+
 function isHistoryTicket(ticket: Ticket) {
-  return (
-    ticket.status === "resolved" ||
-    ticket.status === "closed" ||
-    ticket.approval_status === "rejected"
-  );
+  return ticket.status === "closed" || ticket.approval_status === "rejected";
 }
 
 function isActiveTicket(ticket: Ticket) {
@@ -150,6 +207,10 @@ function matchesTicketListFilter(ticket: Ticket, filter: TicketListFilter) {
     return ticket.status === "returned_to_requester";
   }
 
+  if (filter === "resolved") {
+    return ticket.status === "resolved";
+  }
+
   if (filter === "pending_approval") {
     return ticket.approval_status === "pending";
   }
@@ -175,6 +236,13 @@ function sortActiveTicketsForRequester(first: Ticket, second: Ticket) {
     return firstReturned ? -1 : 1;
   }
 
+  const firstResolved = isResolvedAwaitingConfirmation(first);
+  const secondResolved = isResolvedAwaitingConfirmation(second);
+
+  if (firstResolved !== secondResolved) {
+    return firstResolved ? -1 : 1;
+  }
+
   return getSortableTime(second.updated_at) - getSortableTime(first.updated_at);
 }
 
@@ -198,16 +266,26 @@ function BackButton({ onClick }: { onClick: () => void }) {
 function TicketCard({
   ticket,
   selected,
+  isConfirmingResolution,
+  isReopeningResolution,
   onSelect,
+  onConfirmResolution,
+  onOpenReopenResolution,
 }: {
   ticket: Ticket;
   selected: boolean;
+  isConfirmingResolution: boolean;
+  isReopeningResolution: boolean;
   onSelect: (ticket: Ticket) => void;
+  onConfirmResolution: (ticket: Ticket) => void | Promise<void>;
+  onOpenReopenResolution: (ticket: Ticket) => void;
 }) {
   const statusMeta = getTicketStatusMeta(ticket.status);
   const priorityMeta = getTicketPriorityMeta(ticket.priority);
   const approvalMeta = getTicketApprovalMeta(ticket.approval_status);
   const returnedToRequester = isReturnedToRequester(ticket);
+  const resolvedAwaitingConfirmation = isResolvedAwaitingConfirmation(ticket);
+  const actionPending = isConfirmingResolution || isReopeningResolution;
 
   return (
     <article
@@ -215,11 +293,15 @@ function TicketCard({
         "rounded-panel border bg-surface-1 p-lg shadow-panel transition hover:border-accent/60",
         selected && returnedToRequester
           ? "border-danger bg-danger-bg"
-          : selected
-            ? "border-accent bg-accent/5"
-            : returnedToRequester
-              ? "border-danger/50 bg-danger-bg hover:border-danger"
-              : "border-border"
+          : selected && resolvedAwaitingConfirmation
+            ? "border-success bg-success-bg"
+            : selected
+              ? "border-accent bg-accent/5"
+              : returnedToRequester
+                ? "border-danger/50 bg-danger-bg hover:border-danger"
+                : resolvedAwaitingConfirmation
+                  ? "border-success/50 bg-success-bg hover:border-success"
+                  : "border-border"
       )}
     >
       <div className="flex flex-col gap-md lg:flex-row lg:items-start lg:justify-between">
@@ -230,7 +312,9 @@ function TicketCard({
                 "rounded-full border px-sm py-1 text-caption",
                 returnedToRequester
                   ? "border-danger/30 bg-surface-1 text-danger"
-                  : "border-border bg-surface-2 text-text-secondary"
+                  : resolvedAwaitingConfirmation
+                    ? "border-success/30 bg-surface-1 text-success"
+                    : "border-border bg-surface-2 text-text-secondary"
               )}
             >
               #{ticket.id}
@@ -262,6 +346,50 @@ function TicketCard({
         <div className="mt-md rounded-app border border-danger/30 bg-surface-1 px-md py-sm text-caption text-danger">
           Geri gönderildi. Mesajları kontrol edip eksik bilgileri tamamladıktan
           sonra tekrar gönderebilirsin.
+        </div>
+      ) : null}
+
+      {resolvedAwaitingConfirmation ? (
+        <div className="mt-md rounded-2xl border border-success/30 bg-surface-1 p-md">
+          <div className="flex flex-col gap-sm lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-body font-semibold text-success">
+                Sorun çözüldü mü?
+              </p>
+              <p className="mt-xs text-caption text-text-secondary">
+                IT çözüm notu ekledi. Sorun giderildiyse ticket’ı kapatabilirsin.
+              </p>
+
+              {ticket.resolution_note ? (
+                <p className="mt-sm rounded-app border border-border bg-surface-2 px-md py-sm text-caption text-text-primary">
+                  <span className="font-semibold">Çözüm notu:</span>{" "}
+                  {ticket.resolution_note}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 flex-col gap-xs sm:flex-row lg:flex-col xl:flex-row">
+              <button
+                type="button"
+                onClick={() => onConfirmResolution(ticket)}
+                disabled={actionPending}
+                className="inline-flex items-center justify-center gap-xs rounded-app bg-success px-md py-sm text-caption font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <IconShieldCheck size={15} aria-hidden={true} />
+                {isConfirmingResolution ? "Kapatılıyor..." : "Evet, kapat"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onOpenReopenResolution(ticket)}
+                disabled={actionPending}
+                className="inline-flex items-center justify-center gap-xs rounded-app border border-warning/40 px-md py-sm text-caption font-semibold text-warning transition hover:bg-warning-bg disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <IconRefresh size={15} aria-hidden={true} />
+                Hayır, hâlâ sorun var
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -360,6 +488,104 @@ function TicketChatDrawer({
   );
 }
 
+function ReopenResolutionDialog({
+  ticket,
+  reason,
+  error,
+  isSubmitting,
+  onReasonChange,
+  onClose,
+  onConfirm,
+}: {
+  ticket: Ticket | null;
+  reason: string;
+  error: string | null;
+  isSubmitting: boolean;
+  onReasonChange: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!ticket) {
+    return null;
+  }
+
+  const canSubmit = reason.trim().length >= 10 && !isSubmitting;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-md backdrop-blur-sm">
+      <form
+        className="w-full max-w-lg rounded-panel border border-border bg-surface-0 p-lg shadow-panel"
+        onSubmit={(event) => {
+          event.preventDefault();
+
+          if (canSubmit) {
+            onConfirm();
+          }
+        }}
+      >
+        <div>
+          <p className="text-caption font-semibold uppercase tracking-wide text-warning">
+            Çözüm yeterli değil
+          </p>
+          <h2 className="mt-xs text-h3 text-text-primary">
+            #{ticket.id} {ticket.title}
+          </h2>
+          <p className="mt-sm text-body text-text-secondary">
+            Sorun devam ediyorsa kısa bir açıklama yaz. Ticket tekrar açık
+            duruma döner ve IT kuyruğuna yeniden girer.
+          </p>
+        </div>
+
+        <label
+          htmlFor="resolution-reopen-reason"
+          className="mt-lg block text-caption font-semibold text-text-secondary"
+        >
+          Sorun neden devam ediyor?
+        </label>
+
+        <textarea
+          id="resolution-reopen-reason"
+          value={reason}
+          onChange={(event) => onReasonChange(event.target.value)}
+          autoFocus
+          className="mt-xs min-h-[120px] w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
+          placeholder="Örn: VPN hâlâ kopuyor, aynı hata mesajını almaya devam ediyorum."
+        />
+
+        <div className="mt-md rounded-app border border-warning/30 bg-warning-bg px-md py-sm text-caption text-warning">
+          Açıklama zorunludur ve en az 10 karakter olmalıdır.
+        </div>
+
+        {error ? (
+          <div className="mt-md rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-caption text-danger">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="mt-lg flex flex-col-reverse gap-sm sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Vazgeç
+          </button>
+
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="inline-flex items-center justify-center gap-xs rounded-app bg-warning px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <IconRefresh size={16} aria-hidden={true} />
+            {isSubmitting ? "Gönderiliyor..." : "Hayır, tekrar aç"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function EmptyTicketState({
   title,
   onCreate,
@@ -396,7 +622,11 @@ function TicketListSection({
   onFilterChange,
   isFetching,
   selectedTicket,
+  isConfirmingResolution,
+  isReopeningResolution,
   onSelectTicket,
+  onConfirmResolution,
+  onOpenReopenResolution,
   onRefresh,
   onBack,
   onCreate,
@@ -409,7 +639,11 @@ function TicketListSection({
   onFilterChange?: (value: TicketListFilter) => void;
   isFetching: boolean;
   selectedTicket: Ticket | null;
+  isConfirmingResolution: boolean;
+  isReopeningResolution: boolean;
   onSelectTicket: (ticket: Ticket) => void;
+  onConfirmResolution: (ticket: Ticket) => void | Promise<void>;
+  onOpenReopenResolution: (ticket: Ticket) => void;
   onRefresh: () => void;
   onBack: () => void;
   onCreate: () => void;
@@ -492,7 +726,11 @@ function TicketListSection({
               key={ticket.id}
               ticket={ticket}
               selected={selectedTicket?.id === ticket.id}
+              isConfirmingResolution={isConfirmingResolution}
+              isReopeningResolution={isReopeningResolution}
               onSelect={onSelectTicket}
+              onConfirmResolution={onConfirmResolution}
+              onOpenReopenResolution={onOpenReopenResolution}
             />
           ))}
         </div>
@@ -514,10 +752,18 @@ export function MyTicketsPage() {
 
   const myTicketsQuery = useMyTickets();
   const requesterContextQuery = useRequesterContext();
+  const confirmResolutionMutation = useConfirmTicketResolution();
+  const reopenResolutionMutation = useReopenTicketResolution();
 
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [ticketFilter, setTicketFilter] = useState<TicketListFilter>("all");
+  const [reopenResolutionTicket, setReopenResolutionTicket] =
+    useState<Ticket | null>(null);
+  const [reopenReason, setReopenReason] = useState("");
+  const [resolutionActionError, setResolutionActionError] = useState<
+    string | null
+  >(null);
 
   const allTickets = useMemo(
     () => myTicketsQuery.data ?? [],
@@ -568,6 +814,7 @@ export function MyTicketsPage() {
     setSelectedTicket(null);
     setSearchTerm("");
     setTicketFilter("all");
+    setResolutionActionError(null);
     updateViewInUrl(view, source);
     setCurrentView(view);
   }
@@ -576,6 +823,7 @@ export function MyTicketsPage() {
     setSelectedTicket(null);
     setSearchTerm("");
     setTicketFilter("all");
+    setResolutionActionError(null);
 
     if (source === "approvals" || isApproverPortalUser) {
       window.location.assign("/approvals");
@@ -601,6 +849,68 @@ export function MyTicketsPage() {
     goToView("list");
   }
 
+  async function handleConfirmResolution(ticket: Ticket) {
+    setResolutionActionError(null);
+
+    try {
+      const updated = await confirmResolutionMutation.mutateAsync(ticket.id);
+
+      if (selectedTicket?.id === ticket.id) {
+        setSelectedTicket(updated);
+      }
+
+      await refetchAll();
+    } catch (confirmError) {
+      setResolutionActionError(getErrorMessage(confirmError));
+    }
+  }
+
+  function handleOpenReopenResolution(ticket: Ticket) {
+    setReopenResolutionTicket(ticket);
+    setReopenReason("");
+    setResolutionActionError(null);
+  }
+
+  function handleCloseReopenResolution() {
+    if (reopenResolutionMutation.isPending) {
+      return;
+    }
+
+    setReopenResolutionTicket(null);
+    setReopenReason("");
+    setResolutionActionError(null);
+  }
+
+  async function handleConfirmReopenResolution() {
+    const reason = reopenReason.trim();
+
+    if (!reopenResolutionTicket || reason.length < 10) {
+      return;
+    }
+
+    setResolutionActionError(null);
+
+    try {
+      const updated = await reopenResolutionMutation.mutateAsync({
+        ticketId: reopenResolutionTicket.id,
+        payload: {
+          reason,
+        },
+      });
+
+      if (selectedTicket?.id === reopenResolutionTicket.id) {
+        setSelectedTicket(updated);
+      }
+
+      await refetchAll();
+
+      setReopenResolutionTicket(null);
+      setReopenReason("");
+    } catch (reopenError) {
+      setResolutionActionError(getErrorMessage(reopenError));
+    }
+  }
+
   const isLoadingHome = myTicketsQuery.isLoading;
 
   const approverReturnButton = isApproverPortalUser ? (
@@ -619,6 +929,12 @@ export function MyTicketsPage() {
   return (
     <SimplePortalShell badge="Çalışan Portalı" title="Yardım Merkezi" subtitle="">
       {approverReturnButton}
+
+      {resolutionActionError ? (
+        <div className="mb-lg rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
+          {resolutionActionError}
+        </div>
+      ) : null}
 
       {currentView === "home" ? (
         <section className="mx-auto max-w-4xl">
@@ -686,7 +1002,11 @@ export function MyTicketsPage() {
           onFilterChange={setTicketFilter}
           isFetching={myTicketsQuery.isFetching}
           selectedTicket={selectedTicket}
+          isConfirmingResolution={confirmResolutionMutation.isPending}
+          isReopeningResolution={reopenResolutionMutation.isPending}
           onSelectTicket={setSelectedTicket}
+          onConfirmResolution={handleConfirmResolution}
+          onOpenReopenResolution={handleOpenReopenResolution}
           onRefresh={refetchAll}
           onBack={goBack}
           onCreate={() => goToView("create")}
@@ -701,7 +1021,11 @@ export function MyTicketsPage() {
           onSearchChange={setSearchTerm}
           isFetching={myTicketsQuery.isFetching}
           selectedTicket={selectedTicket}
+          isConfirmingResolution={confirmResolutionMutation.isPending}
+          isReopeningResolution={reopenResolutionMutation.isPending}
           onSelectTicket={setSelectedTicket}
+          onConfirmResolution={handleConfirmResolution}
+          onOpenReopenResolution={handleOpenReopenResolution}
           onRefresh={refetchAll}
           onBack={goBack}
           onCreate={() => goToView("create")}
@@ -712,6 +1036,16 @@ export function MyTicketsPage() {
         ticket={selectedTicket}
         onClose={() => setSelectedTicket(null)}
         onCommentCreated={refetchAll}
+      />
+
+      <ReopenResolutionDialog
+        ticket={reopenResolutionTicket}
+        reason={reopenReason}
+        error={resolutionActionError}
+        isSubmitting={reopenResolutionMutation.isPending}
+        onReasonChange={setReopenReason}
+        onClose={handleCloseReopenResolution}
+        onConfirm={handleConfirmReopenResolution}
       />
     </SimplePortalShell>
   );

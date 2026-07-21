@@ -14,6 +14,8 @@ import {
   fetchTicketAttachments,
   fetchTicketComments,
   fetchTicketContext,
+  confirmTicketResolution,
+  reopenTicketResolution,
   fetchTicketTimeline,
   fetchTicketQueue,
   fetchTicketSummary,
@@ -30,6 +32,7 @@ import type {
   TicketAttachmentUploadPayload,
   TicketCommentCreatePayload,
   TicketReturnToRequesterPayload,
+  TicketResolutionReopenPayload,
   TicketCreatePayload,
   TicketStatusUpdatePayload,
 } from "../types/tickets";
@@ -216,6 +219,52 @@ export function useReturnTicketToRequester() {
     },
   });
 }
+
+export function useConfirmTicketResolution() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ticketId: number) => confirmTicketResolution(ticketId),
+    onSuccess: async (_, ticketId) => {
+      await queryClient.invalidateQueries({
+        queryKey: ticketTimelineQueryKey(ticketId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ticketCommentsQueryKey(ticketId),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useReopenTicketResolution() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      payload,
+    }: {
+      ticketId: number;
+      payload: TicketResolutionReopenPayload;
+    }) => reopenTicketResolution(ticketId, payload),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ticketTimelineQueryKey(variables.ticketId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ticketCommentsQueryKey(variables.ticketId),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+
 export function useCreateTicketComment() {
   const queryClient = useQueryClient();
 

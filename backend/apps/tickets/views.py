@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -38,6 +39,7 @@ from apps.tickets.serializers import (
     TicketCreateSerializer,
     TicketITReturnSerializer,
     TicketResubmitSerializer,
+    TicketResolutionReopenSerializer,
     TicketSerializer,
     TicketStatusUpdateSerializer,
     build_requester_context,
@@ -66,6 +68,11 @@ def get_user_role(user):
 def is_requester(user):
     return get_user_role(user) == UserProfile.Role.REQUESTER
 
+def can_use_requester_portal(user):
+    return get_user_role(user) in {
+        UserProfile.Role.REQUESTER,
+        UserProfile.Role.APPROVER,
+    }
 
 def is_approver(user):
     return get_user_role(user) in {
@@ -111,6 +118,13 @@ def get_display_name(user):
 def get_choice_label(choices, value):
     return dict(choices).get(value, value)
 
+def user_owns_ticket(user, ticket):
+    return bool(
+        user
+        and getattr(user, "is_authenticated", False)
+        and ticket.employee_id
+        and ticket.employee.user_id == user.id
+    )
 
 def create_ticket_audit_log(
     *,
@@ -254,10 +268,14 @@ def get_accessible_ticket_queryset(user):
         return queryset
 
     if is_approver(user):
-        return queryset.filter(approvals__approver_user=user).distinct()
+        return queryset.filter(
+            Q(employee__user=user) | Q(approvals__approver_user=user)
+        ).distinct()
 
     return queryset.none()
 
+def get_owned_ticket_queryset(user):
+    return ticket_base_queryset().filter(employee__user=user)
 
 def get_ticket_table_queryset(user):
     queryset = get_accessible_ticket_queryset(user)
@@ -322,10 +340,7 @@ def user_can_access_ticket_attachment(user, attachment):
     if can_manage_tickets(user):
         return True
 
-    if is_requester(user):
-        return ticket.employee.user_id == user.id
-
-    return False
+    return ticket.employee.user_id == user.id
 
 
 class TicketTableListAPIView(ListAPIView):
@@ -411,10 +426,8 @@ class TicketViewSet(ModelViewSet):
         return TicketSerializer
 
     def create(self, request, *args, **kwargs):
-        if not is_requester(request.user):
-            raise PermissionDenied(
-                "Bu fazda ticket oluşturma yalnızca Requester rolü içindir."
-            )
+        if not can_use_requester_portal(request.user):
+         raise PermissionDenied("Ticket oluşturma yetkin yok.")
 
         employee = get_active_employee_for_requester(request.user)
 
@@ -507,12 +520,23 @@ class TicketViewSet(ModelViewSet):
         raise PermissionDenied(
             "Ticket güncellemek için status veya assign aksiyonlarını kullan."
         )
+    @action(detail=False, methods=["get"], url_path="mine")
+    def mine(self, request):
+        if not can_use_requester_portal(request.user):
+            raise PermissionDenied("Kendi ticketlarını görüntüleme yetkin yok.")
 
+        queryset = get_owned_ticket_queryset(request.user)
+        serializer = TicketSerializer(
+            queryset,
+            many=True,
+            context={"request": request},
+        )
+        return Response(serializer.data)
     @action(detail=False, methods=["get"], url_path="requester-context")
     def requester_context(self, request):
-        if not is_requester(request.user):
-            raise PermissionDenied("Requester context yalnızca requester rolü içindir.")
-
+        if not can_use_requester_portal(request.user):
+            raise PermissionDenied("Requester context görüntüleme yetkin yok.")
+        
         employee = get_active_employee_for_requester(request.user)
 
         if not employee:
@@ -547,10 +571,8 @@ class TicketViewSet(ModelViewSet):
 
         user_can_view_timeline = (
             can_view_it_queue(request.user)
-            or (
-                is_requester(request.user)
-                and ticket.employee.user_id == request.user.id
-            )
+            or user_owns_ticket(request.user, ticket)
+
             or (
                 is_approver(request.user)
                 and ticket.approvals.filter(approver_user=request.user).exists()
@@ -870,10 +892,9 @@ class TicketViewSet(ModelViewSet):
     def resubmit(self, request, pk=None):
         ticket = self.get_object()
 
-        if not is_requester(request.user):
-            raise PermissionDenied("Ticket tekrar gönderme yalnızca requester rolü içindir.")
-
-        if ticket.employee.user_id != request.user.id:
+        if not can_use_requester_portal(request.user):
+            raise PermissionDenied("Ticket tekrar gönderme yetkin yok.")
+        if not user_owns_ticket(request.user, ticket):
             raise PermissionDenied("Yalnızca kendi ticketınızı tekrar gönderebilirsiniz.")
 
         if ticket.status != Ticket.Status.RETURNED_TO_REQUESTER:
@@ -982,7 +1003,175 @@ class TicketViewSet(ModelViewSet):
                 )
 
         return Response(TicketSerializer(ticket, context={"request": request}).data)
+    
 
+    @action(detail=True, methods=["post"], url_path="confirm-resolution")
+    def confirm_resolution(self, request, pk=None):
+        ticket = self.get_object()
+
+        if not can_use_requester_portal(request.user):
+            raise PermissionDenied("Çözüm onaylama yetkin yok.")
+
+        if not user_owns_ticket(request.user, ticket):
+            raise PermissionDenied("Yalnızca kendi ticket çözümünüzü onaylayabilirsiniz.")
+
+        if ticket.status != Ticket.Status.RESOLVED:
+            raise ValidationError(
+                {
+                    "status": (
+                        "Yalnızca çözüldü durumundaki ticketlar talep sahibi "
+                        "tarafından kapatılabilir."
+                    )
+                }
+            )
+
+        with transaction.atomic():
+            before = serialize_instance(ticket, exclude=TICKET_AUDIT_EXCLUDE_FIELDS)
+            status_before = ticket.status
+            now = timezone.now()
+
+            if not ticket.resolved_at:
+                ticket.resolved_at = now
+
+            ticket.status = Ticket.Status.CLOSED
+            ticket.closed_by = request.user
+            ticket.closed_at = now
+
+            ticket.save(
+                update_fields=[
+                    "status",
+                    "resolved_at",
+                    "closed_by",
+                    "closed_at",
+                    "updated_at",
+                ]
+            )
+            ticket.refresh_from_db()
+
+            after = serialize_instance(ticket, exclude=TICKET_AUDIT_EXCLUDE_FIELDS)
+
+            create_ticket_audit_log(
+                request=request,
+                action=AuditLog.Action.STATUS_CHANGE,
+                ticket=ticket,
+                operation="requester_resolution_confirmed",
+                before=before,
+                after=after,
+                timeline_type="requester_confirmed_resolution",
+                metadata={
+                    "status_before": status_before,
+                    "status_after": ticket.status,
+                    "status_before_label": get_choice_label(
+                        Ticket.Status.choices,
+                        status_before,
+                    ),
+                    "status_after_label": ticket.get_status_display(),
+                    "confirmed_by_id": request.user.id,
+                    "confirmed_by_name": get_display_name(request.user),
+                },
+            )
+
+        return Response(TicketSerializer(ticket, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"], url_path="reopen-resolution")
+    def reopen_resolution(self, request, pk=None):
+        ticket = self.get_object()
+
+        if not can_use_requester_portal(request.user):
+            raise PermissionDenied("Çözümü yeniden açma yetkin yok.")
+
+        if not user_owns_ticket(request.user, ticket):
+            raise PermissionDenied("Yalnızca kendi ticket çözümünüzü yeniden açabilirsiniz.")
+
+        if ticket.status != Ticket.Status.RESOLVED:
+            raise ValidationError(
+                {
+                    "status": (
+                        "Yalnızca çözüldü durumundaki ticketlar talep sahibi "
+                        "tarafından yeniden açılabilir."
+                    )
+                }
+            )
+
+        serializer = TicketResolutionReopenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        reason = serializer.validated_data["reason"]
+
+        with transaction.atomic():
+            before = serialize_instance(ticket, exclude=TICKET_AUDIT_EXCLUDE_FIELDS)
+            status_before = ticket.status
+
+            ticket.status = Ticket.Status.OPEN
+            ticket.resolution_note = ""
+            ticket.resolved_by = None
+            ticket.resolved_at = None
+            ticket.closed_by = None
+            ticket.closed_at = None
+
+            ticket.save(
+                update_fields=[
+                    "status",
+                    "resolution_note",
+                    "resolved_by",
+                    "resolved_at",
+                    "closed_by",
+                    "closed_at",
+                    "updated_at",
+                ]
+            )
+            ticket.refresh_from_db()
+
+            comment = TicketComment.objects.create(
+                ticket=ticket,
+                author=request.user,
+                body=f"Çözüm yeterli bulunmadı: {reason}",
+                is_internal=False,
+            )
+
+            create_audit_log(
+                request=request,
+                action=AuditLog.Action.CREATE,
+                instance=comment,
+                before={},
+                after=serialize_instance(comment, exclude=("created_at",)),
+                metadata={
+                    "module": "tickets",
+                    "operation": "requester_resolution_reopen_comment_added",
+                    "ticket_id": ticket.id,
+                    "timeline_type": "public_comment_added",
+                    "comment_id": comment.id,
+                    "is_internal": False,
+                },
+            )
+
+            after = serialize_instance(ticket, exclude=TICKET_AUDIT_EXCLUDE_FIELDS)
+
+            create_ticket_audit_log(
+                request=request,
+                action=AuditLog.Action.STATUS_CHANGE,
+                ticket=ticket,
+                operation="requester_resolution_reopened",
+                before=before,
+                after=after,
+                timeline_type="requester_reopened_resolution",
+                metadata={
+                    "reason": reason,
+                    "comment_id": comment.id,
+                    "status_before": status_before,
+                    "status_after": ticket.status,
+                    "status_before_label": get_choice_label(
+                        Ticket.Status.choices,
+                        status_before,
+                    ),
+                    "status_after_label": ticket.get_status_display(),
+                    "reopened_by_id": request.user.id,
+                    "reopened_by_name": get_display_name(request.user),
+                },
+            )
+
+        return Response(TicketSerializer(ticket, context={"request": request}).data)
+    
     @action(detail=True, methods=["post"], url_path="status")
     def update_status(self, request, pk=None):
         if not can_manage_tickets(request.user):
@@ -1147,10 +1336,12 @@ class TicketViewSet(ModelViewSet):
 
         if request.method == "GET":
             queryset = ticket.comments.select_related("author")
-
-            if is_requester(request.user):
+            
+            if user_owns_ticket(request.user, ticket):
                 queryset = queryset.filter(is_internal=False)
-
+            elif not can_manage_tickets(request.user):
+                raise PermissionDenied("Bu ticket yorumlarını görüntüleme yetkin yok.")
+            
             serializer = TicketCommentSerializer(queryset, many=True)
             return Response(serializer.data)
 
@@ -1159,9 +1350,12 @@ class TicketViewSet(ModelViewSet):
 
         is_internal = serializer.validated_data.get("is_internal", False)
 
-        if is_requester(request.user):
+        if user_owns_ticket(request.user, ticket):
             is_internal = False
-
+            
+        elif not can_manage_tickets(request.user):
+            raise PermissionDenied("Bu ticket için yorum ekleme yetkin yok.")
+        
         if is_internal and not can_manage_tickets(request.user):
             raise PermissionDenied("İç not ekleme yetkin yok.")
 
@@ -1211,10 +1405,7 @@ class TicketViewSet(ModelViewSet):
         ticket = self.get_object()
 
         if request.method == "GET":
-            if is_requester(request.user) and ticket.employee.user_id != request.user.id:
-                raise PermissionDenied("Bu ticket eklerini görüntüleme yetkin yok.")
-
-            if not is_requester(request.user) and not can_manage_tickets(request.user):
+            if not user_owns_ticket(request.user, ticket) and not can_manage_tickets(request.user):
                 raise PermissionDenied("Bu ticket eklerini görüntüleme yetkin yok.")
 
             queryset = ticket.attachments.select_related("uploaded_by")
@@ -1222,12 +1413,9 @@ class TicketViewSet(ModelViewSet):
 
             return Response(serializer.data)
 
-        if is_requester(request.user) and ticket.employee.user_id != request.user.id:
+        if not user_owns_ticket(request.user, ticket) and not can_manage_tickets(request.user):
             raise PermissionDenied("Bu ticket için ek yükleme yetkin yok.")
-
-        if not is_requester(request.user) and not can_manage_tickets(request.user):
-            raise PermissionDenied("Bu ticket için ek yükleme yetkin yok.")
-
+        
         if ticket.attachments.count() >= TICKET_ATTACHMENT_MAX_FILES_PER_TICKET:
             raise ValidationError(
                 {
