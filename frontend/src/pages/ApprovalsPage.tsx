@@ -137,7 +137,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+      className="inline-flex items-center justify-center gap-xs rounded-xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
     >
       <IconArrowLeft size={16} aria-hidden={true} />
       Geri
@@ -156,15 +156,15 @@ function CompactApprovalSummary({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-xs text-caption text-text-secondary">
-      <span className="rounded-full border border-border bg-surface-1 px-sm py-1">
+      <span className="rounded-full border border-border bg-surface-1 px-sm py-1 shadow-sm">
         Bekleyen: <strong className="text-text-primary">{total}</strong>
       </span>
 
-      <span className="rounded-full border border-danger/30 bg-danger-bg px-sm py-1 text-danger">
+      <span className="rounded-full border border-danger/30 bg-danger-bg px-sm py-1 text-danger shadow-sm">
         Acil: <strong>{urgent}</strong>
       </span>
 
-      <span className="rounded-full border border-warning/30 bg-warning-bg px-sm py-1 text-warning">
+      <span className="rounded-full border border-warning/30 bg-warning-bg px-sm py-1 text-warning shadow-sm">
         Yüksek: <strong>{high}</strong>
       </span>
     </div>
@@ -193,7 +193,7 @@ function PendingApprovalCard({
   const status = statusMeta[ticket.status];
 
   return (
-    <article className="rounded-panel border border-border bg-surface-1 p-lg shadow-panel transition hover:border-accent/40">
+    <article className="rounded-panel border border-border bg-surface-1 p-lg shadow-panel transition duration-150 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-card">
       <div className="flex flex-col gap-md lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-xs">
@@ -206,7 +206,9 @@ function PendingApprovalCard({
             <StatusBadge variant="warning">Onay bekliyor</StatusBadge>
           </div>
 
-          <h3 className="mt-sm text-h3 text-text-primary">{ticket.title}</h3>
+          <h3 className="mt-sm text-h3 font-semibold text-text-primary">
+            {ticket.title}
+          </h3>
 
           <div className="mt-xs flex flex-wrap items-center gap-sm text-caption text-text-secondary">
             <span className="inline-flex items-center gap-[4px]">
@@ -222,7 +224,7 @@ function PendingApprovalCard({
         </div>
       </div>
 
-      <p className="mt-md line-clamp-2 rounded-2xl bg-surface-2 px-md py-sm text-body text-text-secondary">
+      <p className="mt-md line-clamp-2 rounded-2xl border border-border-subtle bg-surface-0 px-md py-sm text-body leading-relaxed text-text-secondary">
         {ticket.description}
       </p>
 
@@ -240,12 +242,12 @@ function PendingApprovalCard({
           onChange={(event) =>
             onDecisionNoteChange(ticket.id, event.target.value)
           }
-          className="mt-xs min-h-[82px] w-full rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
+          className="mt-xs min-h-[82px] w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20"
           placeholder="Kısa karar notu yaz..."
         />
       </div>
 
-      <div className="mt-md flex flex-col gap-sm border-t border-border pt-md lg:flex-row lg:items-center lg:justify-between">
+      <div className="mt-md flex flex-col gap-sm border-t border-border-subtle pt-md lg:flex-row lg:items-center lg:justify-between">
         <TicketTimelineIndicator
           ticketId={ticket.id}
           ticketTitle={ticket.title}
@@ -257,7 +259,7 @@ function PendingApprovalCard({
             type="button"
             disabled={isDecisionDisabled}
             onClick={() => onReject(approval)}
-            className="inline-flex items-center justify-center gap-xs rounded-app border border-danger/40 px-md py-sm text-body font-semibold text-danger transition hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-xs rounded-xl border border-danger/40 bg-surface-1 px-md py-sm text-body font-semibold text-danger transition hover:bg-danger-bg focus:outline-none focus:ring-2 focus:ring-danger/25 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <IconX size={16} aria-hidden={true} />
             {isActing ? "İşleniyor..." : "Reddet"}
@@ -267,7 +269,7 @@ function PendingApprovalCard({
             type="button"
             disabled={isDecisionDisabled}
             onClick={() => onApprove(approval)}
-            className="inline-flex items-center justify-center gap-xs rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-xs rounded-xl bg-accent px-md py-sm text-body font-semibold text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <IconCheck size={16} aria-hidden={true} />
             {isActing ? "İşleniyor..." : "Onayla"}
@@ -480,7 +482,9 @@ export function ApprovalsPage() {
             <div className="flex flex-col gap-sm">
               <div className="flex items-center gap-sm">
                 <BackButton onClick={() => goToView("home")} />
-                <h2 className="text-h2 text-text-primary">Onay Bekleyenler</h2>
+                <h2 className="text-h2 font-semibold text-text-primary">
+                  Onay Bekleyenler
+                </h2>
               </div>
 
               <CompactApprovalSummary
@@ -494,7 +498,7 @@ export function ApprovalsPage() {
               type="button"
               onClick={loadApprovals}
               disabled={isRefreshing}
-              className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-xs rounded-xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <IconRefresh
                 size={16}
@@ -506,24 +510,24 @@ export function ApprovalsPage() {
           </div>
 
           {error ? (
-            <div className="mb-md rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
+            <div className="mb-md rounded-2xl border border-danger/30 bg-danger-bg px-md py-sm text-body font-medium text-danger">
               {error}
             </div>
           ) : null}
 
           {successMessage ? (
-            <div className="mb-md rounded-app border border-success/30 bg-success-bg px-md py-sm text-body text-success">
+            <div className="mb-md rounded-2xl border border-success/30 bg-success-bg px-md py-sm text-body font-medium text-success">
               {successMessage}
             </div>
           ) : null}
 
           {isLoading ? (
-            <div className="rounded-panel border border-border bg-surface-1 p-lg text-body text-text-secondary shadow-panel">
+            <div className="rounded-panel border border-border-subtle bg-surface-1 p-lg text-body text-text-secondary shadow-panel">
               Onaylar yükleniyor...
             </div>
           ) : approvals.length === 0 ? (
             <div className="rounded-panel border border-dashed border-border bg-surface-1 p-xl text-center shadow-panel">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-2 text-text-secondary">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-success-bg text-success">
                 <IconCheck size={24} aria-hidden={true} />
               </div>
 

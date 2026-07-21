@@ -255,7 +255,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+      className="inline-flex items-center justify-center gap-xs rounded-xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
     >
       <IconArrowLeft size={16} aria-hidden={true} />
       Geri
@@ -290,7 +290,7 @@ function TicketCard({
   return (
     <article
       className={cn(
-        "rounded-panel border bg-surface-1 p-lg shadow-panel transition hover:border-accent/60",
+        "rounded-panel border bg-surface-1 p-lg shadow-panel transition duration-150 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-card",
         selected && returnedToRequester
           ? "border-danger bg-danger-bg"
           : selected && resolvedAwaitingConfirmation
@@ -343,7 +343,7 @@ function TicketCard({
       </div>
 
       {returnedToRequester ? (
-        <div className="mt-md rounded-app border border-danger/30 bg-surface-1 px-md py-sm text-caption text-danger">
+        <div className="mt-md rounded-2xl border border-danger/30 bg-surface-1 px-md py-sm text-caption font-medium text-danger">
           Geri gönderildi. Mesajları kontrol edip eksik bilgileri tamamladıktan
           sonra tekrar gönderebilirsin.
         </div>
@@ -361,7 +361,7 @@ function TicketCard({
               </p>
 
               {ticket.resolution_note ? (
-                <p className="mt-sm rounded-app border border-border bg-surface-2 px-md py-sm text-caption text-text-primary">
+                <p className="mt-sm rounded-2xl border border-border-subtle bg-surface-0 px-md py-sm text-caption text-text-primary">
                   <span className="font-semibold">Çözüm notu:</span>{" "}
                   {ticket.resolution_note}
                 </p>
@@ -373,7 +373,7 @@ function TicketCard({
                 type="button"
                 onClick={() => onConfirmResolution(ticket)}
                 disabled={actionPending}
-                className="inline-flex items-center justify-center gap-xs rounded-app bg-success px-md py-sm text-caption font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-xs rounded-xl bg-success px-md py-sm text-caption font-semibold text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-success/25 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <IconShieldCheck size={15} aria-hidden={true} />
                 {isConfirmingResolution ? "Kapatılıyor..." : "Evet, kapat"}
@@ -383,7 +383,7 @@ function TicketCard({
                 type="button"
                 onClick={() => onOpenReopenResolution(ticket)}
                 disabled={actionPending}
-                className="inline-flex items-center justify-center gap-xs rounded-app border border-warning/40 px-md py-sm text-caption font-semibold text-warning transition hover:bg-warning-bg disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-xs rounded-xl border border-warning/40 bg-surface-1 px-md py-sm text-caption font-semibold text-warning transition hover:bg-warning-bg focus:outline-none focus:ring-2 focus:ring-warning/25 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <IconRefresh size={15} aria-hidden={true} />
                 Hayır, hâlâ sorun var
@@ -415,15 +415,15 @@ function TicketCard({
         ) : null}
       </div>
 
-      <div className="mt-md flex flex-col gap-sm border-t border-border pt-md sm:flex-row sm:items-center sm:justify-end">
+      <div className="mt-md flex flex-col gap-sm border-t border-border-subtle pt-md sm:flex-row sm:items-center sm:justify-end">
         <button
           type="button"
           onClick={() => onSelect(ticket)}
           className={cn(
-            "inline-flex items-center justify-center gap-xs rounded-app border px-md py-sm text-body transition",
+            "inline-flex items-center justify-center gap-xs rounded-xl border px-md py-sm text-body font-medium transition focus:outline-none focus:ring-2 focus:ring-accent/25",
             selected
               ? "border-accent bg-accent/10 text-accent"
-              : "border-border text-text-primary hover:border-accent hover:text-accent"
+              : "border-border text-text-primary hover:border-accent hover:bg-accent-bg hover:text-accent"
           )}
         >
           <IconMessageCircle size={16} aria-hidden={true} />
@@ -455,9 +455,9 @@ function TicketChatDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
-      <div className="flex h-full w-full max-w-[520px] flex-col bg-surface-0 shadow-panel">
-        <div className="flex items-center justify-between border-b border-border bg-surface-1 p-md">
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45 backdrop-blur-[3px]">
+      <div className="flex h-full w-full max-w-[540px] flex-col border-l border-border bg-surface-1 shadow-popover">
+        <div className="flex items-center justify-between border-b border-border-subtle bg-surface-1 px-lg py-md">
           <div>
             <p className="text-caption text-text-secondary">Talep</p>
             <h2 className="text-h3 text-text-primary">#{ticket.id}</h2>
@@ -466,14 +466,14 @@ function TicketChatDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-secondary transition hover:border-accent hover:text-accent"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface-1 text-text-secondary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
             aria-label="Mesaj panelini kapat"
           >
             <IconX size={18} aria-hidden={true} />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-md">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-surface-0 p-md">
           <TicketChatPanel
             ticket={ticket}
             open={Boolean(ticket)}
@@ -512,9 +512,9 @@ function ReopenResolutionDialog({
   const canSubmit = reason.trim().length >= 10 && !isSubmitting;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-md backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-md backdrop-blur-[3px]">
       <form
-        className="w-full max-w-lg rounded-panel border border-border bg-surface-0 p-lg shadow-panel"
+        className="w-full max-w-lg rounded-panel border border-border bg-surface-1 p-lg shadow-popover"
         onSubmit={(event) => {
           event.preventDefault();
 
@@ -548,16 +548,16 @@ function ReopenResolutionDialog({
           value={reason}
           onChange={(event) => onReasonChange(event.target.value)}
           autoFocus
-          className="mt-xs min-h-[120px] w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
+          className="mt-xs min-h-[120px] w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20"
           placeholder="Örn: VPN hâlâ kopuyor, aynı hata mesajını almaya devam ediyorum."
         />
 
-        <div className="mt-md rounded-app border border-warning/30 bg-warning-bg px-md py-sm text-caption text-warning">
+        <div className="mt-md rounded-2xl border border-warning/30 bg-warning-bg px-md py-sm text-caption font-medium text-warning">
           Açıklama zorunludur ve en az 10 karakter olmalıdır.
         </div>
 
         {error ? (
-          <div className="mt-md rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-caption text-danger">
+          <div className="mt-md rounded-2xl border border-danger/30 bg-danger-bg px-md py-sm text-caption font-medium text-danger">
             {error}
           </div>
         ) : null}
@@ -567,7 +567,7 @@ function ReopenResolutionDialog({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary transition hover:border-accent hover:bg-accent-bg hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             Vazgeç
           </button>
@@ -575,7 +575,7 @@ function ReopenResolutionDialog({
           <button
             type="submit"
             disabled={!canSubmit}
-            className="inline-flex items-center justify-center gap-xs rounded-app bg-warning px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-xs rounded-xl bg-warning px-md py-sm text-body font-semibold text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-warning/25 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <IconRefresh size={16} aria-hidden={true} />
             {isSubmitting ? "Gönderiliyor..." : "Hayır, tekrar aç"}
@@ -595,7 +595,7 @@ function EmptyTicketState({
 }) {
   return (
     <div className="rounded-panel border border-dashed border-border bg-surface-1 p-xl text-center shadow-panel">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-2 text-text-secondary">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-bg text-accent">
         <IconClipboardList size={24} aria-hidden={true} />
       </div>
 
@@ -604,7 +604,7 @@ function EmptyTicketState({
       <button
         type="button"
         onClick={onCreate}
-        className="mt-md inline-flex items-center justify-center gap-xs rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90"
+        className="mt-md inline-flex items-center justify-center gap-xs rounded-xl bg-accent px-md py-sm text-body font-semibold text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent/25"
       >
         <IconPlus size={16} aria-hidden={true} />
         Talep Oluştur
@@ -656,13 +656,13 @@ function TicketListSection({
         <div className="flex items-center gap-sm">
           <BackButton onClick={onBack} />
 
-          <h2 className="text-h2 text-text-primary">{title}</h2>
+          <h2 className="text-h2 font-semibold text-text-primary">{title}</h2>
         </div>
 
         <button
           type="button"
           onClick={onRefresh}
-          className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+          className="inline-flex items-center justify-center gap-xs rounded-xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
         >
           <IconRefresh
             size={16}
@@ -679,10 +679,10 @@ function TicketListSection({
           hasFilter ? "lg:grid-cols-[minmax(0,1fr)_240px]" : "lg:grid-cols-1"
         )}
       >
-        <label className="flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md">
+        <label className="flex h-12 min-w-0 items-center gap-xs rounded-2xl border border-border bg-surface-1 px-md shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
           <IconSearch size={16} className="shrink-0 text-text-secondary" />
           <input
-            className="w-full min-w-0 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+            className="w-full min-w-0 bg-transparent text-body text-text-primary placeholder:text-text-muted focus:outline-none"
             placeholder="Başlık, açıklama, durum, öncelik veya cihaz ara..."
             value={searchTerm}
             onChange={(event) => onSearchChange(event.target.value)}
@@ -690,7 +690,7 @@ function TicketListSection({
         </label>
 
         {hasFilter ? (
-          <label className="flex h-12 min-w-0 items-center gap-xs rounded-app border border-border bg-surface-1 px-md">
+          <label className="flex h-12 min-w-0 items-center gap-xs rounded-2xl border border-border bg-surface-1 px-md shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
             <IconFilter size={16} className="shrink-0 text-text-secondary" />
 
             <select
@@ -712,7 +712,7 @@ function TicketListSection({
       </div>
 
       {isFetching ? (
-        <div className="mb-md rounded-panel border border-border bg-surface-1 p-md text-body text-text-secondary">
+        <div className="mb-md rounded-panel border border-border-subtle bg-surface-1 p-md text-body text-text-secondary shadow-panel">
           Güncelleniyor...
         </div>
       ) : null}
@@ -918,7 +918,7 @@ export function MyTicketsPage() {
       <button
         type="button"
         onClick={goToApprovals}
-        className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+        className="inline-flex items-center justify-center gap-xs rounded-xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
       >
         <IconShieldCheck size={16} aria-hidden={true} />
         Onay Paneline Dön
@@ -931,7 +931,7 @@ export function MyTicketsPage() {
       {approverReturnButton}
 
       {resolutionActionError ? (
-        <div className="mb-lg rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
+        <div className="mb-lg rounded-2xl border border-danger/30 bg-danger-bg px-md py-sm text-body font-medium text-danger">
           {resolutionActionError}
         </div>
       ) : null}
