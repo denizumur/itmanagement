@@ -276,6 +276,9 @@ function ChatBubble({
   item: ChatItem;
   showMeta: boolean;
 }) {
+  const isPublicOwn = item.isOwn && !item.isInternal;
+  const isPublicOther = !item.isOwn && !item.isInternal;
+
   return (
     <div
       className={cn(
@@ -286,16 +289,18 @@ function ChatBubble({
       {showMeta ? (
         <div
           className={cn(
-            "mb-xs flex max-w-[82%] flex-wrap items-center gap-xs text-caption text-text-secondary",
+            "mb-xs flex max-w-[84%] flex-wrap items-center gap-xs text-[11px] text-text-muted",
             item.isOwn && "justify-end text-right"
           )}
         >
-          <span className="font-semibold text-text-primary">{item.authorName}</span>
-          <span>·</span>
+          <span className="font-semibold text-text-secondary">
+            {item.authorName}
+          </span>
+          <span className="text-text-muted">·</span>
           <span>{formatDateTime(item.createdAt)}</span>
 
           {item.isInitial ? (
-            <span className="rounded-full border border-border bg-surface-1 px-xs py-[2px] text-[10px] text-text-secondary">
+            <span className="rounded-full border border-border bg-surface-1 px-xs py-[2px] text-[10px] font-semibold text-text-secondary">
               İlk talep
             </span>
           ) : null}
@@ -303,7 +308,7 @@ function ChatBubble({
           {item.isInternal ? (
             <span className="inline-flex items-center gap-[3px] rounded-full border border-warning/30 bg-warning-bg px-xs py-[2px] text-[10px] font-semibold text-warning">
               <IconLock size={10} aria-hidden={true} />
-              Dahili
+              Dahili not
             </span>
           ) : null}
         </div>
@@ -311,12 +316,12 @@ function ChatBubble({
 
       <div
         className={cn(
-          "max-w-[82%] rounded-[22px] border px-md py-sm shadow-sm",
-          item.isOwn && !item.isInternal
-            ? "rounded-br-md border-accent/20 bg-accent text-white"
+          "max-w-[84%] rounded-2xl border px-md py-sm shadow-sm",
+          isPublicOwn
+            ? "rounded-br-md border-accent bg-accent text-white"
             : null,
-          !item.isOwn && !item.isInternal
-            ? "rounded-bl-md border-border bg-surface-1 text-text-primary"
+          isPublicOther
+            ? "rounded-bl-md border-border-subtle bg-surface-1 text-text-primary"
             : null,
           item.isInternal
             ? "rounded-br-md border-warning/35 bg-warning-bg text-text-primary"
@@ -327,7 +332,7 @@ function ChatBubble({
         <p
           className={cn(
             "whitespace-pre-wrap break-words text-body leading-relaxed",
-            item.isOwn && !item.isInternal ? "text-white" : "text-text-primary"
+            isPublicOwn ? "text-white" : "text-text-primary"
           )}
         >
           {item.body}
@@ -337,9 +342,7 @@ function ChatBubble({
           <p
             className={cn(
               "mt-xs text-[11px]",
-              item.isOwn && !item.isInternal
-                ? "text-white/80"
-                : "text-text-secondary"
+              isPublicOwn ? "text-white/80" : "text-text-secondary"
             )}
           >
             Gönderiliyor...
@@ -557,13 +560,13 @@ export function TicketChatPanel({
     return (
       <aside
         className={cn(
-          "rounded-panel border border-border bg-surface-1 p-lg shadow-panel",
+          "rounded-panel border border-border bg-surface-1 p-lg shadow-card",
           variant === "workspace" && "flex h-full min-h-[520px] flex-col",
           className
         )}
       >
         <div className="flex h-full min-h-[360px] flex-col items-center justify-center text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-text-secondary">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-bg text-accent">
             <IconMessageCircle size={22} aria-hidden={true} />
           </div>
           <h2 className="mt-md text-h3 text-text-primary">Mesajlar</h2>
@@ -583,7 +586,7 @@ export function TicketChatPanel({
   return (
     <aside
       className={cn(
-        "rounded-panel border border-border bg-surface-1 shadow-panel",
+        "rounded-panel border border-border bg-surface-1 shadow-card",
         variant === "workspace"
           ? "flex h-full min-h-0 flex-col overflow-hidden"
           : "p-lg",
@@ -599,10 +602,12 @@ export function TicketChatPanel({
         {headerSlot ? (
           headerSlot
         ) : (
-          <div className="flex items-start justify-between gap-md border-b border-border pb-md">
-            <div>
-              <p className="text-caption text-text-secondary">Talep mesajları</p>
-              <h2 className="mt-xs text-h3 text-text-primary">
+          <div className="flex items-start justify-between gap-md border-b border-border-subtle px-md py-md">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+                Talep mesajları
+              </p>
+              <h2 className="mt-xs line-clamp-1 text-h3 font-semibold text-text-primary">
                 #{ticket.id} {ticket.title}
               </h2>
               <p className="mt-xs text-caption text-text-secondary">
@@ -613,7 +618,7 @@ export function TicketChatPanel({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-border p-xs text-text-secondary transition hover:border-accent hover:text-accent"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface-1 text-text-secondary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
               aria-label="Mesaj panelini kapat"
             >
               <IconX size={18} aria-hidden={true} />
@@ -622,7 +627,7 @@ export function TicketChatPanel({
         )}
 
         {!headerSlot && !descriptionAsFirstMessage ? (
-          <div className="mt-md rounded-2xl bg-surface-2 p-md">
+          <div className="mx-md mt-md rounded-2xl border border-border-subtle bg-surface-0 p-md">
             <div className="flex flex-wrap gap-sm">
               <StatusBadge variant={statusMeta.variant}>{statusMeta.label}</StatusBadge>
               <StatusBadge variant={priorityMeta.variant}>
@@ -633,23 +638,23 @@ export function TicketChatPanel({
               </StatusBadge>
             </div>
 
-            <p className="mt-md line-clamp-4 text-body text-text-secondary">
+            <p className="mt-md line-clamp-4 text-body leading-relaxed text-text-secondary">
               {ticket.description}
             </p>
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-md border-b border-border px-md py-xs">
+        <div className="flex items-center justify-between gap-md border-y border-border-subtle bg-surface-1 px-md py-sm">
           <div className="flex items-center gap-xs text-caption text-text-secondary">
             <span className="h-2 w-2 rounded-full bg-success" />
-            <span>Canlı sohbet</span>
+            <span className="font-medium">Canlı sohbet</span>
           </div>
 
           <button
             type="button"
             onClick={() => commentsQuery.refetch()}
             disabled={commentsQuery.isFetching}
-            className="inline-flex h-8 items-center gap-xs rounded-full border border-border px-sm text-caption text-text-secondary transition hover:border-accent hover:text-accent disabled:opacity-60"
+            className="inline-flex h-8 items-center gap-xs rounded-xl border border-border bg-surface-1 px-sm text-caption font-medium text-text-secondary transition hover:border-accent hover:bg-accent-bg hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             <IconRefresh
               size={14}
@@ -665,13 +670,23 @@ export function TicketChatPanel({
           className="min-h-0 flex-1 overflow-y-auto bg-surface-0 px-md py-lg"
         >
           {commentsQuery.isLoading ? (
-            <p className="text-body text-text-secondary">Mesajlar yükleniyor...</p>
+            <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-bg text-accent">
+                <IconRefresh size={18} className="animate-spin" aria-hidden={true} />
+              </div>
+              <p className="mt-sm text-body font-medium text-text-primary">
+                Mesajlar yükleniyor
+              </p>
+              <p className="mt-xs text-caption text-text-secondary">
+                Sohbet geçmişi hazırlanıyor...
+              </p>
+            </div>
           ) : chatItems.length === 0 ? (
             <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-center">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-text-secondary">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-bg text-accent">
                 <IconMessageCircle size={20} aria-hidden={true} />
               </div>
-              <p className="mt-sm text-body text-text-secondary">
+              <p className="mt-sm max-w-sm text-body text-text-secondary">
                 Henüz mesaj yok. İlk mesajı buradan yazabilirsin.
               </p>
             </div>
@@ -689,17 +704,17 @@ export function TicketChatPanel({
         </div>
 
         {error ? (
-          <div className="mx-md mt-md rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
+          <div className="mx-md mt-md rounded-2xl border border-danger/30 bg-danger-bg px-md py-sm text-body font-medium text-danger">
             {error}
           </div>
         ) : null}
 
         <form
           className={cn(
-            "sticky bottom-0 border-t p-md",
+            "sticky bottom-0 border-t px-md py-md",
             isInternalMode
               ? "border-warning/40 bg-warning-bg"
-              : "border-border bg-surface-1"
+              : "border-border-subtle bg-surface-1"
           )}
           onSubmit={handleSubmit}
         >
@@ -707,12 +722,12 @@ export function TicketChatPanel({
 
           <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
             {allowInternalNotes ? (
-              <div className="grid grid-cols-2 gap-xs rounded-full border border-border bg-surface-2 p-[3px]">
+              <div className="grid grid-cols-2 gap-xs rounded-xl border border-border bg-surface-2 p-[3px]">
                 <button
                   type="button"
                   onClick={() => setMode("public_reply")}
                   className={cn(
-                    "rounded-full px-sm py-xs text-caption font-semibold transition",
+                    "rounded-lg px-sm py-xs text-caption font-semibold transition",
                     mode === "public_reply"
                       ? "bg-accent text-white"
                       : "text-text-secondary hover:text-text-primary"
@@ -725,7 +740,7 @@ export function TicketChatPanel({
                   type="button"
                   onClick={() => setMode("internal_note")}
                   className={cn(
-                    "rounded-full px-sm py-xs text-caption font-semibold transition",
+                    "rounded-lg px-sm py-xs text-caption font-semibold transition",
                     mode === "internal_note"
                       ? "bg-warning text-white"
                       : "text-text-secondary hover:text-text-primary"
@@ -754,7 +769,7 @@ export function TicketChatPanel({
 
           <div
             className={cn(
-              "flex items-end gap-sm rounded-[24px] border bg-surface-0 p-xs shadow-panel transition focus-within:border-accent",
+              "flex items-end gap-sm rounded-2xl border bg-surface-0 p-xs shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20",
               isInternalMode ? "border-warning/45" : "border-border"
             )}
           >
@@ -763,7 +778,7 @@ export function TicketChatPanel({
               onChange={(event) => setBody(event.target.value)}
               onKeyDown={handleComposerKeyDown}
               rows={1}
-              className="max-h-36 min-h-[44px] flex-1 resize-none bg-transparent px-sm py-[11px] text-body text-text-primary outline-none placeholder:text-text-secondary"
+              className="max-h-36 min-h-[44px] flex-1 resize-none bg-transparent px-sm py-[11px] text-body text-text-primary outline-none placeholder:text-text-muted"
               placeholder={
                 isInternalMode
                   ? "Dahili not yaz..."
@@ -775,7 +790,7 @@ export function TicketChatPanel({
               type="submit"
               disabled={!canSubmit}
               className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-50",
                 isInternalMode ? "bg-warning" : "bg-accent"
               )}
               aria-label={isInternalMode ? "Dahili notu kaydet" : "Mesaj gönder"}

@@ -167,7 +167,7 @@ function TimelineStageRow({
       </div>
 
       <article className={cn("pb-lg", isLast ? "pb-0" : "")}>
-        <div className="rounded-2xl border border-border bg-surface-2 p-md">
+        <div className="rounded-2xl border border-border-subtle bg-surface-1 p-md shadow-panel">
           <div className="flex flex-col gap-sm sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-xs">
@@ -239,7 +239,7 @@ function TicketTimelinePopup({
             type="button"
             onClick={() => timelineQuery.refetch()}
             disabled={timelineQuery.isFetching}
-            className="inline-flex items-center justify-center gap-xs rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-xs rounded-xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary transition hover:border-accent hover:bg-accent-bg hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             <IconRefresh
               size={16}
@@ -269,7 +269,7 @@ function TicketTimelinePopup({
       {!timelineQuery.isLoading && !timelineQuery.isError ? (
         <div>
           {timeline ? (
-            <div className="mb-lg grid gap-sm rounded-2xl border border-border bg-surface-2 p-md sm:grid-cols-2">
+            <div className="mb-lg grid gap-sm rounded-2xl border border-border-subtle bg-surface-0 p-md sm:grid-cols-2">
               <div>
                 <p className="text-caption text-text-secondary">Mevcut durum</p>
                 <p className="mt-xs text-body font-semibold text-text-primary">
@@ -297,7 +297,7 @@ function TicketTimelinePopup({
               ))}
             </ol>
           ) : (
-            <div className="rounded-2xl border border-border bg-surface-2 p-md text-body text-text-secondary">
+            <div className="rounded-2xl border border-dashed border-border bg-surface-0 p-md text-body text-text-secondary">
               Bu talep için henüz zaman çizelgesi verisi yok.
             </div>
           )}

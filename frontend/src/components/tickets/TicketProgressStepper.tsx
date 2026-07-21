@@ -114,7 +114,7 @@ export function TicketProgressStepper({
             <div key={step.key} className="flex min-w-0 flex-1 items-center">
               <div
                 className={cn(
-                  "flex shrink-0 items-center justify-center rounded-full border font-semibold",
+                  "flex shrink-0 items-center justify-center rounded-xl border font-semibold shadow-sm",
                   compact
                     ? "h-8 w-8 text-[11px]"
                     : "h-9 w-9 text-caption",
@@ -131,7 +131,7 @@ export function TicketProgressStepper({
               {!isLast ? (
                 <div
                   className={cn(
-                    "mx-xs h-px flex-1",
+                    "mx-xs h-[2px] flex-1 rounded-full",
                     step.state === "done" ? "bg-success/40" : "bg-border"
                   )}
                 />
