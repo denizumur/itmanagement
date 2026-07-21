@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   IconChevronDown,
   IconChevronUp,
+  IconLoader2,
   IconSelector,
 } from "@tabler/icons-react";
 import { DetailIconButton } from "./DetailIconButton";
@@ -69,16 +70,17 @@ export function DataTable<T>({
     <div className="overflow-hidden rounded-panel border border-border bg-surface-1 shadow-panel">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-body">
-          <thead>
-            <tr className="text-caption text-text-secondary">
+          <thead className="bg-surface-2/80">
+            <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
               {columns.map((column) => {
                 const sortKey = column.sortKey ?? column.key;
 
                 return (
                   <th
                     key={column.key}
+                    scope="col"
                     className={cn(
-                      "border-b border-border px-md py-sm font-normal",
+                      "border-b border-border-subtle px-md py-sm",
                       column.className
                     )}
                   >
@@ -86,10 +88,12 @@ export function DataTable<T>({
                       <button
                         type="button"
                         onClick={() => onSortChange(sortKey)}
-                        className="inline-flex items-center gap-xs text-left transition hover:text-accent"
+                        className="inline-flex items-center gap-xs rounded-md text-left transition hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
                       >
                         <span>{column.label}</span>
-                        {renderSortIcon(column)}
+                        <span className="text-text-muted">
+                          {renderSortIcon(column)}
+                        </span>
                       </button>
                     ) : (
                       column.label
@@ -99,30 +103,43 @@ export function DataTable<T>({
               })}
 
               {hasDetailAction ? (
-                <th className="sticky right-0 z-10 w-[72px] border-b border-border bg-surface-1 px-md py-sm text-right font-normal">
+                <th className="sticky right-0 z-10 w-[72px] border-b border-border-subtle bg-surface-2/95 px-md py-sm text-right">
                   <span className="sr-only">{viewDetailsLabel}</span>
                 </th>
               ) : null}
             </tr>
           </thead>
 
-          <tbody>
+          <tbody className="divide-y divide-border-subtle">
             {isLoading ? (
               <tr>
-                <td
-                  colSpan={colSpan}
-                  className="px-md py-lg text-center text-text-secondary"
-                >
-                  Yükleniyor...
+                <td colSpan={colSpan} className="px-md py-xl">
+                  <div className="mx-auto flex max-w-sm flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-0 px-lg py-xl text-center">
+                    <IconLoader2
+                      size={22}
+                      className="animate-spin text-accent"
+                      aria-hidden={true}
+                    />
+                    <p className="mt-sm text-body font-medium text-text-primary">
+                      Yükleniyor
+                    </p>
+                    <p className="mt-xs text-caption text-text-secondary">
+                      Tablo verileri hazırlanıyor...
+                    </p>
+                  </div>
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td
-                  colSpan={colSpan}
-                  className="px-md py-lg text-center text-text-secondary"
-                >
-                  {emptyMessage}
+                <td colSpan={colSpan} className="px-md py-xl">
+                  <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-border bg-surface-0 px-lg py-xl text-center">
+                    <p className="text-body font-semibold text-text-primary">
+                      Kayıt bulunamadı
+                    </p>
+                    <p className="mt-xs text-caption text-text-secondary">
+                      {emptyMessage}
+                    </p>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -130,7 +147,7 @@ export function DataTable<T>({
                 <tr
                   key={getRowKey(item)}
                   className={cn(
-                    "transition hover:bg-surface-2",
+                    "group bg-surface-1 transition hover:bg-surface-2/80",
                     getRowClassName?.(item)
                   )}
                 >
@@ -138,7 +155,7 @@ export function DataTable<T>({
                     <td
                       key={column.key}
                       className={cn(
-                        "border-b border-border px-md py-md align-top",
+                        "px-md py-md align-top text-text-secondary",
                         column.className
                       )}
                     >
@@ -147,11 +164,11 @@ export function DataTable<T>({
                   ))}
 
                   {hasDetailAction ? (
-                    <td className="sticky right-0 z-10 w-[72px] border-b border-border bg-surface-1 px-md py-md text-right align-top shadow-[-8px_0_16px_-16px_rgba(15,23,42,0.35)]">
-                     <DetailIconButton
-                     label={viewDetailsLabel}
-                     onClick={() => onViewDetails?.(item)}
-                     />
+                    <td className="sticky right-0 z-10 w-[72px] bg-inherit px-md py-md text-right align-top shadow-[-10px_0_18px_-18px_rgba(15,23,42,0.38)]">
+                      <DetailIconButton
+                        label={viewDetailsLabel}
+                        onClick={() => onViewDetails?.(item)}
+                      />
                     </td>
                   ) : null}
                 </tr>

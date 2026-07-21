@@ -25,12 +25,19 @@ export function TablePagination({
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return (
-    <div className="flex flex-col gap-sm rounded-panel border border-border bg-surface-1 p-md shadow-panel md:flex-row md:items-center md:justify-between">
-      <div className="text-caption text-text-secondary">
-        Toplam <span className="font-semibold text-text-primary">{totalCount}</span>{" "}
-        kayıt · Sayfa{" "}
-        <span className="font-semibold text-text-primary">{page}</span> /{" "}
-        <span className="font-semibold text-text-primary">{totalPages}</span>
+    <div className="flex flex-col gap-md rounded-panel border border-border bg-surface-1 px-md py-sm shadow-panel md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-center gap-xs text-caption text-text-secondary">
+        <span>
+          Toplam{" "}
+          <span className="font-semibold text-text-primary">{totalCount}</span>{" "}
+          kayıt
+        </span>
+        <span className="text-text-muted">·</span>
+        <span>
+          Sayfa{" "}
+          <span className="font-semibold text-text-primary">{page}</span> /{" "}
+          <span className="font-semibold text-text-primary">{totalPages}</span>
+        </span>
       </div>
 
       <div className="flex flex-wrap items-center gap-sm">
@@ -39,7 +46,7 @@ export function TablePagination({
           <select
             value={pageSize}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            className="rounded-app border border-border bg-surface-2 px-sm py-xs text-body text-text-primary outline-none focus:border-accent"
+            className="h-9 rounded-xl border border-border bg-surface-2 px-sm text-body text-text-primary outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
           >
             {pageSizeOptions.map((option) => (
               <option key={option} value={option}>
@@ -55,10 +62,10 @@ export function TablePagination({
             disabled={!hasPrevious}
             onClick={() => onPageChange(Math.max(1, page - 1))}
             className={cn(
-              "inline-flex items-center gap-xs rounded-app border border-border px-sm py-xs text-body transition",
+              "inline-flex h-9 items-center gap-xs rounded-xl border border-border px-sm text-body font-medium transition focus:outline-none focus:ring-2 focus:ring-accent/25",
               hasPrevious
-                ? "text-text-primary hover:border-accent hover:text-accent"
-                : "cursor-not-allowed text-text-muted opacity-50"
+                ? "bg-surface-1 text-text-primary hover:border-accent hover:bg-accent-bg hover:text-accent"
+                : "cursor-not-allowed bg-surface-0 text-text-muted opacity-60"
             )}
           >
             <IconChevronLeft size={16} aria-hidden={true} />
@@ -70,10 +77,10 @@ export function TablePagination({
             disabled={!hasNext}
             onClick={() => onPageChange(page + 1)}
             className={cn(
-              "inline-flex items-center gap-xs rounded-app border border-border px-sm py-xs text-body transition",
+              "inline-flex h-9 items-center gap-xs rounded-xl border border-border px-sm text-body font-medium transition focus:outline-none focus:ring-2 focus:ring-accent/25",
               hasNext
-                ? "text-text-primary hover:border-accent hover:text-accent"
-                : "cursor-not-allowed text-text-muted opacity-50"
+                ? "bg-surface-1 text-text-primary hover:border-accent hover:bg-accent-bg hover:text-accent"
+                : "cursor-not-allowed bg-surface-0 text-text-muted opacity-60"
             )}
           >
             Sonraki

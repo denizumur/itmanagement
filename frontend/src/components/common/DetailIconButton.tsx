@@ -25,7 +25,7 @@ export function DetailIconButton({
       title={label}
       onClick={handleClick}
       className={cn(
-        "inline-flex h-9 w-9 items-center justify-center rounded-app border border-border bg-surface-1 text-text-secondary shadow-sm transition hover:border-accent hover:bg-surface-2 hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30",
+        "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface-1 text-text-secondary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30",
         className
       )}
     >
