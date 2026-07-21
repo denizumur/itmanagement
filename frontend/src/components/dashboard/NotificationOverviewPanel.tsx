@@ -113,7 +113,7 @@ function AlertGroup({
   const remainingCount = Math.max(items.length - MAX_PREVIEW_ITEMS, 0);
 
   return (
-    <div className="rounded-panel border border-border-subtle bg-surface-1 p-md">
+    <div className="rounded-panel border border-border bg-surface-1 p-md shadow-panel">
       <div className="flex items-start justify-between gap-md">
         <div>
           <h3 className="text-h3">{title}</h3>
@@ -125,7 +125,7 @@ function AlertGroup({
 
       <div className="mt-md space-y-sm">
         {items.length === 0 ? (
-          <div className="rounded-2xl border border-border-subtle bg-surface-0 p-md">
+          <div className="rounded-2xl border border-dashed border-border bg-surface-0 p-md">
             <p className="text-body font-semibold text-text-primary">
               {emptyText}
             </p>
@@ -139,7 +139,7 @@ function AlertGroup({
               key={item.id}
               type="button"
               onClick={() => navigate(item.url)}
-              className="block w-full rounded-2xl border border-border-subtle bg-surface-0 p-md text-left transition hover:border-border-strong hover:bg-surface-2"
+              className="block w-full rounded-2xl border border-border-subtle bg-surface-0 p-md text-left transition duration-150 hover:border-accent/30 hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-accent/25"
             >
               <div className="flex items-start justify-between gap-md">
                 <div className="min-w-0">
@@ -164,7 +164,7 @@ function AlertGroup({
         <button
           type="button"
           onClick={() => navigate(getTargetUrl(items, fallbackUrl))}
-          className="mt-md w-full rounded-app border border-border-subtle px-md py-sm text-caption font-semibold text-text-secondary transition hover:border-border-strong hover:text-text-primary"
+          className="mt-md w-full rounded-xl border border-border bg-surface-1 px-md py-sm text-caption font-semibold text-text-secondary transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
         >
           {remainingCount > 0
             ? `Tümünü gör · +${remainingCount} kayıt daha`
@@ -187,7 +187,7 @@ function MetricPopupContent({
       {groups.map((group) => (
         <section
           key={group.title}
-          className="rounded-panel border border-border bg-surface-2 p-md"
+          className="rounded-panel border border-border bg-surface-1 p-md shadow-panel"
         >
           <div className="flex items-start justify-between gap-md">
             <div>
@@ -213,7 +213,7 @@ function MetricPopupContent({
                   key={item.id}
                   type="button"
                   onClick={() => onNavigate(item.url || group.fallbackUrl)}
-                  className="block w-full rounded-2xl border border-border bg-surface-1 p-md text-left transition hover:border-accent hover:bg-accent-bg"
+                  className="block w-full rounded-2xl border border-border-subtle bg-surface-0 p-md text-left transition duration-150 hover:border-accent/30 hover:bg-accent-bg focus:outline-none focus:ring-2 focus:ring-accent/25"
                 >
                   <div className="flex items-start justify-between gap-md">
                     <div className="min-w-0">
@@ -261,7 +261,7 @@ export function NotificationOverviewPanel({
 
   if (isLoading) {
     return (
-      <section className="panel">
+      <section className="panel shadow-card">
         <p className="text-h3">Dikkat Gerektirenler</p>
         <p className="mt-sm text-body text-text-secondary">
           Bildirimler yükleniyor...

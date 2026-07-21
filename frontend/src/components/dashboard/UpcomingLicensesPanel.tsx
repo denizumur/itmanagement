@@ -14,7 +14,6 @@ export function UpcomingLicensesPanel({
     <DataCard
       title="Yaklaşan lisanslar"
       description="30 gün içinde yenilenmesi gereken abonelikler."
-      className="p-lg"
     >
       {!licenses.length ? (
         <EmptyState message="30 gün içinde bitecek lisans yok." />
@@ -23,13 +22,13 @@ export function UpcomingLicensesPanel({
           {licenses.map((license) => (
             <div
               key={license.id}
-              className="flex items-center justify-between gap-md rounded-app border border-border bg-surface-1 p-md shadow-panel transition hover:-translate-y-0.5"
+              className="flex items-center justify-between gap-md rounded-2xl border border-border-subtle bg-surface-0 p-md transition duration-150 hover:border-accent/30 hover:bg-surface-2"
             >
               <div className="min-w-0">
-                <p className="truncate text-body text-text-primary">
+                <p className="truncate text-body font-semibold text-text-primary">
                   {license.name}
                 </p>
-                <p className="text-caption text-text-secondary">
+                <p className="mt-xs text-caption text-text-secondary">
                   {license.vendor} · {license.end_date}
                 </p>
               </div>

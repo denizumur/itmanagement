@@ -30,12 +30,13 @@ export function MetricCard({ card }: MetricCardProps) {
   const Icon = iconMap[card.icon as keyof typeof iconMap] ?? IconDevices;
 
   return (
-    <div className="inline-flex items-center gap-sm">
+    <div className="flex min-w-[180px] items-center gap-sm">
       <MiniMetricCard
         label={card.label}
         value={card.value}
         tone={metricTone[card.role]}
-        icon={<Icon size={15} aria-hidden={true} />}
+        icon={<Icon size={17} aria-hidden={true} />}
+        className="w-full"
       />
 
       {card.module_ready === false ? (

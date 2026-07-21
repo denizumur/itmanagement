@@ -12,46 +12,55 @@ export function AttentionAssetsList({ assets }: AttentionAssetsListProps) {
     <DataCard
       title="Dikkat gerektiren varlıklar"
       description="Garanti, bakım ve risk bayraklarına göre önceliklendirilmiş liste."
-      className="p-lg"
     >
       {!assets.length ? (
         <EmptyState message="Dikkat gerektiren varlık yok." />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-body">
-            <thead>
-              <tr className="border-b border-border text-caption text-text-secondary">
-                <th className="py-sm font-normal">Cihaz</th>
-                <th className="py-sm font-normal">Kategori</th>
-                <th className="py-sm font-normal">Durum</th>
-                <th className="py-sm text-right font-normal">Kalan</th>
+        <div className="overflow-hidden rounded-2xl border border-border-subtle">
+          <table className="w-full border-separate border-spacing-0 text-left text-body">
+            <thead className="bg-surface-2/80">
+              <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+                <th className="border-b border-border-subtle px-md py-sm">
+                  Cihaz
+                </th>
+                <th className="border-b border-border-subtle px-md py-sm">
+                  Kategori
+                </th>
+                <th className="border-b border-border-subtle px-md py-sm">
+                  Durum
+                </th>
+                <th className="border-b border-border-subtle px-md py-sm text-right">
+                  Kalan
+                </th>
               </tr>
             </thead>
 
-            <tbody>
+            <tbody className="divide-y divide-border-subtle bg-surface-1">
               {assets.map((asset, index) => (
                 <tr
                   key={`${asset.id}-${asset.flag_type}-${index}`}
-                  className="border-b border-border transition hover:bg-surface-1"
+                  className="transition duration-150 hover:bg-surface-2/80"
                 >
-                  <td className="py-md">
-                    <p className="text-text-primary">{asset.name}</p>
-                    <p className="text-caption text-text-secondary">
+                  <td className="px-md py-md">
+                    <p className="font-semibold text-text-primary">
+                      {asset.name}
+                    </p>
+                    <p className="mt-xs text-caption text-text-secondary">
                       {asset.inventory_code ?? "Kod yok"}
                     </p>
                   </td>
 
-                  <td className="py-md text-text-secondary">
+                  <td className="px-md py-md text-text-secondary">
                     {asset.category ?? "-"}
                   </td>
 
-                  <td className="py-md">
+                  <td className="px-md py-md">
                     <span className={`badge ${badgeClass[asset.flag_level]}`}>
                       {asset.flag_label}
                     </span>
                   </td>
 
-                  <td className="py-md text-right text-text-secondary">
+                  <td className="px-md py-md text-right text-text-secondary">
                     {daysLabel(asset.days_remaining)}
                   </td>
                 </tr>

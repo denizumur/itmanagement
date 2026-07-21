@@ -12,11 +12,16 @@ interface MiniMetricCardProps {
 }
 
 const toneClasses: Record<NonNullable<MiniMetricCardProps["tone"]>, string> = {
-  default: "border-border bg-surface-1/80 text-text-primary",
-  success: "border-success/25 bg-success/10 text-success",
-  warning: "border-warning/25 bg-warning/10 text-warning",
-  danger: "border-danger/25 bg-danger/10 text-danger",
-  accent: "border-accent/25 bg-accent-bg text-accent",
+  default:
+    "border-border bg-surface-1 text-text-primary [--metric-icon-bg:var(--surface-2)] [--metric-icon-color:var(--text-secondary)]",
+  success:
+    "border-success/25 bg-surface-1 text-success [--metric-icon-bg:var(--bg-success)] [--metric-icon-color:var(--color-success)]",
+  warning:
+    "border-warning/25 bg-surface-1 text-warning [--metric-icon-bg:var(--bg-warning)] [--metric-icon-color:var(--color-warning)]",
+  danger:
+    "border-danger/25 bg-surface-1 text-danger [--metric-icon-bg:var(--bg-danger)] [--metric-icon-color:var(--color-danger)]",
+  accent:
+    "border-accent/25 bg-surface-1 text-accent [--metric-icon-bg:var(--bg-accent)] [--metric-icon-color:var(--color-accent)]",
 };
 
 export function MiniMetricCard({
@@ -31,24 +36,26 @@ export function MiniMetricCard({
   const content = (
     <>
       {icon ? (
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-2/70">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--metric-icon-bg)] text-[var(--metric-icon-color)]">
           {icon}
         </span>
       ) : null}
 
       <div className="min-w-0 text-left">
-        <p className="truncate text-[10px] font-medium leading-tight text-text-secondary">
+        <p className="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
           {label}
         </p>
-        <p className="text-lg font-semibold leading-tight">{value}</p>
+        <p className="mt-[2px] text-xl font-semibold leading-tight text-text-primary">
+          {value}
+        </p>
       </div>
     </>
   );
 
   const classNames = cn(
-    "inline-flex min-w-[104px] items-center gap-sm rounded-full border px-md py-xs shadow-sm",
+    "inline-flex min-h-[64px] min-w-[148px] items-center gap-sm rounded-panel border px-md py-sm shadow-panel",
     onClick &&
-      "cursor-pointer transition hover:-translate-y-0.5 hover:border-accent hover:shadow-panel focus:outline-none focus:ring-2 focus:ring-accent/40",
+      "cursor-pointer transition duration-150 hover:-translate-y-0.5 hover:border-accent hover:bg-accent-bg hover:shadow-card focus:outline-none focus:ring-2 focus:ring-accent/30",
     toneClasses[tone],
     className
   );
