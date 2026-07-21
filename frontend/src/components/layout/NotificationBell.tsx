@@ -2,6 +2,7 @@ import {
   IconAlertTriangle,
   IconBell,
   IconChevronRight,
+  IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -52,31 +53,34 @@ export function NotificationBell({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className={`relative flex h-11 w-11 items-center justify-center rounded-full border bg-surface-1 shadow-panel transition hover:border-accent hover:text-accent ${
+        className={`relative flex h-10 w-10 items-center justify-center rounded-xl border bg-surface-1 shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30 ${
           hasCritical
             ? "border-danger/40 text-danger"
             : "border-border text-text-secondary"
         }`}
         aria-label={title}
+        aria-expanded={open}
       >
         {hasCritical ? (
-          <IconAlertTriangle size={20} aria-hidden={true} />
+          <IconAlertTriangle size={19} aria-hidden={true} />
         ) : (
-          <IconBell size={20} aria-hidden={true} />
+          <IconBell size={19} aria-hidden={true} />
         )}
 
         {count > 0 ? (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white shadow-sm">
             {count > 99 ? "99+" : count}
           </span>
         ) : null}
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-50 mt-sm w-[420px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-panel border border-border bg-surface-1 shadow-panel">
-          <div className="flex items-center justify-between gap-md border-b border-border px-md py-sm">
+        <div className="absolute right-0 z-50 mt-sm w-[420px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-panel border border-border bg-surface-1 shadow-popover">
+          <div className="flex items-center justify-between gap-md border-b border-border bg-surface-1 px-md py-sm">
             <div>
-              <p className="text-body font-semibold text-text-primary">{title}</p>
+              <p className="text-body font-semibold text-text-primary">
+                {title}
+              </p>
               <p className="text-caption text-text-secondary">
                 {count} toplam · {criticalCount} kritik
               </p>
@@ -85,9 +89,11 @@ export function NotificationBell({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-app border border-border px-sm py-xs text-caption text-text-secondary transition hover:border-accent hover:text-accent"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-text-secondary transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+              aria-label="Bildirim panelini kapat"
+              title="Kapat"
             >
-              Kapat
+              <IconX size={16} aria-hidden={true} />
             </button>
           </div>
 
@@ -105,7 +111,7 @@ export function NotificationBell({
                     key={item.id}
                     to={item.url}
                     onClick={() => setOpen(false)}
-                    className="block rounded-2xl border border-transparent p-sm transition hover:border-border hover:bg-surface-2"
+                    className="block rounded-xl border border-transparent p-sm transition hover:border-border hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-accent/30"
                   >
                     <div className="flex items-start gap-sm">
                       <span
@@ -116,12 +122,13 @@ export function NotificationBell({
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-md">
-                          <div>
-                            <p className="text-body font-semibold text-text-primary">
+                          <div className="min-w-0">
+                            <p className="truncate text-body font-semibold text-text-primary">
                               {item.title}
                             </p>
                             <p className="mt-xs text-caption text-text-secondary">
-                              {getNotificationTypeLabel(item)} · {item.urgency_label}
+                              {getNotificationTypeLabel(item)} ·{" "}
+                              {item.urgency_label}
                             </p>
                           </div>
 
