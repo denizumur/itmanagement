@@ -6,9 +6,16 @@ export default {
     extend: {
       colors: {
         accent: "var(--color-accent)",
+        "accent-hover": "var(--color-accent-hover)",
+        "accent-foreground": "var(--color-accent-foreground)",
+
         danger: "var(--color-danger)",
         warning: "var(--color-warning)",
         success: "var(--color-success)",
+
+        "danger-foreground": "var(--color-danger-foreground)",
+        "warning-foreground": "var(--color-warning-foreground)",
+        "success-foreground": "var(--color-success-foreground)",
 
         "accent-bg": "var(--bg-accent)",
         "danger-bg": "var(--bg-danger)",
@@ -18,10 +25,15 @@ export default {
         "surface-0": "var(--surface-0)",
         "surface-1": "var(--surface-1)",
         "surface-2": "var(--surface-2)",
+        "surface-3": "var(--surface-3)",
+
         border: "var(--border)",
+        "border-subtle": "var(--border-subtle)",
+        "border-strong": "var(--border-strong)",
 
         "text-primary": "var(--text-primary)",
         "text-secondary": "var(--text-secondary)",
+        "text-muted": "var(--text-muted)",
       },
       spacing: {
         xs: "var(--gap-xs)",
@@ -36,13 +48,15 @@ export default {
       },
       boxShadow: {
         panel: "var(--shadow-panel)",
+        card: "var(--shadow-card)",
+        popover: "var(--shadow-popover)",
       },
       fontSize: {
-        display: ["var(--font-display)", { lineHeight: "1.2", fontWeight: "500" }],
-        h2: ["var(--font-h2)", { lineHeight: "1.3", fontWeight: "500" }],
-        h3: ["var(--font-h3)", { lineHeight: "1.4", fontWeight: "500" }],
+        display: ["var(--font-display)", { lineHeight: "1.2", fontWeight: "600" }],
+        h2: ["var(--font-h2)", { lineHeight: "1.3", fontWeight: "600" }],
+        h3: ["var(--font-h3)", { lineHeight: "1.4", fontWeight: "600" }],
         body: ["var(--font-body)", { lineHeight: "1.5", fontWeight: "400" }],
-        caption: ["var(--font-caption)", { lineHeight: "1.4", fontWeight: "400" }],
+        caption: ["var(--font-caption)", { lineHeight: "1.4", fontWeight: "500" }],
       },
     },
   },
