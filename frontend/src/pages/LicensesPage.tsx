@@ -15,6 +15,7 @@ import { DataTable, type DataTableColumn } from "../components/common/DataTable"
 import { ErrorState } from "../components/common/ErrorState";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { Skeleton } from "../components/common/Skeleton";
+import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
 import { AppToast } from "../components/ui/AppToast";
@@ -215,7 +216,7 @@ function DetailRow({
     value === undefined || value === null || value === "" ? "-" : value;
 
   return (
-    <div className="rounded-app border border-border bg-surface-1 p-md">
+    <div className="rounded-2xl border border-border-subtle bg-surface-0 p-md">
       <p className="text-caption text-text-secondary">{label}</p>
       <p className="mt-xs text-body text-text-primary">{displayValue}</p>
     </div>
@@ -224,7 +225,7 @@ function DetailRow({
 
 function DateCell({ value }: { value?: string | null }) {
   return (
-    <span className="inline-flex min-w-[108px] items-center justify-center rounded-app border border-border bg-surface-1 px-sm py-xs text-caption text-text-secondary shadow-panel">
+    <span className="inline-flex min-w-[108px] items-center justify-center rounded-xl border border-border-subtle bg-surface-1 px-sm py-xs text-caption text-text-secondary shadow-sm">
       {formatDate(value)}
     </span>
   );
@@ -495,21 +496,24 @@ function LicenseForm({
     });
   }
 
+  const fieldClassName =
+    "w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20";
+
   return (
     <form className="space-y-md" onSubmit={handleSubmit}>
-      {error && (
-        <div className="rounded-app border border-danger bg-danger-bg px-md py-sm text-body text-danger">
+      {error ? (
+        <div className="rounded-2xl border border-danger/30 bg-danger-bg px-md py-sm text-body font-medium text-danger">
           {error}
         </div>
-      )}
+      ) : null}
 
       <div className="grid gap-md sm:grid-cols-2">
         <label className="space-y-xs sm:col-span-2">
-          <span className="text-caption text-text-secondary">
+          <span className="text-caption font-medium text-text-secondary">
             Lisans / abonelik adı *
           </span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.name}
             onChange={(event) => updateField("name", event.target.value)}
             placeholder="Microsoft 365 Business Premium"
@@ -517,9 +521,11 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Takip kodu</span>
+          <span className="text-caption font-medium text-text-secondary">
+            Takip kodu
+          </span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.tracking_code ?? ""}
             onChange={(event) =>
               updateField("tracking_code", event.target.value)
@@ -529,9 +535,9 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Tip</span>
+          <span className="text-caption font-medium text-text-secondary">Tip</span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.type}
             onChange={(event) =>
               updateField("type", event.target.value as LicenseType)
@@ -546,9 +552,11 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Tedarikçi</span>
+          <span className="text-caption font-medium text-text-secondary">
+            Tedarikçi
+          </span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.vendor ?? ""}
             onChange={(event) => updateField("vendor", event.target.value)}
             placeholder="Microsoft, Adobe, ESET..."
@@ -556,30 +564,30 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
+          <span className="text-caption font-medium text-text-secondary">
             Maskeli lisans anahtarı
           </span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.license_key_masked ?? ""}
             onChange={(event) =>
               updateField("license_key_masked", event.target.value)
             }
             placeholder="XXXX-XXXX-1234"
           />
-          <p className="text-caption text-text-secondary">
+          <p className="rounded-xl border border-warning/20 bg-warning-bg px-sm py-xs text-caption text-warning">
             Tam anahtar girme. Sadece maskeli değer saklanır.
           </p>
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
+          <span className="text-caption font-medium text-text-secondary">
             Kullanıcı / koltuk sayısı *
           </span>
           <input
             type="number"
             min={1}
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.seat_count}
             onChange={(event) =>
               updateField("seat_count", Number(event.target.value))
@@ -588,9 +596,11 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Bağlı varlık</span>
+          <span className="text-caption font-medium text-text-secondary">
+            Bağlı varlık
+          </span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.assigned_asset ? String(form.assigned_asset) : ""}
             onChange={(event) =>
               updateField(
@@ -609,11 +619,11 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
+          <span className="text-caption font-medium text-text-secondary">
             Faturalama döngüsü
           </span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.billing_cycle}
             onChange={(event) =>
               updateField(
@@ -631,38 +641,38 @@ function LicenseForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
+          <span className="text-caption font-medium text-text-secondary">
             Başlangıç tarihi
           </span>
           <input
             type="date"
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.start_date ?? ""}
             onChange={(event) => updateField("start_date", event.target.value)}
           />
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
+          <span className="text-caption font-medium text-text-secondary">
             Bitiş / yenileme tarihi
           </span>
           <input
             type="date"
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.end_date ?? ""}
             onChange={(event) => updateField("end_date", event.target.value)}
           />
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
+          <span className="text-caption font-medium text-text-secondary">
             Yenileme maliyeti
           </span>
           <input
             type="number"
             min={0}
             step="0.01"
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.renewal_cost ?? ""}
             onChange={(event) =>
               updateField("renewal_cost", event.target.value)
@@ -671,7 +681,7 @@ function LicenseForm({
           />
         </label>
 
-        <div className="space-y-sm rounded-app border border-border bg-surface-1 p-md">
+        <div className="space-y-sm rounded-2xl border border-border-subtle bg-surface-0 p-md">
           <label className="flex items-center gap-sm">
             <input
               type="checkbox"
@@ -698,9 +708,11 @@ function LicenseForm({
         </div>
 
         <label className="space-y-xs sm:col-span-2">
-          <span className="text-caption text-text-secondary">Notlar</span>
+          <span className="text-caption font-medium text-text-secondary">
+            Notlar
+          </span>
           <textarea
-            className="min-h-28 w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className="min-h-28 w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20"
             value={form.notes ?? ""}
             onChange={(event) => updateField("notes", event.target.value)}
             placeholder="Satın alma, yenileme, kullanıcı dağılımı veya operasyonel notlar..."
@@ -708,7 +720,7 @@ function LicenseForm({
         </label>
       </div>
 
-      <div className="flex justify-end gap-sm border-t border-border pt-md">
+      <div className="flex justify-end gap-sm border-t border-border-subtle pt-md">
         <GlowButton type="button" variant="ghost" onClick={onCancel}>
           Vazgeç
         </GlowButton>
@@ -1014,14 +1026,14 @@ export function LicensesPage() {
           />
 
           <MiniMetricCard
-            label="aktif lisans sayısı"
+            label="Aktif lisans sayısı"
             value={summary?.active ?? 0}
             icon={<IconKey size={15} aria-hidden={true} />}
             tone="success"
           />
 
           <MiniMetricCard
-            label="lisansların toplam kullanıcı sayısı"
+            label="Toplam kullanıcı sayısı"
             value={summary?.total_seats ?? 0}
             icon={<IconUsers size={15} aria-hidden={true} />}
             tone="success"
@@ -1041,9 +1053,10 @@ export function LicensesPage() {
             tone="danger"
           />
         </section>
-        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+
+        <section className="mt-lg rounded-panel border border-border-subtle bg-surface-1 p-md shadow-panel">
           <div className="grid gap-md xl:grid-cols-[1fr_220px_220px_220px_auto]">
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
+            <label className="flex items-center gap-sm rounded-2xl border border-border bg-surface-0 px-md py-sm shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
               <IconSearch
                 size={18}
                 className="text-text-secondary"
@@ -1051,7 +1064,7 @@ export function LicensesPage() {
               />
 
               <input
-                className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+                className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-muted focus:outline-none"
                 placeholder="Lisans adı, takip kodu, tedarikçi ara..."
                 value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -1059,7 +1072,7 @@ export function LicensesPage() {
             </label>
 
             <select
-              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              className="rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary shadow-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
               value={selectedType}
               onChange={(event) => setFilter("type", event.target.value || null)}
               aria-label="Tip filtresi"
@@ -1070,7 +1083,7 @@ export function LicensesPage() {
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none disabled:opacity-60"
+              className="rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary shadow-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
               value={selectedStatusFilter}
               onChange={(event) => applyStatusFilter(event.target.value)}
               aria-label="Durum filtresi"
@@ -1083,7 +1096,7 @@ export function LicensesPage() {
               <option value="expired">Süresi dolan</option>
             </select>
 
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel">
+            <label className="flex items-center gap-sm rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary shadow-sm">
               <input
                 type="checkbox"
                 checked={showDeleted}
@@ -1095,7 +1108,7 @@ export function LicensesPage() {
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+              className="inline-flex items-center justify-center rounded-2xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
             >
               Temizle
             </button>
@@ -1136,7 +1149,7 @@ export function LicensesPage() {
         >
           {selectedLicense && (
             <div className="space-y-md">
-              <div className="flex items-center justify-between gap-md rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+              <div className="flex items-center justify-between gap-md rounded-panel border border-border-subtle bg-surface-0 p-md shadow-panel">
                 <div>
                   <p className="text-caption text-text-secondary">Durum</p>
                   <StatusBadge
@@ -1165,6 +1178,11 @@ export function LicensesPage() {
                       Düzenle
                     </GlowButton>
                   ))}
+
+                <AuditHistoryLink
+                  entityType="licensing.LicenseSubscription"
+                  entityId={selectedLicense.id}
+                />
               </div>
 
               <div className="grid gap-md sm:grid-cols-2">

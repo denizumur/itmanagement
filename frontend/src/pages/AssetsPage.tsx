@@ -7,6 +7,7 @@ import {
   IconSearch,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
+import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import { useAuth } from "../auth/AuthContext";
 import {
   AssetForm,
@@ -190,7 +191,7 @@ function DetailRow({
     value === undefined || value === null || value === "" ? "-" : value;
 
   return (
-    <div className="rounded-app border border-border bg-surface-1 p-md">
+    <div className="rounded-2xl border border-border-subtle bg-surface-0 p-md">
       <p className="text-caption text-text-secondary">{label}</p>
       <p className="mt-xs text-body text-text-primary">{displayValue}</p>
     </div>
@@ -199,7 +200,7 @@ function DetailRow({
 
 function DateCell({ value }: { value?: string | null }) {
   return (
-    <span className="inline-flex min-w-[108px] items-center justify-center rounded-app border border-border bg-surface-1 px-sm py-xs text-caption text-text-secondary shadow-panel">
+    <span className="inline-flex min-w-[108px] items-center justify-center rounded-xl border border-border-subtle bg-surface-1 px-sm py-xs text-caption text-text-secondary shadow-sm">
       {formatDate(value)}
     </span>
   );
@@ -616,9 +617,9 @@ export function AssetsPage() {
           />
         </section>
 
-        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+        <section className="mt-lg rounded-panel border border-border-subtle bg-surface-1 p-md shadow-panel">
           <div className="grid gap-md lg:grid-cols-[1fr_220px_220px_auto]">
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
+            <label className="flex items-center gap-sm rounded-2xl border border-border bg-surface-0 px-md py-sm shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
               <IconSearch
                 size={18}
                 className="text-text-secondary"
@@ -626,7 +627,7 @@ export function AssetsPage() {
               />
 
               <input
-                className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+                className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-muted focus:outline-none"
                 placeholder="Varlık adı, envanter kodu, seri no ara..."
                 value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -634,7 +635,7 @@ export function AssetsPage() {
             </label>
 
             <select
-              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              className="rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary shadow-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
               value={selectedStatus}
               onChange={(event) => setFilter("status", event.target.value || null)}
               aria-label="Durum filtresi"
@@ -647,7 +648,7 @@ export function AssetsPage() {
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              className="rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary shadow-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
               value={selectedCategory}
               onChange={(event) =>
                 setFilter("category", event.target.value || null)
@@ -666,7 +667,7 @@ export function AssetsPage() {
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+              className="inline-flex items-center justify-center rounded-2xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
             >
               Temizle
             </button>
@@ -705,7 +706,7 @@ export function AssetsPage() {
         >
           {selectedAsset && (
             <div className="space-y-md">
-              <div className="flex items-center justify-between gap-md rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+              <div className="flex items-center justify-between gap-md rounded-panel border border-border-subtle bg-surface-0 p-md shadow-panel">
                 <div>
                   <p className="text-caption text-text-secondary">Durum</p>
 
@@ -725,6 +726,11 @@ export function AssetsPage() {
                     Düzenle
                   </GlowButton>
                 )}
+
+                <AuditHistoryLink
+                  entityType="inventory.Asset"
+                  entityId={selectedAsset.id}
+                />
               </div>
 
               <div className="grid gap-md sm:grid-cols-2">
