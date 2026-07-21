@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
@@ -13,23 +13,29 @@ export function GlassPanel({
   className,
   hover = true,
 }: GlassPanelProps) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <motion.div
       className={cn(
-        "glass-panel rounded-panel border border-border bg-surface-1 shadow-panel",
+        "glass-panel rounded-panel border border-border bg-surface-1 shadow-panel motion-reduce:transition-none",
         hover && "glass-panel-hover",
         className
       )}
-      initial={{
-        opacity: 0,
-        y: 8,
-      }}
+      initial={
+        shouldReduceMotion
+          ? false
+          : {
+              opacity: 0,
+              y: 6,
+            }
+      }
       animate={{
         opacity: 1,
         y: 0,
       }}
       transition={{
-        duration: 0.2,
+        duration: shouldReduceMotion ? 0 : 0.18,
         ease: "easeOut",
       }}
     >

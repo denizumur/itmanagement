@@ -55,7 +55,7 @@ export function MiniMetricCard({
   const classNames = cn(
     "inline-flex min-h-[64px] min-w-[148px] items-center gap-sm rounded-panel border px-md py-sm shadow-panel",
     onClick &&
-      "cursor-pointer transition duration-150 hover:-translate-y-0.5 hover:border-accent hover:bg-accent-bg hover:shadow-card focus:outline-none focus:ring-2 focus:ring-accent/30",
+      "cursor-pointer transition duration-150 hover:-translate-y-0.5 hover:border-accent hover:bg-accent-bg hover:shadow-card focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
     toneClasses[tone],
     className
   );

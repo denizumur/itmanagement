@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { HTMLMotionProps } from "framer-motion";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useState } from "react";
@@ -34,10 +34,15 @@ export function GlowButton({
   type = "button",
   ...props
 }: GlowButtonProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [ripples, setRipples] = useState<Ripple[]>([]);
 
   function handleMouseDown(event: ReactMouseEvent<HTMLButtonElement>) {
     onMouseDown?.(event);
+
+    if (shouldReduceMotion || event.defaultPrevented) {
+      return;
+    }
 
     const rect = event.currentTarget.getBoundingClientRect();
     const size = Math.max(rect.width, rect.height) * 2;
@@ -57,22 +62,20 @@ export function GlowButton({
       setRipples((currentRipples) =>
         currentRipples.filter((ripple) => ripple.id !== id)
       );
-    }, 650);
+    }, 260);
   }
 
   return (
     <motion.button
+      {...props}
       type={type}
       className={cn(
-        "glow-button inline-flex items-center justify-center gap-sm rounded-app px-md py-sm text-body font-medium disabled:cursor-not-allowed disabled:opacity-60",
+        "glow-button inline-flex items-center justify-center gap-sm rounded-app px-md py-sm text-body font-medium disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none",
         variantClass[variant],
         className
       )}
       onMouseDown={handleMouseDown}
-      whileTap={{
-        scale: 0.97,
-      }}
-      {...props}
+      whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }}
     >
       {ripples.map((ripple) => (
         <motion.span
@@ -86,20 +89,20 @@ export function GlowButton({
           }}
           initial={{
             scale: 0,
-            opacity: 0.55,
+            opacity: 0.45,
           }}
           animate={{
             scale: 1,
             opacity: 0,
           }}
           transition={{
-            duration: 0.65,
+            duration: 0.22,
             ease: "easeOut",
           }}
         />
       ))}
 
-      {icon && <span className="relative z-10">{icon}</span>}
+      {icon ? <span className="relative z-10">{icon}</span> : null}
       <span className="relative z-10">{children}</span>
     </motion.button>
   );

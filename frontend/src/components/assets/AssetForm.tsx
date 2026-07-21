@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { GlowButton } from "../ui/GlowButton";
 import type {
   Asset,
@@ -149,7 +149,7 @@ export function AssetForm({
     }));
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!form.name.trim()) {
@@ -203,19 +203,27 @@ export function AssetForm({
 
   const showAssignmentSection = mode === "create";
 
+  const fieldClassName =
+    "w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20";
+
+  const textareaClassName =
+    "w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20";
+
+  const labelClassName = "text-caption font-medium text-text-secondary";
+
   return (
     <form className="space-y-md" onSubmit={handleSubmit}>
-      {error && (
-        <div className="rounded-app border border-danger bg-danger-bg px-md py-sm text-body text-danger">
+      {error ? (
+        <div className="rounded-2xl border border-danger/30 bg-danger-bg px-md py-sm text-body font-medium text-danger">
           {error}
         </div>
-      )}
+      ) : null}
 
       <div className="grid gap-md sm:grid-cols-2">
         <label className="space-y-xs sm:col-span-2">
-          <span className="text-caption text-text-secondary">Varlık adı *</span>
+          <span className={labelClassName}>Varlık adı *</span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.name}
             onChange={(event) => updateField("name", event.target.value)}
             placeholder="Örn. Bilgi İşlem Laptop 01"
@@ -223,9 +231,9 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Envanter kodu</span>
+          <span className={labelClassName}>Envanter kodu</span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.inventory_code ?? ""}
             onChange={(event) =>
               updateField("inventory_code", event.target.value)
@@ -235,9 +243,9 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Seri numarası</span>
+          <span className={labelClassName}>Seri numarası</span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.serial_number ?? ""}
             onChange={(event) =>
               updateField("serial_number", event.target.value)
@@ -247,9 +255,9 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Kategori</span>
+          <span className={labelClassName}>Kategori</span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.category ? String(form.category) : ""}
             onChange={(event) =>
               updateField(
@@ -268,9 +276,9 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Durum *</span>
+          <span className={labelClassName}>Durum *</span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.status ?? "in_stock"}
             onChange={(event) => updateField("status", event.target.value)}
           >
@@ -283,9 +291,9 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Marka</span>
+          <span className={labelClassName}>Marka</span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.brand ?? ""}
             onChange={(event) => updateField("brand", event.target.value)}
             placeholder="Dell, HP, Lenovo..."
@@ -293,9 +301,9 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Model</span>
+          <span className={labelClassName}>Model</span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.model ?? ""}
             onChange={(event) => updateField("model", event.target.value)}
             placeholder="Latitude 5420"
@@ -303,9 +311,9 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Konum</span>
+          <span className={labelClassName}>Konum</span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.location ?? ""}
             onChange={(event) => updateField("location", event.target.value)}
             placeholder="Bilgi İşlem, Sistem Odası..."
@@ -313,12 +321,10 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
-            Satın alma tarihi
-          </span>
+          <span className={labelClassName}>Satın alma tarihi</span>
           <input
             type="date"
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.purchase_date ?? ""}
             onChange={(event) =>
               updateField("purchase_date", event.target.value)
@@ -327,12 +333,10 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
-            Garanti bitiş tarihi
-          </span>
+          <span className={labelClassName}>Garanti bitiş tarihi</span>
           <input
             type="date"
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.warranty_end_date ?? ""}
             onChange={(event) =>
               updateField("warranty_end_date", event.target.value)
@@ -341,12 +345,10 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
-            Sonraki bakım tarihi
-          </span>
+          <span className={labelClassName}>Sonraki bakım tarihi</span>
           <input
             type="date"
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.next_maintenance_due_date ?? ""}
             onChange={(event) =>
               updateField("next_maintenance_due_date", event.target.value)
@@ -355,27 +357,27 @@ export function AssetForm({
         </label>
 
         <label className="space-y-xs sm:col-span-2">
-          <span className="text-caption text-text-secondary">Notlar</span>
+          <span className={labelClassName}>Notlar</span>
           <textarea
-            className="min-h-28 w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={`${textareaClassName} min-h-28`}
             value={form.notes ?? ""}
             onChange={(event) => updateField("notes", event.target.value)}
             placeholder="Cihazla ilgili operasyonel notlar..."
           />
         </label>
 
-        {showAssignmentSection && (
-          <div className="space-y-md rounded-panel border border-border bg-surface-1 p-md sm:col-span-2">
+        {showAssignmentSection ? (
+          <div className="space-y-md rounded-panel border border-border-subtle bg-surface-0 p-md sm:col-span-2">
             <label className="flex items-start gap-sm">
               <input
                 type="checkbox"
-                className="mt-1 h-4 w-4 rounded border-border"
+                className="mt-1 h-4 w-4 rounded border-border text-accent focus:ring-2 focus:ring-accent/20"
                 checked={assignAfterCreate}
                 onChange={(event) => setAssignAfterCreate(event.target.checked)}
               />
 
               <span>
-                <span className="block text-body text-text-primary">
+                <span className="block text-body font-semibold text-text-primary">
                   Kaydettikten sonra zimmetle
                 </span>
                 <span className="mt-xs block text-caption text-text-secondary">
@@ -385,14 +387,12 @@ export function AssetForm({
               </span>
             </label>
 
-            {assignAfterCreate && (
-              <div className="grid gap-md sm:grid-cols-2">
+            {assignAfterCreate ? (
+              <div className="grid gap-md border-t border-border-subtle pt-md sm:grid-cols-2">
                 <label className="space-y-xs">
-                  <span className="text-caption text-text-secondary">
-                    Personel *
-                  </span>
+                  <span className={labelClassName}>Personel *</span>
                   <select
-                    className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+                    className={fieldClassName}
                     value={assignmentEmployee}
                     onChange={(event) =>
                       setAssignmentEmployee(event.target.value)
@@ -411,43 +411,39 @@ export function AssetForm({
                     })}
                   </select>
 
-                  {!employees.length && (
-                    <p className="text-caption text-warning">
+                  {!employees.length ? (
+                    <p className="rounded-xl border border-warning/20 bg-warning-bg px-sm py-xs text-caption text-warning">
                       Personel listesi alınamadı veya kayıtlı personel yok.
                     </p>
-                  )}
+                  ) : null}
                 </label>
 
                 <label className="space-y-xs">
-                  <span className="text-caption text-text-secondary">
-                    Zimmet tarihi *
-                  </span>
+                  <span className={labelClassName}>Zimmet tarihi *</span>
                   <input
                     type="date"
-                    className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+                    className={fieldClassName}
                     value={assignedAt}
                     onChange={(event) => setAssignedAt(event.target.value)}
                   />
                 </label>
 
                 <label className="space-y-xs sm:col-span-2">
-                  <span className="text-caption text-text-secondary">
-                    Zimmet notu
-                  </span>
+                  <span className={labelClassName}>Zimmet notu</span>
                   <textarea
-                    className="min-h-24 w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+                    className={`${textareaClassName} min-h-24`}
                     value={assignmentNotes}
                     onChange={(event) => setAssignmentNotes(event.target.value)}
                     placeholder="Teslim notu, ekipman durumu, aksesuar bilgisi..."
                   />
                 </label>
               </div>
-            )}
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
 
-      <div className="flex justify-end gap-sm border-t border-border pt-md">
+      <div className="flex justify-end gap-sm border-t border-border-subtle pt-md">
         <GlowButton type="button" variant="ghost" onClick={onCancel}>
           Vazgeç
         </GlowButton>

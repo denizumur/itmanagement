@@ -67,7 +67,7 @@ export function PortalActionGrid({ actions, className }: PortalActionGridProps) 
             disabled={action.disabled}
             aria-label={action.label}
             className={cn(
-              "group relative min-h-[150px] overflow-hidden rounded-panel border border-border-subtle bg-surface-1 p-lg text-left shadow-panel outline-none transition duration-150 hover:-translate-y-0.5 hover:shadow-card focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:border-border-subtle disabled:hover:bg-surface-1 disabled:hover:shadow-panel",
+              "group relative min-h-[150px] overflow-hidden rounded-panel border border-border-subtle bg-surface-1 p-lg text-left shadow-panel outline-none transition duration-150 hover:-translate-y-0.5 hover:shadow-card focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:border-border-subtle disabled:hover:bg-surface-1 disabled:hover:shadow-panel motion-reduce:transition-none motion-reduce:hover:translate-y-0",
               toneClassNames[tone]
             )}
           >
@@ -76,7 +76,7 @@ export function PortalActionGrid({ actions, className }: PortalActionGridProps) 
             <div className="flex h-full flex-col items-center justify-center gap-md text-center">
               <div
                 className={cn(
-                  "flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm transition duration-150 group-hover:scale-105",
+                  "flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm",
                   iconToneClassNames[tone]
                 )}
               >
@@ -84,7 +84,7 @@ export function PortalActionGrid({ actions, className }: PortalActionGridProps) 
               </div>
 
               <div className="flex max-w-full flex-col items-center gap-xs">
-                <span className="max-w-full truncate text-h3 font-semibold text-text-primary transition group-hover:text-inherit">
+                <span className="max-w-full truncate text-h3 font-semibold text-text-primary transition duration-150 group-hover:text-inherit motion-reduce:transition-none">
                   {action.label}
                 </span>
 

@@ -39,7 +39,7 @@ export function AttentionAssetsList({ assets }: AttentionAssetsListProps) {
               {assets.map((asset, index) => (
                 <tr
                   key={`${asset.id}-${asset.flag_type}-${index}`}
-                  className="transition duration-150 hover:bg-surface-2/80"
+                  className="transition duration-150 hover:bg-surface-2/80 motion-reduce:transition-none"
                 >
                   <td className="px-md py-md">
                     <p className="font-semibold text-text-primary">

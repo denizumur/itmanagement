@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { GlowButton } from "../ui/GlowButton";
 import { getAssetPrimaryCode } from "../../lib/inventory";
 import type { Asset } from "../../types/inventory";
@@ -114,7 +114,7 @@ export function MaintenanceForm({
     }));
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!form.asset) {
@@ -167,19 +167,25 @@ export function MaintenanceForm({
     });
   }
 
+  const fieldClassName =
+    "w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20";
+
+  const textareaClassName =
+    "w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20";
+
+  const labelClassName = "text-caption font-medium text-text-secondary";
+
   return (
     <form className="space-y-md" onSubmit={handleSubmit}>
-      {error && (
-        <div className="rounded-app border border-danger bg-danger-bg px-md py-sm text-body text-danger">
+      {error ? (
+        <div className="rounded-2xl border border-danger/30 bg-danger-bg px-md py-sm text-body font-medium text-danger">
           {error}
         </div>
-      )}
+      ) : null}
 
       <div className="grid gap-md">
         <div className="space-y-xs">
-          <span className="text-caption text-text-secondary">
-            Kayıt türü *
-          </span>
+          <span className={labelClassName}>Kayıt türü *</span>
 
           <div className="grid gap-sm">
             {typeOptions.map((option) => {
@@ -190,14 +196,14 @@ export function MaintenanceForm({
                   key={option.value}
                   type="button"
                   className={[
-                    "rounded-app border px-md py-sm text-left transition",
+                    "rounded-2xl border px-md py-sm text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-accent/20",
                     selected
                       ? "border-accent bg-accent-bg text-accent"
-                      : "border-border bg-surface-1 text-text-secondary hover:text-text-primary",
+                      : "border-border-subtle bg-surface-0 text-text-secondary hover:border-accent hover:bg-accent-bg hover:text-text-primary",
                   ].join(" ")}
                   onClick={() => handleTypeChange(option.value)}
                 >
-                  <p className="text-body">{option.label}</p>
+                  <p className="text-body font-semibold">{option.label}</p>
                   <p className="mt-xs text-caption">{option.description}</p>
                 </button>
               );
@@ -206,9 +212,9 @@ export function MaintenanceForm({
         </div>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Varlık *</span>
+          <span className={labelClassName}>Varlık *</span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.asset ? String(form.asset) : ""}
             onChange={(event) =>
               updateField(
@@ -226,21 +232,19 @@ export function MaintenanceForm({
             ))}
           </select>
 
-          {!assets.length && (
-            <p className="text-caption text-warning">
+          {!assets.length ? (
+            <p className="rounded-xl border border-warning/20 bg-warning-bg px-sm py-xs text-caption text-warning">
               İşlem yapılabilir varlık bulunamadı.
             </p>
-          )}
+          ) : null}
         </label>
 
         <div className="grid gap-md md:grid-cols-2">
           <label className="space-y-xs">
-            <span className="text-caption text-text-secondary">
-              İşlem tarihi *
-            </span>
+            <span className={labelClassName}>İşlem tarihi *</span>
             <input
               type="date"
-              className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+              className={fieldClassName}
               value={form.performed_at}
               onChange={(event) =>
                 updateField("performed_at", event.target.value)
@@ -249,14 +253,12 @@ export function MaintenanceForm({
           </label>
 
           <label className="space-y-xs">
-            <span className="text-caption text-text-secondary">
-              Maliyet
-            </span>
+            <span className={labelClassName}>Maliyet</span>
             <input
               type="number"
               min="0"
               step="0.01"
-              className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+              className={fieldClassName}
               value={form.cost}
               onChange={(event) => updateField("cost", event.target.value)}
               placeholder="0"
@@ -264,15 +266,13 @@ export function MaintenanceForm({
           </label>
         </div>
 
-        {form.type === "maintenance" && (
+        {form.type === "maintenance" ? (
           <div className="grid gap-md md:grid-cols-2">
             <label className="space-y-xs">
-              <span className="text-caption text-text-secondary">
-                Sonraki bakım tarihi
-              </span>
+              <span className={labelClassName}>Sonraki bakım tarihi</span>
               <input
                 type="date"
-                className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+                className={fieldClassName}
                 value={form.next_due_date}
                 onChange={(event) =>
                   updateField("next_due_date", event.target.value)
@@ -281,13 +281,11 @@ export function MaintenanceForm({
             </label>
 
             <label className="space-y-xs">
-              <span className="text-caption text-text-secondary">
-                Bakım periyodu / gün
-              </span>
+              <span className={labelClassName}>Bakım periyodu / gün</span>
               <input
                 type="number"
                 min="1"
-                className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+                className={fieldClassName}
                 value={form.frequency_days}
                 onChange={(event) =>
                   updateField("frequency_days", event.target.value)
@@ -296,14 +294,12 @@ export function MaintenanceForm({
               />
             </label>
           </div>
-        )}
+        ) : null}
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
-            İşlem sonrası varlık durumu
-          </span>
+          <span className={labelClassName}>İşlem sonrası varlık durumu</span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none disabled:opacity-70"
+            className="w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-70"
             value={form.asset_status_after}
             disabled={form.type === "disposal"}
             onChange={(event) =>
@@ -317,20 +313,18 @@ export function MaintenanceForm({
             ))}
           </select>
 
-          {form.type === "disposal" && (
-            <p className="text-caption text-danger">
-              İmha kaydı oluşturulduğunda varlık durumu otomatik olarak
-              “İmha edildi” yapılır.
+          {form.type === "disposal" ? (
+            <p className="rounded-xl border border-danger/20 bg-danger-bg px-sm py-xs text-caption text-danger">
+              İmha kaydı oluşturulduğunda varlık durumu otomatik olarak “İmha
+              edildi” yapılır.
             </p>
-          )}
+          ) : null}
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
-            İşlem yapan / servis
-          </span>
+          <span className={labelClassName}>İşlem yapan / servis</span>
           <input
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.performed_by}
             onChange={(event) =>
               updateField("performed_by", event.target.value)
@@ -340,11 +334,9 @@ export function MaintenanceForm({
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
-            Açıklama *
-          </span>
+          <span className={labelClassName}>Açıklama *</span>
           <textarea
-            className="min-h-32 w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={`${textareaClassName} min-h-32`}
             value={form.description}
             onChange={(event) =>
               updateField("description", event.target.value)
@@ -354,7 +346,7 @@ export function MaintenanceForm({
         </label>
       </div>
 
-      <div className="flex justify-end gap-sm border-t border-border pt-md">
+      <div className="flex justify-end gap-sm border-t border-border-subtle pt-md">
         <GlowButton type="button" variant="ghost" onClick={onCancel}>
           Vazgeç
         </GlowButton>

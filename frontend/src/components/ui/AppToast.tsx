@@ -12,7 +12,12 @@ export function AppToast({ type, message, onClose }: AppToastProps) {
   const isSuccess = type === "success";
 
   return (
-    <div className="fixed bottom-lg right-lg z-50 w-[min(100%-2rem,420px)] rounded-panel border border-border bg-surface-1 p-md shadow-popover">
+    <div
+      role={isSuccess ? "status" : "alert"}
+      aria-live={isSuccess ? "polite" : "assertive"}
+      aria-atomic="true"
+      className="fixed bottom-lg right-lg z-50 w-[min(100%-2rem,420px)] rounded-panel border border-border bg-surface-1 p-md shadow-popover"
+    >
       <div className="flex items-start gap-sm">
         <span
           className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
@@ -32,8 +37,10 @@ export function AppToast({ type, message, onClose }: AppToastProps) {
 
         <button
           type="button"
-          className="rounded-lg px-xs py-[2px] text-caption font-semibold text-text-secondary transition hover:bg-surface-2 hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/25"
+          className="rounded-lg px-xs py-[2px] text-caption font-semibold text-text-secondary transition hover:bg-surface-2 hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
           onClick={onClose}
+          aria-label="Bildirimi kapat"
+          title="Kapat"
         >
           Kapat
         </button>

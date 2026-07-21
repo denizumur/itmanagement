@@ -1,29 +1,31 @@
-import { motion } from "framer-motion";
-import type { ReactNode } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import type { Variants } from "framer-motion";
+import type { ReactNode } from "react";
 
 interface PageTransitionProps {
   children: ReactNode;
   className?: string;
 }
 
-const pageVariants: Variants = {
-  hidden: {
-    opacity: 0,
-    y: 18,
-  },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.48,
-      ease: "easeOut",
-      staggerChildren: 0.06,
-    },
-  },
-};
-
 export function PageTransition({ children, className }: PageTransitionProps) {
+  const shouldReduceMotion = useReducedMotion();
+
+  const pageVariants: Variants = {
+    hidden: {
+      opacity: shouldReduceMotion ? 1 : 0,
+      y: shouldReduceMotion ? 0 : 6,
+    },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: shouldReduceMotion ? 0 : 0.2,
+        ease: "easeOut",
+        staggerChildren: shouldReduceMotion ? 0 : 0.03,
+      },
+    },
+  };
+
   return (
     <motion.div
       className={className}

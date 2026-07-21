@@ -22,7 +22,7 @@ export function UpcomingLicensesPanel({
           {licenses.map((license) => (
             <div
               key={license.id}
-              className="flex items-center justify-between gap-md rounded-2xl border border-border-subtle bg-surface-0 p-md transition duration-150 hover:border-accent/30 hover:bg-surface-2"
+              className="flex items-center justify-between gap-md rounded-2xl border border-border-subtle bg-surface-0 p-md transition duration-150 hover:border-accent/30 hover:bg-surface-2 motion-reduce:transition-none"
             >
               <div className="min-w-0">
                 <p className="truncate text-body font-semibold text-text-primary">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { GlowButton } from "../ui/GlowButton";
 import { getAssetPrimaryCode } from "../../lib/inventory";
 import {
@@ -53,7 +53,7 @@ export function AssignmentForm({
     }));
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!form.asset) {
@@ -76,22 +76,30 @@ export function AssignmentForm({
     });
   }
 
+  const fieldClassName =
+    "w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20";
+
+  const labelClassName = "text-caption font-medium text-text-secondary";
+
   return (
     <form className="space-y-md" onSubmit={handleSubmit}>
-      {error && (
-        <div className="rounded-app border border-danger bg-danger-bg px-md py-sm text-body text-danger">
+      {error ? (
+        <div className="rounded-2xl border border-danger/30 bg-danger-bg px-md py-sm text-body font-medium text-danger">
           {error}
         </div>
-      )}
+      ) : null}
 
       <div className="grid gap-md">
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Varlık *</span>
+          <span className={labelClassName}>Varlık *</span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.asset ? String(form.asset) : ""}
             onChange={(event) =>
-              updateField("asset", event.target.value ? Number(event.target.value) : 0)
+              updateField(
+                "asset",
+                event.target.value ? Number(event.target.value) : 0
+              )
             }
           >
             <option value="">Zimmetlenecek varlık seç</option>
@@ -103,17 +111,17 @@ export function AssignmentForm({
             ))}
           </select>
 
-          {!assets.length && (
-            <p className="text-caption text-warning">
+          {!assets.length ? (
+            <p className="rounded-xl border border-warning/20 bg-warning-bg px-sm py-xs text-caption text-warning">
               Zimmetlenebilir aktif/depoda varlık bulunamadı.
             </p>
-          )}
+          ) : null}
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Personel *</span>
+          <span className={labelClassName}>Personel *</span>
           <select
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.employee ? String(form.employee) : ""}
             onChange={(event) =>
               updateField(
@@ -137,24 +145,28 @@ export function AssignmentForm({
               );
             })}
           </select>
+
+          {!employees.length ? (
+            <p className="rounded-xl border border-warning/20 bg-warning-bg px-sm py-xs text-caption text-warning">
+              Personel listesi alınamadı veya kayıtlı personel yok.
+            </p>
+          ) : null}
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">
-            Zimmet tarihi
-          </span>
+          <span className={labelClassName}>Zimmet tarihi</span>
           <input
             type="date"
-            className="w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className={fieldClassName}
             value={form.assigned_at ?? ""}
             onChange={(event) => updateField("assigned_at", event.target.value)}
           />
         </label>
 
         <label className="space-y-xs">
-          <span className="text-caption text-text-secondary">Notlar</span>
+          <span className={labelClassName}>Notlar</span>
           <textarea
-            className="min-h-28 w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary focus:outline-none"
+            className="min-h-28 w-full rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/20"
             value={form.notes ?? ""}
             onChange={(event) => updateField("notes", event.target.value)}
             placeholder="Zimmet teslim notu, cihaz durumu, aksesuar bilgisi..."
@@ -162,7 +174,7 @@ export function AssignmentForm({
         </label>
       </div>
 
-      <div className="flex justify-end gap-sm border-t border-border pt-md">
+      <div className="flex justify-end gap-sm border-t border-border-subtle pt-md">
         <GlowButton type="button" variant="ghost" onClick={onCancel}>
           Vazgeç
         </GlowButton>

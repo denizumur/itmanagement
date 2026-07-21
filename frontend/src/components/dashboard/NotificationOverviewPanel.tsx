@@ -139,7 +139,7 @@ function AlertGroup({
               key={item.id}
               type="button"
               onClick={() => navigate(item.url)}
-              className="block w-full rounded-2xl border border-border-subtle bg-surface-0 p-md text-left transition duration-150 hover:border-accent/30 hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-accent/25"
+              className="block w-full rounded-2xl border border-border-subtle bg-surface-0 p-md text-left transition duration-150 hover:border-accent/30 hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
             >
               <div className="flex items-start justify-between gap-md">
                 <div className="min-w-0">
@@ -164,7 +164,7 @@ function AlertGroup({
         <button
           type="button"
           onClick={() => navigate(getTargetUrl(items, fallbackUrl))}
-          className="mt-md w-full rounded-xl border border-border bg-surface-1 px-md py-sm text-caption font-semibold text-text-secondary transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+          className="mt-md w-full rounded-xl border border-border bg-surface-1 px-md py-sm text-caption font-semibold text-text-secondary transition duration-150 hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
         >
           {remainingCount > 0
             ? `Tümünü gör · +${remainingCount} kayıt daha`
@@ -213,7 +213,7 @@ function MetricPopupContent({
                   key={item.id}
                   type="button"
                   onClick={() => onNavigate(item.url || group.fallbackUrl)}
-                  className="block w-full rounded-2xl border border-border-subtle bg-surface-0 p-md text-left transition duration-150 hover:border-accent/30 hover:bg-accent-bg focus:outline-none focus:ring-2 focus:ring-accent/25"
+                  className="block w-full rounded-2xl border border-border-subtle bg-surface-0 p-md text-left transition duration-150 hover:border-accent/30 hover:bg-accent-bg focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
                 >
                   <div className="flex items-start justify-between gap-md">
                     <div className="min-w-0">
@@ -241,7 +241,7 @@ function MetricPopupContent({
               onClick={() =>
                 onNavigate(getTargetUrl(group.items, group.fallbackUrl))
               }
-              className="mt-md w-full rounded-app border border-border px-md py-sm text-caption font-semibold text-text-secondary transition hover:border-accent hover:text-accent"
+              className="mt-md w-full rounded-xl border border-border bg-surface-1 px-md py-sm text-caption font-semibold text-text-secondary transition duration-150 hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
             >
               İlgili ekrana git
             </button>

@@ -84,7 +84,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "sidebar-glass hidden min-h-screen shrink-0 border-r border-border bg-surface-1/95 px-md py-lg transition-[width] duration-200 ease-out md:flex md:flex-col",
+        "sidebar-glass hidden min-h-screen shrink-0 border-r border-border bg-surface-1/95 px-md py-lg transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex md:flex-col",
         collapsed ? "w-[84px]" : "w-[264px]"
       )}
     >
@@ -113,7 +113,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onToggleCollapsed}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-text-secondary transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-text-secondary transition duration-150 hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none"
             aria-label="Menüyü daralt"
             title="Menüyü daralt"
           >
@@ -126,7 +126,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="mb-lg inline-flex h-10 w-10 items-center justify-center self-center rounded-xl border border-border bg-surface-1 text-text-secondary shadow-panel transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+          className="mb-lg inline-flex h-10 w-10 items-center justify-center self-center rounded-xl border border-border bg-surface-1 text-text-secondary shadow-panel transition duration-150 hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none"
           aria-label="Menüyü genişlet"
           title="Menüyü genişlet"
         >
@@ -152,7 +152,7 @@ export function Sidebar({
               title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
                 cn(
-                  "group flex items-center rounded-xl border px-sm py-sm text-body font-medium outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-accent/30",
+                  "group flex items-center rounded-xl border px-sm py-sm text-body font-medium outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-accent/30 motion-reduce:transition-none",
                   collapsed ? "justify-center" : "gap-sm",
                   isActive
                     ? "border-accent/20 bg-accent-bg text-accent shadow-sm"
@@ -164,7 +164,7 @@ export function Sidebar({
                 <>
                   <span
                     className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition",
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition duration-150 motion-reduce:transition-none",
                       isActive
                         ? "bg-surface-1 text-accent"
                         : "bg-transparent text-inherit group-hover:bg-surface-1"

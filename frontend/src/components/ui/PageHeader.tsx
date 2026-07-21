@@ -1,5 +1,6 @@
 import { IconSparkles } from "@tabler/icons-react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import type { Variants } from "framer-motion";
 import type { ReactNode } from "react";
 
 interface PageHeaderProps {
@@ -15,23 +16,27 @@ export function PageHeader({
   description,
   actions,
 }: PageHeaderProps) {
+  const shouldReduceMotion = useReducedMotion();
+
+  const headerVariants: Variants = {
+    hidden: {
+      opacity: shouldReduceMotion ? 1 : 0,
+      y: shouldReduceMotion ? 0 : 6,
+    },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: shouldReduceMotion ? 0 : 0.2,
+        ease: "easeOut",
+      },
+    },
+  };
+
   return (
     <motion.div
       className="mb-lg flex flex-col gap-md lg:flex-row lg:items-end lg:justify-between"
-      variants={{
-        hidden: {
-          opacity: 0,
-          y: 18,
-        },
-        show: {
-          opacity: 1,
-          y: 0,
-          transition: {
-            duration: 0.42,
-            ease: "easeOut",
-          },
-        },
-      }}
+      variants={headerVariants}
     >
       <div>
         <div className="inline-flex items-center gap-sm rounded-full border border-border bg-surface-1 px-md py-sm text-caption text-text-secondary shadow-panel">
@@ -41,14 +46,16 @@ export function PageHeader({
 
         <h1 className="mt-md text-display text-text-primary">{title}</h1>
 
-        {description && (
+        {description ? (
           <p className="mt-sm max-w-2xl text-body text-text-secondary">
             {description}
           </p>
-        )}
+        ) : null}
       </div>
 
-      {actions && <div className="flex flex-wrap items-center gap-sm">{actions}</div>}
+      {actions ? (
+        <div className="flex flex-wrap items-center gap-sm">{actions}</div>
+      ) : null}
     </motion.div>
   );
 }
