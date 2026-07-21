@@ -9,6 +9,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
@@ -152,6 +153,23 @@ function getSummaryTypeCount(
   return getMaintenanceSummaryCount(summary, `${type}_count`) || fallback;
 }
 
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="rounded-app border border-border bg-surface-2 px-md py-sm">
+      <p className="text-caption text-text-secondary">{label}</p>
+      <div className="mt-xs text-body font-medium text-text-primary">
+        {value || "-"}
+      </div>
+    </div>
+  );
+}
+
 function buildMaintenanceColumns(): DataTableColumn<MaintenanceRecord>[] {
   return [
     {
@@ -268,6 +286,8 @@ export function MaintenancePage() {
 
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
+  const [selectedMaintenanceRecord, setSelectedMaintenanceRecord] =
+    useState<MaintenanceRecord | null>(null);
 
   const recordsQuery = useMaintenanceTable(state);
   const summaryQuery = useMaintenanceSummary();
@@ -521,6 +541,10 @@ export function MaintenancePage() {
             onSortChange={setSort}
             isLoading={recordsQuery.isLoading}
             emptyMessage="Bakım / onarım / imha kaydı bulunamadı."
+            onViewDetails={setSelectedMaintenanceRecord}
+            getRowClassName={(record) =>
+              selectedMaintenanceRecord?.id === record.id ? "bg-surface-2" : ""
+            }
           />
 
           <TablePagination
@@ -546,6 +570,98 @@ export function MaintenancePage() {
             onCancel={closeCreatePanel}
             onSubmit={handleCreateRecord}
           />
+        </SlideOverPanel>
+
+        <SlideOverPanel
+          open={Boolean(selectedMaintenanceRecord)}
+          title={
+            selectedMaintenanceRecord
+              ? getRecordTitle(selectedMaintenanceRecord)
+              : "Bakım kaydı detayı"
+          }
+          description={
+            selectedMaintenanceRecord
+              ? getMaintenanceAssetName(selectedMaintenanceRecord)
+              : undefined
+          }
+          onClose={() => setSelectedMaintenanceRecord(null)}
+        >
+          {selectedMaintenanceRecord ? (
+            <div className="space-y-md">
+              <div className="flex flex-wrap items-center gap-xs">
+                <StatusBadge
+                  variant={getMaintenanceTypeVariant(selectedMaintenanceRecord)}
+                >
+                  {getMaintenanceTypeLabel(selectedMaintenanceRecord)}
+                </StatusBadge>
+
+                <StatusBadge
+                  variant={
+                    isMaintenanceOverdue(selectedMaintenanceRecord)
+                      ? "danger"
+                      : getMaintenanceStatusVariant(selectedMaintenanceRecord)
+                  }
+                >
+                  {isMaintenanceOverdue(selectedMaintenanceRecord)
+                    ? "Gecikmiş"
+                    : getMaintenanceStatusLabel(selectedMaintenanceRecord)}
+                </StatusBadge>
+              </div>
+
+              <div className="grid gap-sm sm:grid-cols-2">
+                <DetailRow
+                  label="Varlık"
+                  value={getMaintenanceAssetName(selectedMaintenanceRecord)}
+                />
+
+                <DetailRow
+                  label="Envanter Kodu"
+                  value={
+                    getMaintenanceAssetCode(selectedMaintenanceRecord) ?? "-"
+                  }
+                />
+
+                <DetailRow
+                  label="İşlem Tarihi"
+                  value={formatMaintenanceDate(
+                    getMaintenanceRecordDate(selectedMaintenanceRecord)
+                  )}
+                />
+
+                <DetailRow
+                  label="Sonraki Bakım"
+                  value={formatMaintenanceDate(
+                    selectedMaintenanceRecord.next_due_date
+                  )}
+                />
+
+                <DetailRow
+                  label="Firma"
+                  value={selectedMaintenanceRecord.vendor || "-"}
+                />
+
+                <DetailRow
+                  label="İşlem Yapan"
+                  value={selectedMaintenanceRecord.performed_by || "-"}
+                />
+
+                <DetailRow
+                  label="Maliyet"
+                  value={formatMaintenanceCost(selectedMaintenanceRecord.cost)}
+                />
+              </div>
+
+              <DetailRow
+                label="Açıklama"
+                value={getRecordDescription(selectedMaintenanceRecord)}
+              />
+
+              <DetailRow
+                label="Notlar"
+                value={selectedMaintenanceRecord.notes || "-"}
+              />
+            </div>
+          ) : null}
         </SlideOverPanel>
 
         {toast && (

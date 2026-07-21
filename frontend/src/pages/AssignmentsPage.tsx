@@ -7,6 +7,7 @@ import {
   IconUserCheck,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { AssignmentForm } from "../components/assignments/AssignmentForm";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
@@ -135,6 +136,23 @@ function isAssignmentActive(assignment: Assignment) {
   return !assignment.returned_at;
 }
 
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="rounded-app border border-border bg-surface-2 px-md py-sm">
+      <p className="text-caption text-text-secondary">{label}</p>
+      <div className="mt-xs text-body font-medium text-text-primary">
+        {value || "-"}
+      </div>
+    </div>
+  );
+}
+
 function buildAssignmentColumns({
   userCanManage,
   isSubmitting,
@@ -260,6 +278,8 @@ export function AssignmentsPage() {
   });
 
   const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] =
+    useState<Assignment | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const assignmentsQuery = useAssignmentsTable(state);
@@ -385,6 +405,10 @@ export function AssignmentsPage() {
         message: "Zimmet başarıyla iade alındı.",
       });
 
+      if (selectedAssignment?.id === assignment.id) {
+        setSelectedAssignment(null);
+      }
+
       refetchAll();
     } catch (error) {
       setToast({
@@ -401,7 +425,7 @@ export function AssignmentsPage() {
         isSubmitting,
         onReturnAssignment: handleReturnAssignment,
       }),
-    [userCanManage, isSubmitting]
+    [userCanManage, isSubmitting, selectedAssignment]
   );
 
   if (isInitialLoading) {
@@ -559,6 +583,10 @@ export function AssignmentsPage() {
             onSortChange={setSort}
             isLoading={assignmentsQuery.isLoading}
             emptyMessage="Zimmet kaydı bulunamadı."
+            onViewDetails={setSelectedAssignment}
+            getRowClassName={(assignment) =>
+              selectedAssignment?.id === assignment.id ? "bg-surface-2" : ""
+            }
           />
 
           <TablePagination
@@ -585,6 +613,81 @@ export function AssignmentsPage() {
             onCancel={closeCreatePanel}
             onSubmit={handleCreateAssignment}
           />
+        </SlideOverPanel>
+
+        <SlideOverPanel
+          open={Boolean(selectedAssignment)}
+          title={
+            selectedAssignment
+              ? getAssignmentAssetName(selectedAssignment)
+              : "Zimmet detayı"
+          }
+          description={
+            selectedAssignment
+              ? getAssignmentEmployeeName(selectedAssignment)
+              : undefined
+          }
+          onClose={() => setSelectedAssignment(null)}
+        >
+          {selectedAssignment ? (
+            <div className="space-y-md">
+              <div className="flex flex-wrap items-center justify-between gap-sm">
+                {isAssignmentActive(selectedAssignment) ? (
+                  <StatusBadge variant="accent">Aktif zimmet</StatusBadge>
+                ) : (
+                  <StatusBadge variant="success">İade edilmiş</StatusBadge>
+                )}
+
+                {userCanManage && isAssignmentActive(selectedAssignment) ? (
+                  <GlowButton
+                    variant="ghost"
+                    disabled={isSubmitting}
+                    onClick={() => handleReturnAssignment(selectedAssignment)}
+                    icon={<IconRotateClockwise size={16} aria-hidden={true} />}
+                  >
+                    İade al
+                  </GlowButton>
+                ) : null}
+              </div>
+
+              <div className="grid gap-sm sm:grid-cols-2">
+                <DetailRow
+                  label="Varlık"
+                  value={getAssignmentAssetName(selectedAssignment)}
+                />
+
+                <DetailRow
+                  label="Envanter Kodu"
+                  value={getAssignmentAssetCode(selectedAssignment) ?? "-"}
+                />
+
+                <DetailRow
+                  label="Personel"
+                  value={getAssignmentEmployeeName(selectedAssignment)}
+                />
+
+                <DetailRow
+                  label="Departman"
+                  value={getAssignmentDepartmentName(selectedAssignment) ?? "-"}
+                />
+
+                <DetailRow
+                  label="Görev"
+                  value={getAssignmentJobTitleName(selectedAssignment) ?? "-"}
+                />
+
+                <DetailRow
+                  label="Zimmet Tarihi"
+                  value={formatDate(selectedAssignment.assigned_at)}
+                />
+
+                <DetailRow
+                  label="İade Tarihi"
+                  value={formatDate(selectedAssignment.returned_at)}
+                />
+              </div>
+            </div>
+          ) : null}
         </SlideOverPanel>
 
         {toast && (

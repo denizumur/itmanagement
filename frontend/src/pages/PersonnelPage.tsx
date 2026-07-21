@@ -16,6 +16,7 @@ import { DataTable, type DataTableColumn } from "../components/common/DataTable"
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
+import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import {
   useEmployeeDetail,
   useEmployeeExport,
@@ -347,6 +348,10 @@ function EmployeeDetailPanel({
 
           {detail && employee && summary ? (
             <div className="flex flex-col gap-lg">
+              <AuditHistoryLink
+                entityType="employees.Employee"
+                entityId={employee.id}
+              />
               <section className="grid gap-sm sm:grid-cols-2 xl:grid-cols-4">
                 <MiniMetricCard
                   label="Aktif zimmet"
@@ -783,7 +788,7 @@ export function PersonnelPage() {
           onSortChange={setSort}
           isLoading={employeesQuery.isLoading}
           emptyMessage="Personel kaydı bulunamadı."
-          onRowClick={(employee) => setSelectedEmployeeId(employee.id)}
+          onViewDetails={(employee) => setSelectedEmployeeId(employee.id)}
           getRowClassName={(employee) =>
             selectedEmployeeId === employee.id ? "bg-surface-2" : ""
           }

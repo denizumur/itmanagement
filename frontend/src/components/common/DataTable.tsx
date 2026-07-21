@@ -4,6 +4,7 @@ import {
   IconChevronUp,
   IconSelector,
 } from "@tabler/icons-react";
+import { DetailIconButton } from "./DetailIconButton";
 import { cn } from "../../lib/cn";
 import { getSortDirection } from "../../lib/tableQuery";
 
@@ -24,7 +25,8 @@ type DataTableProps<T> = {
   onSortChange?: (sortKey: string) => void;
   isLoading?: boolean;
   emptyMessage?: string;
-  onRowClick?: (item: T) => void;
+  onViewDetails?: (item: T) => void;
+  viewDetailsLabel?: string;
   getRowClassName?: (item: T) => string;
 };
 
@@ -36,10 +38,13 @@ export function DataTable<T>({
   onSortChange,
   isLoading = false,
   emptyMessage = "Kayıt bulunamadı.",
-  onRowClick,
+  onViewDetails,
+  viewDetailsLabel = "Detayları gör",
   getRowClassName,
 }: DataTableProps<T>) {
   const currentOrdering = ordering ?? "";
+  const hasDetailAction = Boolean(onViewDetails);
+  const colSpan = columns.length + (hasDetailAction ? 1 : 0);
 
   function renderSortIcon(column: DataTableColumn<T>) {
     if (!column.sortable) {
@@ -92,6 +97,12 @@ export function DataTable<T>({
                   </th>
                 );
               })}
+
+              {hasDetailAction ? (
+                <th className="sticky right-0 z-10 w-[72px] border-b border-border bg-surface-1 px-md py-sm text-right font-normal">
+                  <span className="sr-only">{viewDetailsLabel}</span>
+                </th>
+              ) : null}
             </tr>
           </thead>
 
@@ -99,7 +110,7 @@ export function DataTable<T>({
             {isLoading ? (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={colSpan}
                   className="px-md py-lg text-center text-text-secondary"
                 >
                   Yükleniyor...
@@ -108,7 +119,7 @@ export function DataTable<T>({
             ) : data.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={colSpan}
                   className="px-md py-lg text-center text-text-secondary"
                 >
                   {emptyMessage}
@@ -118,10 +129,8 @@ export function DataTable<T>({
               data.map((item) => (
                 <tr
                   key={getRowKey(item)}
-                  onClick={onRowClick ? () => onRowClick(item) : undefined}
                   className={cn(
                     "transition hover:bg-surface-2",
-                    onRowClick && "cursor-pointer",
                     getRowClassName?.(item)
                   )}
                 >
@@ -136,6 +145,15 @@ export function DataTable<T>({
                       {column.render(item)}
                     </td>
                   ))}
+
+                  {hasDetailAction ? (
+                    <td className="sticky right-0 z-10 w-[72px] border-b border-border bg-surface-1 px-md py-md text-right align-top shadow-[-8px_0_16px_-16px_rgba(15,23,42,0.35)]">
+                     <DetailIconButton
+                     label={viewDetailsLabel}
+                     onClick={() => onViewDetails?.(item)}
+                     />
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}

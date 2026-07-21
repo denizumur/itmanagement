@@ -936,7 +936,7 @@ export function AuditLogsPage() {
               onSortChange={setSort}
               isLoading={auditLogsQuery.isLoading}
               emptyMessage="Audit kaydı bulunamadı."
-              onRowClick={(auditLog) => setSelectedAuditLogId(auditLog.id)}
+              onViewDetails={(auditLog) => setSelectedAuditLogId(auditLog.id)}
               getRowClassName={(auditLog) =>
                 selectedAuditLogId === auditLog.id ? "bg-surface-2" : ""
               }
