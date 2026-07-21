@@ -19,6 +19,7 @@ import {
   fetchTicketSummary,
   fetchTicketsTable,
   rejectTicket,
+  returnTicketToRequester,
   updateTicketStatus,
   uploadTicketAttachment,
 } from "../api/tickets";
@@ -28,6 +29,7 @@ import type {
   TicketApprovalDecisionPayload,
   TicketAttachmentUploadPayload,
   TicketCommentCreatePayload,
+  TicketReturnToRequesterPayload,
   TicketCreatePayload,
   TicketStatusUpdatePayload,
 } from "../types/tickets";
@@ -190,6 +192,30 @@ export function useUpdateTicketStatus() {
   });
 }
 
+export function useReturnTicketToRequester() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      payload,
+    }: {
+      ticketId: number;
+      payload: TicketReturnToRequesterPayload;
+    }) => returnTicketToRequester(ticketId, payload),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ticketContextQueryKey(variables.ticketId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ticketTimelineQueryKey(variables.ticketId),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
 export function useCreateTicketComment() {
   const queryClient = useQueryClient();
 

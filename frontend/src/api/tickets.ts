@@ -14,6 +14,7 @@ import type {
   TicketCreatePayload,
   TicketRequesterContext,
   TicketStatusUpdatePayload,
+  TicketReturnToRequesterPayload,
   TicketSummary,
   TicketTimelineResponse,
 } from "../types/tickets";
@@ -21,7 +22,7 @@ import type {
 const TICKETS_ENDPOINT = "/api/tickets/";
 
 export async function fetchMyTickets() {
-  const response = await api.get<Ticket[]>(TICKETS_ENDPOINT);
+  const response = await api.get<Ticket[]>(`${TICKETS_ENDPOINT}mine/`);
   return response.data;
 }
 
@@ -118,6 +119,20 @@ export async function updateTicketStatus({
     status,
     solution_note,
   });
+
+  return response.data;
+}
+
+export async function returnTicketToRequester(
+  ticketId: number,
+  payload: TicketReturnToRequesterPayload
+) {
+  const response = await api.post<Ticket>(
+    `${TICKETS_ENDPOINT}${ticketId}/return-to-requester/`,
+    {
+      comment: payload.comment.trim(),
+    }
+  );
 
   return response.data;
 }

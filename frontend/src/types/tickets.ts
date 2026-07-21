@@ -74,7 +74,9 @@ export interface TicketStatusUpdatePayload {
   status: TicketStatus;
   solution_note?: string;
 }
-
+export interface TicketReturnToRequesterPayload {
+  comment: string;
+}
 export interface TicketApproval {
   id: number;
   ticket: Ticket;
