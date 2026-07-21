@@ -24,6 +24,7 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import {
+  useReturnTicketToRequester,
   useTicketContext,
   useTicketSummary,
   useTicketsTable,
@@ -358,37 +359,29 @@ function WorkspaceChatHeader({
   context,
   canEditTickets,
   isUpdating,
-  pendingStatus,
-  solutionNote,
+  isReturning,
   onClose,
   onRefresh,
   onOpenContext,
-  onStatusChange,
-  onSolutionNoteChange,
-  onCancelSolutionNote,
-  onApplySolutionNote,
+  onOpenReturnDialog,
 }: {
   ticket: Ticket;
   context?: TicketContext;
   canEditTickets: boolean;
   isUpdating: boolean;
-  pendingStatus: TicketStatus | null;
-  solutionNote: string;
+  isReturning: boolean;
   onClose: () => void;
   onRefresh: () => void;
   onOpenContext: () => void;
-  onStatusChange: (ticket: Ticket, status: TicketStatus) => void;
-  onSolutionNoteChange: (value: string) => void;
-  onCancelSolutionNote: () => void;
-  onApplySolutionNote: () => void;
+  onOpenReturnDialog: () => void;
 }) {
   const resolvedTicket = context?.ticket ?? ticket;
   const statusMeta = getTicketStatusMeta(resolvedTicket.status);
   const priorityMeta = getTicketPriorityMeta(resolvedTicket.priority);
   const approvalMeta = getTicketApprovalMeta(resolvedTicket.approval_status);
 
-  const canUpdateStatus = Boolean(
-    canEditTickets && context?.actions.can_update_status
+  const canReturnToRequester = Boolean(
+    canEditTickets && context?.actions.can_return_to_requester
   );
 
   return (
@@ -410,21 +403,17 @@ function WorkspaceChatHeader({
             className="h-10"
           />
 
-          <select
-            value={resolvedTicket.status}
-            disabled={!canUpdateStatus || isUpdating}
-            onChange={(event) =>
-              onStatusChange(resolvedTicket, event.target.value as TicketStatus)
-            }
-            className="h-10 rounded-app border border-border bg-surface-2 px-sm text-caption text-text-primary outline-none transition focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Ticket durumunu değiştir"
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {canReturnToRequester ? (
+            <button
+              type="button"
+              onClick={onOpenReturnDialog}
+              disabled={isReturning || isUpdating}
+              className="inline-flex h-10 items-center justify-center gap-xs rounded-app border border-warning/40 px-sm text-caption font-semibold text-warning transition hover:bg-warning-bg disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <IconAlertTriangle size={15} aria-hidden={true} />
+              Geri Çevir
+            </button>
+          ) : null}
 
           <button
             type="button"
@@ -437,7 +426,8 @@ function WorkspaceChatHeader({
           <button
             type="button"
             onClick={onRefresh}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-secondary transition hover:border-accent hover:text-accent"
+            disabled={isReturning}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-secondary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Ticket detayını yenile"
           >
             <IconRefresh size={17} aria-hidden={true} />
@@ -446,7 +436,8 @@ function WorkspaceChatHeader({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-secondary transition hover:border-accent hover:text-accent"
+            disabled={isReturning}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-secondary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Ticket detayını kapat"
           >
             <IconX size={17} aria-hidden={true} />
@@ -471,35 +462,104 @@ function WorkspaceChatHeader({
           {context.actions.blocked_reason}
         </div>
       ) : null}
+    </div>
+  );
+}
 
-      {resolvedTicket.resolution_note ? (
-        <div className="mt-md rounded-app border border-success/30 bg-success-bg px-md py-sm text-body text-success">
+function TicketStatusComposerControls({
+  ticket,
+  context,
+  canEditTickets,
+  isUpdating,
+  isReturning,
+  pendingStatus,
+  solutionNote,
+  onStatusChange,
+  onSolutionNoteChange,
+  onCancelSolutionNote,
+  onApplySolutionNote,
+}: {
+  ticket: Ticket;
+  context?: TicketContext;
+  canEditTickets: boolean;
+  isUpdating: boolean;
+  isReturning: boolean;
+  pendingStatus: TicketStatus | null;
+  solutionNote: string;
+  onStatusChange: (ticket: Ticket, status: TicketStatus) => void;
+  onSolutionNoteChange: (value: string) => void;
+  onCancelSolutionNote: () => void;
+  onApplySolutionNote: () => void;
+}) {
+  const canUpdateStatus = Boolean(
+    canEditTickets && context?.actions.can_update_status
+  );
+
+  const selectedStatus = pendingStatus ?? ticket.status;
+  const isResolutionFlow = pendingStatus === "resolved" || pendingStatus === "closed";
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface-2 p-sm">
+      <div className="flex flex-col gap-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-caption font-semibold uppercase tracking-wide text-text-secondary">
+            Ticket durumu
+          </p>
+          <p className="mt-[2px] text-caption text-text-secondary">
+            Durumu buradan güncelle. Çözüldü/Kapandı için not zorunludur.
+          </p>
+        </div>
+
+        <select
+          value={selectedStatus}
+          disabled={!canUpdateStatus || isUpdating || isReturning}
+          onChange={(event) =>
+            onStatusChange(ticket, event.target.value as TicketStatus)
+          }
+          className="h-10 min-w-[180px] rounded-app border border-border bg-surface-0 px-sm text-caption text-text-primary outline-none transition focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Ticket durumunu değiştir"
+        >
+          {statusOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {ticket.resolution_note && !isResolutionFlow ? (
+        <div className="mt-sm rounded-app border border-success/30 bg-success-bg px-md py-sm text-caption text-success">
           <span className="font-semibold">Çözüm notu:</span>{" "}
-          {resolvedTicket.resolution_note}
+          {ticket.resolution_note}
         </div>
       ) : null}
 
-      {pendingStatus ? (
-        <div className="mt-md rounded-2xl border border-accent/30 bg-accent-bg p-md">
-          <p className="text-body font-semibold text-text-primary">
-            {pendingStatus === "resolved" ? "Çözüm notu" : "Kapanış notu"} zorunlu
-          </p>
-          <p className="mt-xs text-caption text-text-secondary">
-            Bu not requester tarafında public mesaj olarak da görünecek.
-          </p>
+      {isResolutionFlow ? (
+        <div className="mt-sm rounded-2xl border border-accent/30 bg-accent-bg p-sm">
+          <div className="flex flex-col gap-xs sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-body font-semibold text-text-primary">
+                {pendingStatus === "resolved" ? "Çözüm notu" : "Kapanış notu"} zorunlu
+              </p>
+              <p className="mt-[2px] text-caption text-text-secondary">
+                Bu not requester tarafında public mesaj olarak da görünür.
+              </p>
+            </div>
+          </div>
 
           <textarea
             value={solutionNote}
             onChange={(event) => onSolutionNoteChange(event.target.value)}
-            className="mt-sm min-h-[88px] w-full rounded-app border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
+            className="mt-sm min-h-[82px] w-full rounded-app border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
             placeholder="Örn: VPN profili yenilendi ve kullanıcı tekrar giriş yapabildi."
           />
 
-          <div className="mt-sm flex justify-end gap-sm">
+          <div className="mt-sm flex flex-col-reverse gap-sm sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onCancelSolutionNote}
-              className="rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+              disabled={isUpdating || isReturning}
+              className="rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               Vazgeç
             </button>
@@ -507,7 +567,7 @@ function WorkspaceChatHeader({
             <button
               type="button"
               onClick={onApplySolutionNote}
-              disabled={!solutionNote.trim() || isUpdating}
+              disabled={!solutionNote.trim() || isUpdating || isReturning}
               className="rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUpdating ? "Kaydediliyor" : "Kaydet ve uygula"}
@@ -742,6 +802,103 @@ function ContextDrawer({
   );
 }
 
+function ReturnToRequesterDialog({
+  open,
+  ticket,
+  comment,
+  isSubmitting,
+  onCommentChange,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  ticket: Ticket | null;
+  comment: string;
+  isSubmitting: boolean;
+  onCommentChange: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!open || !ticket) {
+    return null;
+  }
+
+  const canSubmit = comment.trim().length > 0 && !isSubmitting;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-md backdrop-blur-sm">
+      <form
+        className="w-full max-w-lg rounded-panel border border-border bg-surface-0 p-lg shadow-panel"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit) {
+            onConfirm();
+          }
+        }}
+      >
+        <div className="flex items-start gap-md">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-warning-bg text-warning">
+            <IconAlertTriangle size={22} aria-hidden={true} />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-caption font-semibold uppercase tracking-wide text-warning">
+              Requester’a geri çevir
+            </p>
+            <h2 className="mt-xs text-h3 text-text-primary">
+              #{ticket.id} {ticket.title}
+            </h2>
+            <p className="mt-sm text-body text-text-secondary">
+              Bu ticket IT kuyruğundan çıkar ve requester düzenleyip tekrar gönderebilir.
+              Gerekçe requester tarafında görünür.
+            </p>
+          </div>
+        </div>
+
+        <label
+          htmlFor="return-to-requester-comment"
+          className="mt-lg block text-caption font-semibold text-text-secondary"
+        >
+          Geri çevirme gerekçesi
+        </label>
+
+        <textarea
+          id="return-to-requester-comment"
+          value={comment}
+          onChange={(event) => onCommentChange(event.target.value)}
+          autoFocus
+          className="mt-xs min-h-[120px] w-full rounded-app border border-border bg-surface-1 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
+          placeholder="Örn: Talepte eksik bilgi var. Lütfen cihaz adını ve hata ekran görüntüsünü ekleyerek tekrar gönder."
+        />
+
+        <div className="mt-md rounded-app border border-warning/30 bg-warning-bg px-md py-sm text-caption text-warning">
+          Gerekçe zorunludur. Boş açıklama ile geri çevirme yapılamaz.
+        </div>
+
+        <div className="mt-lg flex flex-col-reverse gap-sm sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Vazgeç
+          </button>
+
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="inline-flex items-center justify-center gap-xs rounded-app bg-warning px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <IconAlertTriangle size={16} aria-hidden={true} />
+            {isSubmitting ? "Geri çevriliyor..." : "Geri Çevir"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export function TicketsQueuePage() {
   const { user } = useAuth();
   const canEditTickets = canManage(user?.role);
@@ -777,11 +934,14 @@ export function TicketsQueuePage() {
   const resolvedTicketsQuery = useTicketsTable(resolvedTicketsState);
   const summaryQuery = useTicketSummary();
   const updateStatusMutation = useUpdateTicketStatus();
+  const returnTicketMutation = useReturnTicketToRequester();
 
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [pendingStatus, setPendingStatus] = useState<TicketStatus | null>(null);
   const [solutionNote, setSolutionNote] = useState("");
   const [contextDrawerOpen, setContextDrawerOpen] = useState(false);
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnComment, setReturnComment] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const selectedTicketId = selectedTicket?.id ?? null;
@@ -817,6 +977,8 @@ export function TicketsQueuePage() {
     setSelectedTicket(ticket);
     setPendingStatus(null);
     setSolutionNote("");
+    setReturnDialogOpen(false);
+    setReturnComment("");
     setError(null);
   }
 
@@ -845,6 +1007,8 @@ export function TicketsQueuePage() {
 
   function handleStatusChange(ticket: Ticket, nextStatus: TicketStatus) {
     if (ticket.status === nextStatus) {
+      setPendingStatus(null);
+      setSolutionNote("");
       return;
     }
 
@@ -865,10 +1029,63 @@ export function TicketsQueuePage() {
     void performStatusUpdate(resolvedTicket, pendingStatus, solutionNote.trim());
   }
 
+  function handleOpenReturnDialog() {
+    if (!resolvedTicket || !context?.actions.can_return_to_requester) {
+      return;
+    }
+
+    setPendingStatus(null);
+    setSolutionNote("");
+    setReturnComment("");
+    setError(null);
+    setReturnDialogOpen(true);
+  }
+
+  function handleCloseReturnDialog() {
+    if (returnTicketMutation.isPending) {
+      return;
+    }
+
+    setReturnDialogOpen(false);
+    setReturnComment("");
+  }
+
+  async function handleConfirmReturnToRequester() {
+    const comment = returnComment.trim();
+
+    if (!resolvedTicket || !comment) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await returnTicketMutation.mutateAsync({
+        ticketId: resolvedTicket.id,
+        payload: {
+          comment,
+        },
+      });
+
+      await refetchAll();
+
+      setReturnDialogOpen(false);
+      setReturnComment("");
+      setSelectedTicket(null);
+      setPendingStatus(null);
+      setSolutionNote("");
+      setContextDrawerOpen(false);
+    } catch (returnError) {
+      setError(getErrorMessage(returnError));
+    }
+  }
+
   function handleCloseSelectedTicket() {
     setSelectedTicket(null);
     setPendingStatus(null);
     setSolutionNote("");
+    setReturnDialogOpen(false);
+    setReturnComment("");
     setContextDrawerOpen(false);
   }
 
@@ -916,7 +1133,8 @@ export function TicketsQueuePage() {
               disabled={
                 ticketsQuery.isFetching ||
                 summaryQuery.isFetching ||
-                updateStatusMutation.isPending
+                updateStatusMutation.isPending ||
+                returnTicketMutation.isPending
               }
               icon={<IconRefresh size={16} aria-hidden={true} />}
             >
@@ -1079,11 +1297,22 @@ export function TicketsQueuePage() {
                     context={context}
                     canEditTickets={canEditTickets}
                     isUpdating={updateStatusMutation.isPending}
-                    pendingStatus={pendingStatus}
-                    solutionNote={solutionNote}
+                    isReturning={returnTicketMutation.isPending}
                     onClose={handleCloseSelectedTicket}
                     onRefresh={refetchAll}
                     onOpenContext={() => setContextDrawerOpen(true)}
+                    onOpenReturnDialog={handleOpenReturnDialog}
+                  />
+                }
+                composerTopSlot={
+                  <TicketStatusComposerControls
+                    ticket={resolvedTicket}
+                    context={context}
+                    canEditTickets={canEditTickets}
+                    isUpdating={updateStatusMutation.isPending}
+                    isReturning={returnTicketMutation.isPending}
+                    pendingStatus={pendingStatus}
+                    solutionNote={solutionNote}
                     onStatusChange={handleStatusChange}
                     onSolutionNoteChange={setSolutionNote}
                     onCancelSolutionNote={() => {
@@ -1112,6 +1341,16 @@ export function TicketsQueuePage() {
           context={context}
           isLoading={ticketContextQuery.isLoading}
           onClose={() => setContextDrawerOpen(false)}
+        />
+
+        <ReturnToRequesterDialog
+          open={returnDialogOpen}
+          ticket={resolvedTicket}
+          comment={returnComment}
+          isSubmitting={returnTicketMutation.isPending}
+          onCommentChange={setReturnComment}
+          onClose={handleCloseReturnDialog}
+          onConfirm={handleConfirmReturnToRequester}
         />
       </PageTransition>
     </AppShell>
