@@ -267,8 +267,7 @@ export function PopupRoot() {
         key="popup-shared-overlay"
         type="button"
         aria-label="Popup kapat"
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-        style={{ zIndex: 1000 }}
+        className="fixed inset-0 bg-slate-950/45 backdrop-blur-[3px]"        style={{ zIndex: 1000 }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -285,7 +284,7 @@ export function PopupRoot() {
             tabIndex={-1}
             role="dialog"
             aria-modal={isTop}
-            className="pointer-events-none fixed inset-0 flex items-center justify-center p-md outline-none"
+            className="pointer-events-none fixed inset-0 flex items-center justify-center overflow-y-auto px-md py-lg outline-none sm:px-lg"
             style={{ zIndex: 1001 + index * 2 }}
             initial={{ opacity: 0, y: 18, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -331,13 +330,13 @@ export function PopupPanel({
   return (
     <section
       className={cn(
-        "mx-auto max-h-[calc(100vh-48px)] overflow-hidden rounded-panel border border-border bg-surface-1 shadow-panel",
+       "mx-auto max-h-[calc(100vh-48px)] overflow-hidden rounded-panel border border-border bg-surface-1 shadow-popover",
         popupPanelSizeClass[size]
       )}
     >
-      <header className="flex items-start justify-between gap-md border-b border-border p-lg">
+      <header className="flex items-start justify-between gap-md border-b border-border-subtle bg-surface-1 px-lg py-md">
         <div className="min-w-0">
-          <h2 className="text-h2 text-text-primary">{title}</h2>
+          <h2 className="text-h2 font-semibold text-text-primary">{title}</h2>
 
           {description ? (
             <p className="mt-xs text-body text-text-secondary">{description}</p>
@@ -348,7 +347,7 @@ export function PopupPanel({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-text-secondary transition hover:border-accent hover:text-accent"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-1 text-text-secondary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
             aria-label="Popup kapat"
           >
             <IconX size={17} aria-hidden={true} />
@@ -356,12 +355,12 @@ export function PopupPanel({
         ) : null}
       </header>
 
-      <div className="max-h-[calc(100vh-210px)] overflow-y-auto p-lg">
+      <div className="max-h-[calc(100vh-210px)] overflow-y-auto bg-surface-1 px-lg py-md">
         {children}
       </div>
 
       {footer ? (
-        <footer className="border-t border-border bg-surface-2 p-md">
+        <footer className="border-t border-border-subtle bg-surface-0 px-lg py-md">
           {footer}
         </footer>
       ) : null}
@@ -406,7 +405,7 @@ export function ConfirmPopup({
             type="button"
             onClick={onCancel}
             disabled={isSubmitting}
-            className="rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary transition hover:border-accent hover:bg-accent-bg hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {cancelLabel}
           </button>
@@ -416,7 +415,7 @@ export function ConfirmPopup({
             onClick={onConfirm}
             disabled={isConfirmDisabled || isSubmitting}
             className={cn(
-              "rounded-app px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+              "rounded-xl px-md py-sm text-body font-semibold text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60",
               confirmVariant === "danger" ? "bg-danger" : "bg-accent"
             )}
           >

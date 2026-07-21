@@ -1,7 +1,6 @@
 import { IconX } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ReactNode } from "react";
-import { GlowButton } from "./GlowButton";
 
 interface SlideOverPanelProps {
   open: boolean;
@@ -24,7 +23,7 @@ export function SlideOverPanel({
         <>
           <motion.button
             type="button"
-            className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm"
+            className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[3px]"
             aria-label="Paneli kapat"
             onClick={onClose}
             initial={{
@@ -39,7 +38,10 @@ export function SlideOverPanel({
           />
 
           <motion.aside
-            className="glass-panel fixed right-0 top-0 z-50 h-full w-full max-w-xl overflow-y-auto border-l border-border p-lg"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="slide-over-title"
+            className="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col border-l border-border bg-surface-1 shadow-popover"
             initial={{
               x: "100%",
               opacity: 0,
@@ -58,27 +60,36 @@ export function SlideOverPanel({
               damping: 28,
             }}
           >
-            <div className="mb-lg flex items-start justify-between gap-md">
-              <div>
-                <h2 className="text-h2 text-text-primary">{title}</h2>
-                {description && (
-                  <p className="mt-sm text-caption text-text-secondary">
+            <header className="flex items-start justify-between gap-md border-b border-border-subtle px-lg py-md">
+              <div className="min-w-0">
+                <h2
+                  id="slide-over-title"
+                  className="text-h2 font-semibold text-text-primary"
+                >
+                  {title}
+                </h2>
+
+                {description ? (
+                  <p className="mt-xs max-w-md text-caption text-text-secondary">
                     {description}
                   </p>
-                )}
+                ) : null}
               </div>
 
-              <GlowButton
-                variant="ghost"
+              <button
+                type="button"
                 onClick={onClose}
                 aria-label="Paneli kapat"
-                icon={<IconX size={16} aria-hidden={true} />}
+                title="Kapat"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-1 text-text-secondary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
               >
-                Kapat
-              </GlowButton>
-            </div>
+                <IconX size={17} aria-hidden={true} />
+              </button>
+            </header>
 
-            {children}
+            <div className="min-h-0 flex-1 overflow-y-auto px-lg py-md">
+              {children}
+            </div>
           </motion.aside>
         </>
       )}

@@ -16,20 +16,20 @@ export function GlassPanel({
   return (
     <motion.div
       className={cn(
-        "glass-panel rounded-panel",
+        "glass-panel rounded-panel border border-border bg-surface-1 shadow-panel",
         hover && "glass-panel-hover",
         className
       )}
       initial={{
         opacity: 0,
-        y: 14,
+        y: 8,
       }}
       animate={{
         opacity: 1,
         y: 0,
       }}
       transition={{
-        duration: 0.42,
+        duration: 0.2,
         ease: "easeOut",
       }}
     >
