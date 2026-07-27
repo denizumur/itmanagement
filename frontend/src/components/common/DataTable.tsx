@@ -67,11 +67,11 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="overflow-hidden rounded-panel border border-border bg-surface-1 shadow-panel">
+    <div className="overflow-hidden rounded-panel border border-border-strong/60 bg-surface-1/80 shadow-panel backdrop-blur-sm">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-body">
-          <thead className="bg-surface-2/80">
-            <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+          <thead className="bg-surface-2/95">
+            <tr className="text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted">
               {columns.map((column) => {
                 const sortKey = column.sortKey ?? column.key;
 
@@ -80,7 +80,7 @@ export function DataTable<T>({
                     key={column.key}
                     scope="col"
                     className={cn(
-                      "border-b border-border-subtle px-md py-sm",
+                      "border-b border-border px-md py-[10px]",
                       column.className
                     )}
                   >
@@ -88,7 +88,7 @@ export function DataTable<T>({
                       <button
                         type="button"
                         onClick={() => onSortChange(sortKey)}
-                        className="inline-flex items-center gap-xs rounded-md text-left transition hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+                        className="inline-flex items-center gap-xs rounded-md text-left transition hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
                       >
                         <span>{column.label}</span>
                         <span className="text-text-muted">
@@ -103,18 +103,18 @@ export function DataTable<T>({
               })}
 
               {hasDetailAction ? (
-                <th className="sticky right-0 z-10 w-[72px] border-b border-border-subtle bg-surface-2/95 px-md py-sm text-right">
+                <th className="sticky right-0 z-10 w-[64px] border-b border-border bg-surface-2/95 px-sm py-[10px] text-right shadow-[-16px_0_22px_-22px_rgba(15,23,42,0.42)]">
                   <span className="sr-only">{viewDetailsLabel}</span>
                 </th>
               ) : null}
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-border-subtle">
+          <tbody>
             {isLoading ? (
               <tr>
                 <td colSpan={colSpan} className="px-md py-xl">
-                  <div className="mx-auto flex max-w-sm flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-0 px-lg py-xl text-center">
+                  <div className="mx-auto flex max-w-sm flex-col items-center justify-center rounded-2xl border border-dashed border-accent/30 bg-accent-bg/40 px-lg py-xl text-center">
                     <IconLoader2
                       size={22}
                       className="animate-spin text-accent"
@@ -132,7 +132,7 @@ export function DataTable<T>({
             ) : data.length === 0 ? (
               <tr>
                 <td colSpan={colSpan} className="px-md py-xl">
-                  <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-border bg-surface-0 px-lg py-xl text-center">
+                  <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-border-strong bg-surface-0/80 px-lg py-xl text-center">
                     <p className="text-body font-semibold text-text-primary">
                       Kayıt bulunamadı
                     </p>
@@ -147,7 +147,7 @@ export function DataTable<T>({
                 <tr
                   key={getRowKey(item)}
                   className={cn(
-                    "group bg-surface-1 transition hover:bg-surface-2/80",
+                    "group bg-surface-1/70 transition hover:bg-surface-2/90 motion-reduce:transition-none",
                     getRowClassName?.(item)
                   )}
                 >
@@ -155,7 +155,7 @@ export function DataTable<T>({
                     <td
                       key={column.key}
                       className={cn(
-                        "px-md py-md align-top text-text-secondary",
+                        "border-b border-border-subtle/80 px-md py-sm align-middle text-text-secondary",
                         column.className
                       )}
                     >
@@ -164,7 +164,7 @@ export function DataTable<T>({
                   ))}
 
                   {hasDetailAction ? (
-                    <td className="sticky right-0 z-10 w-[72px] bg-inherit px-md py-md text-right align-top shadow-[-10px_0_18px_-18px_rgba(15,23,42,0.38)]">
+                    <td className="sticky right-0 z-10 w-[64px] border-b border-border-subtle/80 bg-inherit px-sm py-sm text-right align-middle shadow-[-16px_0_22px_-22px_rgba(15,23,42,0.42)]">
                       <DetailIconButton
                         label={viewDetailsLabel}
                         onClick={() => onViewDetails?.(item)}

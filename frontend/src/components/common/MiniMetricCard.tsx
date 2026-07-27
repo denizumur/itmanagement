@@ -13,15 +13,15 @@ interface MiniMetricCardProps {
 
 const toneClasses: Record<NonNullable<MiniMetricCardProps["tone"]>, string> = {
   default:
-    "border-border bg-surface-1 text-text-primary [--metric-icon-bg:var(--surface-2)] [--metric-icon-color:var(--text-secondary)]",
+    "border-border bg-surface-1/80 text-text-primary [--metric-icon-bg:var(--surface-2)] [--metric-icon-color:var(--text-secondary)]",
   success:
-    "border-success/25 bg-surface-1 text-success [--metric-icon-bg:var(--bg-success)] [--metric-icon-color:var(--color-success)]",
+    "metric-card-success border-success/25 text-success [--metric-icon-bg:var(--bg-success)] [--metric-icon-color:var(--color-success)]",
   warning:
-    "border-warning/25 bg-surface-1 text-warning [--metric-icon-bg:var(--bg-warning)] [--metric-icon-color:var(--color-warning)]",
+    "metric-card-warning border-warning/25 text-warning [--metric-icon-bg:var(--bg-warning)] [--metric-icon-color:var(--color-warning)]",
   danger:
-    "border-danger/25 bg-surface-1 text-danger [--metric-icon-bg:var(--bg-danger)] [--metric-icon-color:var(--color-danger)]",
+    "metric-card-danger border-danger/25 text-danger [--metric-icon-bg:var(--bg-danger)] [--metric-icon-color:var(--color-danger)]",
   accent:
-    "border-accent/25 bg-surface-1 text-accent [--metric-icon-bg:var(--bg-accent)] [--metric-icon-color:var(--color-accent)]",
+    "metric-card-accent border-accent/25 text-accent [--metric-icon-bg:var(--bg-accent)] [--metric-icon-color:var(--color-accent)]",
 };
 
 export function MiniMetricCard({
@@ -36,16 +36,16 @@ export function MiniMetricCard({
   const content = (
     <>
       {icon ? (
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--metric-icon-bg)] text-[var(--metric-icon-color)]">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--metric-icon-bg)] text-[var(--metric-icon-color)]">
           {icon}
         </span>
       ) : null}
 
       <div className="min-w-0 text-left">
-        <p className="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted">
           {label}
         </p>
-        <p className="mt-[2px] text-xl font-semibold leading-tight text-text-primary">
+        <p className="text-base font-semibold leading-tight text-text-primary">
           {value}
         </p>
       </div>
@@ -53,7 +53,7 @@ export function MiniMetricCard({
   );
 
   const classNames = cn(
-    "inline-flex min-h-[64px] min-w-[148px] items-center gap-sm rounded-panel border px-md py-sm shadow-panel",
+    "inline-flex min-h-[48px] min-w-[118px] items-center gap-sm rounded-xl border px-sm py-xs shadow-panel backdrop-blur-sm",
     onClick &&
       "cursor-pointer transition duration-150 hover:-translate-y-0.5 hover:border-accent hover:bg-accent-bg hover:shadow-card focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
     toneClasses[tone],
