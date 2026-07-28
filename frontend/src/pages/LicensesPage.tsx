@@ -1,15 +1,21 @@
 import {
   IconCalendar,
+  IconCalendarDue,
   IconEdit,
-  IconEye,
+  IconHistory,
   IconKey,
+  IconNotes,
   IconPlus,
   IconRefresh,
   IconSearch,
+  IconShieldCheck,
+  IconSparkles,
   IconTrash,
   IconUsers,
+  IconX,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
@@ -34,6 +40,7 @@ import {
   useUpdateLicenseSubscription,
 } from "../hooks/useLicensing";
 import { useTableQueryState } from "../hooks/useTableQueryState";
+import { cn } from "../lib/cn";
 import { canManage } from "../lib/rbac";
 import type { Asset } from "../types/inventory";
 import type {
@@ -210,23 +217,131 @@ function DetailRow({
   value,
 }: {
   label: string;
-  value?: string | number | null;
+  value?: ReactNode;
 }) {
   const displayValue =
     value === undefined || value === null || value === "" ? "-" : value;
 
   return (
-    <div className="rounded-2xl border border-border-subtle bg-surface-0 p-md">
+    <div className="rounded-2xl border border-border-subtle bg-surface-0/90 p-md shadow-sm transition hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-panel focus-within:ring-2 focus-within:ring-accent/20 motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <p className="text-caption text-text-secondary">{label}</p>
-      <p className="mt-xs text-body text-text-primary">{displayValue}</p>
+      <div className="mt-xs text-body font-medium text-text-primary">
+        {displayValue}
+      </div>
     </div>
   );
 }
 
-function DateCell({ value }: { value?: string | null }) {
+function DetailSection({
+  title,
+  icon,
+  tone = "accent",
+  children,
+}: {
+  title: string;
+  icon: ReactNode;
+  tone?: "accent" | "success" | "warning" | "danger";
+  children: ReactNode;
+}) {
+  const toneClasses = {
+    accent: "border-accent/20 bg-accent-bg text-accent",
+    success: "border-success/20 bg-success-bg text-success",
+    warning: "border-warning/25 bg-warning-bg text-warning",
+    danger: "border-danger/25 bg-danger-bg text-danger",
+  };
+
   return (
-    <span className="inline-flex min-w-[108px] items-center justify-center rounded-xl border border-border-subtle bg-surface-1 px-sm py-xs text-caption text-text-secondary shadow-sm">
-      {formatDate(value)}
+    <section className="rounded-panel border border-border-subtle bg-surface-1/80 p-md shadow-panel">
+      <div className="mb-md flex items-center gap-sm">
+        <span
+          className={cn(
+            "inline-flex size-9 items-center justify-center rounded-2xl border shadow-sm",
+            toneClasses[tone]
+          )}
+        >
+          {icon}
+        </span>
+        <h3 className="text-body font-semibold text-text-primary">{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function LicenseAvatar({ license }: { license: LicenseSubscription }) {
+  const initial = license.name.slice(0, 1).toLocaleUpperCase("tr-TR") || "L";
+  const risky = license.is_expired || license.is_expiring_soon_30_days;
+
+  return (
+    <span
+      className={cn(
+        "relative inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border text-body font-semibold shadow-sm",
+        risky
+          ? "border-warning/25 bg-warning-bg text-warning"
+          : "border-accent/25 bg-accent-bg text-accent"
+      )}
+    >
+      <span aria-hidden={true}>{initial}</span>
+      <span className="absolute -right-1 -top-1 rounded-full border border-surface-1 bg-surface-1 text-text-secondary">
+        <IconKey size={15} aria-hidden={true} />
+      </span>
+    </span>
+  );
+}
+
+function DateChip({
+  label,
+  value,
+  tone = "accent",
+}: {
+  label: string;
+  value?: string | null;
+  tone?: "accent" | "success" | "warning" | "danger";
+}) {
+  const toneClasses = {
+    accent: "border-accent/25 bg-accent-bg/70 text-accent",
+    success: "border-success/25 bg-success-bg/70 text-success",
+    warning: "border-warning/25 bg-warning-bg/70 text-warning",
+    danger: "border-danger/25 bg-danger-bg/70 text-danger",
+  };
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-xs rounded-xl border px-sm py-xs text-caption font-medium shadow-sm transition hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        toneClasses[tone]
+      )}
+    >
+      <IconCalendarDue size={14} aria-hidden={true} />
+      <span>{label}</span>
+      <span className="text-text-primary">{formatDate(value)}</span>
+    </span>
+  );
+}
+
+function FilterChip({
+  label,
+  value,
+  onRemove,
+}: {
+  label: string;
+  value: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-xs rounded-full border border-accent/25 bg-accent-bg px-sm py-xs text-caption font-semibold text-accent shadow-sm">
+      <span>
+        {label}: {value}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="rounded-full p-0.5 transition hover:bg-accent/10 focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none"
+        aria-label={`${label} filtresini kaldır`}
+        title={`${label} filtresini kaldır`}
+      >
+        <IconX size={13} aria-hidden={true} />
+      </button>
     </span>
   );
 }
@@ -254,14 +369,12 @@ function getSelectedStatusFilter(filters: Record<string, string | string[]>) {
 function buildLicenseColumns({
   userCanManage,
   isSubmitting,
-  onSelectLicense,
   onEditLicense,
   onDeleteLicense,
   onRestoreLicense,
 }: {
   userCanManage: boolean;
   isSubmitting: boolean;
-  onSelectLicense: (license: LicenseSubscription) => void;
   onEditLicense: (license: LicenseSubscription) => void;
   onDeleteLicense: (license: LicenseSubscription) => void;
   onRestoreLicense: (license: LicenseSubscription) => void;
@@ -273,41 +386,77 @@ function buildLicenseColumns({
       sortable: true,
       sortKey: "name",
       render: (license) => (
-        <div className={license.is_deleted ? "opacity-70" : undefined}>
-          <p className="text-text-primary">{license.name}</p>
-          <p className="text-caption text-text-secondary">
-            {license.tracking_code ?? "Takip kodu yok"}
-          </p>
+        <div
+          className={cn(
+            "flex min-w-[260px] items-center gap-sm",
+            license.is_deleted ? "opacity-70" : ""
+          )}
+        >
+          <LicenseAvatar license={license} />
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-text-primary">
+              {license.name}
+            </p>
+            <div className="mt-xs flex max-w-full flex-wrap gap-xs">
+              <span className="inline-flex max-w-full rounded-full border border-border-subtle bg-surface-0 px-sm py-[2px] text-[11px] font-medium text-text-secondary shadow-sm">
+                <span className="truncate">
+                  {license.tracking_code ?? "Takip kodu yok"}
+                </span>
+              </span>
+              {license.license_key_masked ? (
+                <span className="inline-flex max-w-full rounded-full border border-warning/20 bg-warning-bg px-sm py-[2px] text-[11px] font-medium text-warning shadow-sm">
+                  <span className="truncate">{license.license_key_masked}</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
       ),
     },
     {
       key: "type",
-      label: "Tip",
+      label: "Tip / Plan",
       sortable: true,
       sortKey: "type",
-      render: (license) =>
-        license.type_label ??
-        (license.type === "license" ? "Lisans" : "Abonelik"),
+      render: (license) => (
+        <div className="flex flex-col gap-xs">
+          <StatusBadge variant={license.type === "license" ? "accent" : "warning"}>
+            {license.type_label ??
+              (license.type === "license" ? "Lisans" : "Abonelik")}
+          </StatusBadge>
+          <span className="text-caption text-text-secondary">
+            {license.billing_cycle_label ?? license.billing_cycle}
+          </span>
+        </div>
+      ),
     },
     {
       key: "vendor",
-      label: "Tedarikçi",
+      label: "Sağlayıcı",
       sortable: true,
       sortKey: "vendor",
-      render: (license) => license.vendor || "-",
-    },
-    {
-      key: "license_key_masked",
-      label: "Anahtar",
-      render: (license) => license.license_key_masked || "-",
+      render: (license) => (
+        <div className="min-w-[160px] rounded-2xl border border-border-subtle bg-surface-0/80 px-sm py-xs shadow-sm">
+          <p className="text-body font-medium text-text-primary">
+            {license.vendor || "-"}
+          </p>
+          <p className="text-caption text-text-secondary">
+            {license.auto_renew ? "Otomatik yenileme" : "Manuel takip"}
+          </p>
+        </div>
+      ),
     },
     {
       key: "seat_count",
       label: "Koltuk",
       sortable: true,
       sortKey: "seat_count",
-      render: (license) => license.seat_count,
+      render: (license) => (
+        <span className="inline-flex items-center gap-xs rounded-xl border border-success/25 bg-success-bg/70 px-sm py-xs text-caption font-semibold text-success shadow-sm">
+          <IconUsers size={14} aria-hidden={true} />
+          {license.seat_count}
+        </span>
+      ),
     },
     {
       key: "assigned_asset",
@@ -316,24 +465,64 @@ function buildLicenseColumns({
       sortKey: "assigned_asset__name",
       render: (license) =>
         license.assigned_asset_name ? (
-          <div>
-            <p className="text-body text-text-primary">
-              {license.assigned_asset_name}
-            </p>
-            <p className="text-caption text-text-secondary">
-              {license.assigned_asset_inventory_code ?? "-"}
-            </p>
+          <div className="flex min-w-[190px] items-center gap-sm">
+            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-2xl border border-accent/25 bg-accent-bg text-accent shadow-sm">
+              <IconShieldCheck size={15} aria-hidden={true} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate font-medium text-text-primary">
+                {license.assigned_asset_name}
+              </p>
+              <p className="truncate text-caption text-text-secondary">
+                {license.assigned_asset_inventory_code ?? "-"}
+              </p>
+            </div>
           </div>
         ) : (
-          "-"
+          <span className="text-caption text-text-secondary">Atanmamış</span>
         ),
     },
     {
-      key: "end_date",
-      label: "Bitiş",
+      key: "timeline",
+      label: "Tarihler",
       sortable: true,
       sortKey: "end_date",
-      render: (license) => <DateCell value={license.end_date} />,
+      render: (license) => (
+        <div className="flex min-w-[200px] flex-col gap-xs">
+          <DateChip label="Başlangıç" value={license.start_date} />
+          <DateChip
+            label="Bitiş"
+            value={license.end_date}
+            tone={
+              license.is_expired
+                ? "danger"
+                : license.is_expiring_soon_30_days
+                  ? "warning"
+                  : "success"
+            }
+          />
+        </div>
+      ),
+    },
+    {
+      key: "cost",
+      label: "Yenileme",
+      sortable: true,
+      sortKey: "renewal_cost",
+      className: "text-right",
+      render: (license) => (
+        <div className="flex flex-col items-end gap-xs">
+          <span className="font-semibold text-text-primary">
+            {formatCurrency(license.renewal_cost)}
+          </span>
+          <span className="text-caption text-text-secondary">
+            {license.days_until_end === null ||
+            license.days_until_end === undefined
+              ? "Gün bilgisi yok"
+              : `${license.days_until_end} gün`}
+          </span>
+        </div>
+      ),
     },
     {
       key: "status",
@@ -346,46 +535,44 @@ function buildLicenseColumns({
     },
     {
       key: "actions",
-      label: "İşlem",
+      label: "Aksiyon",
       className: "text-right",
       render: (license) => (
-        <div className="flex justify-end gap-sm">
-          <GlowButton
-            variant="ghost"
-            onClick={() => onSelectLicense(license)}
-            icon={<IconEye size={16} aria-hidden={true} />}
-          >
-            Detay
-          </GlowButton>
-
+        <div className="flex justify-end gap-xs">
           {userCanManage ? (
             license.is_deleted ? (
-              <GlowButton
-                variant="ghost"
+              <button
+                type="button"
                 onClick={() => onRestoreLicense(license)}
                 disabled={isSubmitting}
-                icon={<IconRefresh size={16} aria-hidden={true} />}
+                className="inline-flex size-9 items-center justify-center rounded-xl border border-success/30 bg-success-bg text-success shadow-sm transition hover:border-success focus:outline-none focus:ring-2 focus:ring-success/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+                aria-label={`${license.name} kaydını geri yükle`}
+                title="Geri yükle"
               >
-                Geri Yükle
-              </GlowButton>
+                <IconRefresh size={16} aria-hidden={true} />
+              </button>
             ) : (
               <>
-                <GlowButton
-                  variant="ghost"
+                <button
+                  type="button"
                   onClick={() => onEditLicense(license)}
-                  icon={<IconEdit size={16} aria-hidden={true} />}
+                  className="inline-flex size-9 items-center justify-center rounded-xl border border-accent/30 bg-accent-bg text-accent shadow-sm transition hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
+                  aria-label={`${license.name} kaydını düzenle`}
+                  title="Düzenle"
                 >
-                  Düzenle
-                </GlowButton>
+                  <IconEdit size={16} aria-hidden={true} />
+                </button>
 
-                <GlowButton
-                  variant="ghost"
+                <button
+                  type="button"
                   onClick={() => onDeleteLicense(license)}
                   disabled={isSubmitting}
-                  icon={<IconTrash size={16} aria-hidden={true} />}
+                  className="inline-flex size-9 items-center justify-center rounded-xl border border-danger/30 bg-danger-bg text-danger shadow-sm transition hover:border-danger focus:outline-none focus:ring-2 focus:ring-danger/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+                  aria-label={`${license.name} kaydını sil`}
+                  title="Sil"
                 >
-                  Sil
-                </GlowButton>
+                  <IconTrash size={16} aria-hidden={true} />
+                </button>
               </>
             )
           ) : null}
@@ -394,7 +581,6 @@ function buildLicenseColumns({
     },
   ];
 }
-
 function LicenseForm({
   mode,
   license,
@@ -800,6 +986,28 @@ export function LicensesPage() {
   const hasError =
     licensesQuery.isError || summaryQuery.isError || assetsQuery.isError;
 
+  const selectedTypeLabel =
+    selectedType === "subscription"
+      ? "Abonelik"
+      : selectedType === "license"
+        ? "Lisans"
+        : "";
+
+  const selectedStatusLabel =
+    selectedStatusFilter === "active"
+      ? "Aktif"
+      : selectedStatusFilter === "inactive"
+        ? "Pasif"
+        : selectedStatusFilter === "upcoming"
+          ? "30 gün içinde yenilenecek"
+          : selectedStatusFilter === "expired"
+            ? "Süresi dolan"
+            : "";
+
+  const hasActiveFilters = Boolean(
+    state.search || selectedType || selectedStatusFilter || showDeleted
+  );
+
   function refetchAll() {
     licensesQuery.refetch();
     summaryQuery.refetch();
@@ -952,7 +1160,6 @@ export function LicensesPage() {
       buildLicenseColumns({
         userCanManage,
         isSubmitting,
-        onSelectLicense: setSelectedLicense,
         onEditLicense: openEditForm,
         onDeleteLicense: handleDelete,
         onRestoreLicense: handleRestore,
@@ -1017,62 +1224,74 @@ export function LicensesPage() {
           }
         />
 
-        <section className="mt-lg flex flex-wrap gap-sm">
-          <MiniMetricCard
-            label="Listelenen lisans"
-            value={licenseTableData?.count ?? licenses.length}
-            icon={<IconKey size={15} aria-hidden={true} />}
-            tone="accent"
-          />
+        <section className="mt-lg overflow-hidden rounded-panel border border-border-strong/60 bg-surface-1/75 shadow-panel backdrop-blur-sm">
+          <div className="relative grid gap-md border-b border-border-subtle/80 p-md lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,var(--surface-1),transparent),radial-gradient(circle_at_0%_0%,var(--bg-accent),transparent_32%),radial-gradient(circle_at_88%_0%,var(--bg-warning),transparent_28%)] opacity-80" />
 
-          <MiniMetricCard
-            label="Aktif lisans sayısı"
-            value={summary?.active ?? 0}
-            icon={<IconKey size={15} aria-hidden={true} />}
-            tone="success"
-          />
+            <div className="relative min-w-0">
+              <div className="flex flex-wrap items-center gap-sm">
+                <span className="inline-flex items-center gap-xs rounded-full border border-accent/25 bg-accent-bg/70 px-sm py-xs text-caption font-semibold text-accent shadow-sm">
+                  <IconSparkles size={14} aria-hidden={true} />
+                  License Intelligence Console
+                </span>
+                <span className="inline-flex items-center gap-xs rounded-full border border-border bg-surface-0/80 px-sm py-xs text-caption text-text-secondary shadow-sm">
+                  Lisans Operasyon Merkezi
+                </span>
+              </div>
 
-          <MiniMetricCard
-            label="Toplam kullanıcı sayısı"
-            value={summary?.total_seats ?? 0}
-            icon={<IconUsers size={15} aria-hidden={true} />}
-            tone="success"
-          />
+              <p className="mt-sm max-w-3xl text-body leading-7 text-text-secondary">
+                Lisans, abonelik ve yenileme risklerini tek ekrandan takip et;
+                sağlayıcı, koltuk, bağlı varlık ve maliyet sinyallerini hızlı
+                tara.
+              </p>
+            </div>
 
-          <MiniMetricCard
-            label="30 gün içinde bitecek"
-            value={summary?.upcoming_30_days ?? 0}
-            icon={<IconCalendar size={15} aria-hidden={true} />}
-            tone="warning"
-          />
+            <div className="relative grid grid-cols-2 gap-xs sm:grid-cols-4 lg:min-w-[520px]">
+              <MiniMetricCard
+                label="Toplam"
+                value={licenseTableData?.count ?? licenses.length}
+                icon={<IconKey size={14} aria-hidden={true} />}
+                tone="accent"
+              />
+              <MiniMetricCard
+                label="Aktif"
+                value={summary?.active ?? 0}
+                icon={<IconShieldCheck size={14} aria-hidden={true} />}
+                tone="success"
+              />
+              <MiniMetricCard
+                label="Yaklaşan"
+                value={summary?.upcoming_30_days ?? 0}
+                icon={<IconCalendarDue size={14} aria-hidden={true} />}
+                tone="warning"
+              />
+              <MiniMetricCard
+                label="Riskli"
+                value={summary?.expired ?? 0}
+                icon={<IconKey size={14} aria-hidden={true} />}
+                tone="danger"
+              />
+            </div>
+          </div>
 
-          <MiniMetricCard
-            label="Süresi dolan"
-            value={summary?.expired ?? 0}
-            icon={<IconKey size={15} aria-hidden={true} />}
-            tone="danger"
-          />
-        </section>
-
-        <section className="mt-lg rounded-panel border border-border-subtle bg-surface-1 p-md shadow-panel">
-          <div className="grid gap-md xl:grid-cols-[1fr_220px_220px_220px_auto]">
-            <label className="flex items-center gap-sm rounded-2xl border border-border bg-surface-0 px-md py-sm shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+          <div className="grid gap-sm p-md xl:grid-cols-[1fr_180px_220px_190px_auto]">
+            <label className="flex min-h-10 items-center gap-sm rounded-xl border border-accent/25 bg-surface-0/85 px-md py-xs shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 motion-reduce:transition-none">
               <IconSearch
                 size={18}
-                className="text-text-secondary"
+                className="text-accent"
                 aria-hidden={true}
               />
 
               <input
                 className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-muted focus:outline-none"
-                placeholder="Lisans adı, takip kodu, tedarikçi ara..."
+                placeholder="Lisans adı, takip kodu, sağlayıcı ara..."
                 value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
               />
             </label>
 
             <select
-              className="rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary shadow-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+              className="min-h-10 rounded-xl border border-border bg-surface-0/85 px-sm py-xs text-body text-text-primary shadow-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 motion-reduce:transition-none"
               value={selectedType}
               onChange={(event) => setFilter("type", event.target.value || null)}
               aria-label="Tip filtresi"
@@ -1083,7 +1302,7 @@ export function LicensesPage() {
             </select>
 
             <select
-              className="rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary shadow-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-10 rounded-xl border border-border bg-surface-0/85 px-sm py-xs text-body text-text-primary shadow-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
               value={selectedStatusFilter}
               onChange={(event) => applyStatusFilter(event.target.value)}
               aria-label="Durum filtresi"
@@ -1096,7 +1315,7 @@ export function LicensesPage() {
               <option value="expired">Süresi dolan</option>
             </select>
 
-            <label className="flex items-center gap-sm rounded-2xl border border-border bg-surface-0 px-md py-sm text-body text-text-primary shadow-sm">
+            <label className="flex min-h-10 items-center gap-sm rounded-xl border border-border bg-surface-0/85 px-sm py-xs text-body text-text-primary shadow-sm transition focus-within:ring-2 focus-within:ring-accent/20 motion-reduce:transition-none">
               <input
                 type="checkbox"
                 checked={showDeleted}
@@ -1108,13 +1327,48 @@ export function LicensesPage() {
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center justify-center rounded-2xl border border-border bg-surface-1 px-md py-sm text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-border bg-surface-0/85 px-md py-xs text-body font-medium text-text-primary shadow-sm transition hover:border-accent hover:bg-accent-bg hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
             >
               Temizle
             </button>
           </div>
-        </section>
 
+          {hasActiveFilters ? (
+            <div className="flex flex-wrap items-center gap-sm border-t border-border-subtle/80 px-md py-sm">
+              {state.search ? (
+                <FilterChip
+                  label="Arama"
+                  value={state.search}
+                  onRemove={() => setSearch("")}
+                />
+              ) : null}
+
+              {selectedType ? (
+                <FilterChip
+                  label="Tip"
+                  value={selectedTypeLabel}
+                  onRemove={() => setFilter("type", null)}
+                />
+              ) : null}
+
+              {selectedStatusFilter ? (
+                <FilterChip
+                  label="Durum"
+                  value={selectedStatusLabel}
+                  onRemove={() => applyStatusFilter("")}
+                />
+              ) : null}
+
+              {showDeleted ? (
+                <FilterChip
+                  label="Arşiv"
+                  value="Silinenler"
+                  onRemove={() => applyDeletedFilter(false)}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </section>
         <section className="mt-lg flex flex-col gap-md">
           <DataTable
             columns={licenseColumns}
@@ -1128,6 +1382,8 @@ export function LicensesPage() {
                 ? "Silinen lisans veya abonelik bulunamadı."
                 : "Filtrelere uygun lisans veya abonelik bulunamadı."
             }
+            onViewDetails={setSelectedLicense}
+            viewDetailsLabel="Lisans detayını gör"
           />
 
           <TablePagination
@@ -1149,131 +1405,222 @@ export function LicensesPage() {
         >
           {selectedLicense && (
             <div className="space-y-md">
-              <div className="flex items-center justify-between gap-md rounded-panel border border-border-subtle bg-surface-0 p-md shadow-panel">
-                <div>
-                  <p className="text-caption text-text-secondary">Durum</p>
-                  <StatusBadge
-                    variant={getLicenseStatusVariant(selectedLicense)}
-                  >
-                    {getLicenseStatusLabel(selectedLicense)}
-                  </StatusBadge>
+              <section className="overflow-hidden rounded-panel border border-accent/20 bg-surface-0 shadow-panel">
+                <div className="h-1 bg-accent" />
+                <div className="flex flex-wrap items-center justify-between gap-md">
+                  <div className="flex min-w-0 items-center gap-md p-md">
+                    <LicenseAvatar license={selectedLicense} />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-sm">
+                        <h3 className="truncate text-lg font-semibold text-text-primary">
+                          {selectedLicense.name}
+                        </h3>
+                        <StatusBadge
+                          variant={getLicenseStatusVariant(selectedLicense)}
+                        >
+                          {getLicenseStatusLabel(selectedLicense)}
+                        </StatusBadge>
+                      </div>
+                      <div className="mt-xs flex flex-wrap gap-xs">
+                        <span className="rounded-full border border-border-subtle bg-surface-1 px-sm py-[2px] text-caption font-medium text-text-secondary">
+                          {selectedLicense.tracking_code ?? "Takip kodu yok"}
+                        </span>
+                        <span className="rounded-full border border-accent/20 bg-accent-bg px-sm py-[2px] text-caption font-medium text-accent">
+                          {selectedLicense.vendor || "Sağlayıcı yok"}
+                        </span>
+                        <span className="rounded-full border border-border-subtle bg-surface-1 px-sm py-[2px] text-caption text-text-secondary">
+                          Bitiş: {formatDate(selectedLicense.end_date)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-sm p-md">
+                    {userCanManage &&
+                      (selectedLicense.is_deleted ? (
+                        <GlowButton
+                          variant="ghost"
+                          icon={<IconRefresh size={16} aria-hidden={true} />}
+                          onClick={() => handleRestore(selectedLicense)}
+                          disabled={isSubmitting}
+                        >
+                          Geri Yükle
+                        </GlowButton>
+                      ) : (
+                        <GlowButton
+                          variant="ghost"
+                          icon={<IconEdit size={16} aria-hidden={true} />}
+                          onClick={() => openEditForm(selectedLicense)}
+                        >
+                          Düzenle
+                        </GlowButton>
+                      ))}
+
+                    <AuditHistoryLink
+                      entityType="licensing.LicenseSubscription"
+                      entityId={selectedLicense.id}
+                    />
+                  </div>
                 </div>
+              </section>
 
-                {userCanManage &&
-                  (selectedLicense.is_deleted ? (
-                    <GlowButton
-                      variant="ghost"
-                      icon={<IconRefresh size={16} aria-hidden={true} />}
-                      onClick={() => handleRestore(selectedLicense)}
-                      disabled={isSubmitting}
-                    >
-                      Geri Yükle
-                    </GlowButton>
-                  ) : (
-                    <GlowButton
-                      variant="ghost"
-                      icon={<IconEdit size={16} aria-hidden={true} />}
-                      onClick={() => openEditForm(selectedLicense)}
-                    >
-                      Düzenle
-                    </GlowButton>
-                  ))}
+              <DetailSection
+                title="Lisans Bilgisi"
+                icon={<IconKey size={17} aria-hidden={true} />}
+                tone={selectedLicense.is_expired ? "danger" : "accent"}
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow label="Takip kodu" value={selectedLicense.tracking_code} />
+                  <DetailRow
+                    label="Tip"
+                    value={
+                      selectedLicense.type_label ??
+                      (selectedLicense.type === "license" ? "Lisans" : "Abonelik")
+                    }
+                  />
+                  <DetailRow
+                    label="Maskeli lisans anahtarı"
+                    value={selectedLicense.license_key_masked}
+                  />
+                  <DetailRow label="Koltuk sayısı" value={selectedLicense.seat_count} />
+                </div>
+              </DetailSection>
 
-                <AuditHistoryLink
-                  entityType="licensing.LicenseSubscription"
-                  entityId={selectedLicense.id}
-                />
-              </div>
+              <DetailSection
+                title="Sağlayıcı / Plan"
+                icon={<IconShieldCheck size={17} aria-hidden={true} />}
+                tone="success"
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow label="Sağlayıcı" value={selectedLicense.vendor} />
+                  <DetailRow
+                    label="Faturalama"
+                    value={
+                      selectedLicense.billing_cycle_label ??
+                      selectedLicense.billing_cycle
+                    }
+                  />
+                  <DetailRow
+                    label="Otomatik yenileme"
+                    value={selectedLicense.auto_renew ? "Evet" : "Hayır"}
+                  />
+                  <DetailRow
+                    label="Aktiflik"
+                    value={selectedLicense.is_active ? "Aktif" : "Pasif"}
+                  />
+                </div>
+              </DetailSection>
 
-              <div className="grid gap-md sm:grid-cols-2">
-                <DetailRow
-                  label="Takip kodu"
-                  value={selectedLicense.tracking_code}
-                />
+              <DetailSection
+                title="Atama / Varlık"
+                icon={<IconUsers size={17} aria-hidden={true} />}
+                tone="warning"
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Bağlı varlık"
+                    value={
+                      selectedLicense.assigned_asset_name
+                        ? selectedLicense.assigned_asset_name
+                        : null
+                    }
+                  />
+                  <DetailRow
+                    label="Varlık kodu"
+                    value={selectedLicense.assigned_asset_inventory_code}
+                  />
+                </div>
+              </DetailSection>
 
-                <DetailRow
-                  label="Tip"
-                  value={
-                    selectedLicense.type_label ??
-                    (selectedLicense.type === "license"
-                      ? "Lisans"
-                      : "Abonelik")
-                  }
-                />
+              <DetailSection
+                title="Tarihler"
+                icon={<IconCalendarDue size={17} aria-hidden={true} />}
+                tone={
+                  selectedLicense.is_expired
+                    ? "danger"
+                    : selectedLicense.is_expiring_soon_30_days
+                      ? "warning"
+                      : "success"
+                }
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Başlangıç tarihi"
+                    value={formatDate(selectedLicense.start_date)}
+                  />
+                  <DetailRow
+                    label="Bitiş / yenileme tarihi"
+                    value={formatDate(selectedLicense.end_date)}
+                  />
+                  <DetailRow
+                    label="Kalan gün"
+                    value={
+                      selectedLicense.days_until_end === null ||
+                      selectedLicense.days_until_end === undefined
+                        ? "-"
+                        : selectedLicense.days_until_end
+                    }
+                  />
+                  <DetailRow
+                    label="Silinme tarihi"
+                    value={
+                      selectedLicense.is_deleted
+                        ? formatDate(selectedLicense.deleted_at)
+                        : null
+                    }
+                  />
+                </div>
+              </DetailSection>
 
-                <DetailRow label="Tedarikçi" value={selectedLicense.vendor} />
+              <DetailSection
+                title="Maliyet / Yenileme"
+                icon={<IconCalendar size={17} aria-hidden={true} />}
+                tone="accent"
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Yenileme maliyeti"
+                    value={formatCurrency(selectedLicense.renewal_cost)}
+                  />
+                  <DetailRow
+                    label="Yenileme riski"
+                    value={
+                      selectedLicense.is_expired
+                        ? "Süresi doldu"
+                        : selectedLicense.is_expiring_soon_30_days
+                          ? "30 gün içinde yenilenecek"
+                          : "Risk görünmüyor"
+                    }
+                  />
+                </div>
+              </DetailSection>
 
-                <DetailRow
-                  label="Maskeli lisans anahtarı"
-                  value={selectedLicense.license_key_masked}
-                />
+              <DetailSection
+                title="Notlar"
+                icon={<IconNotes size={17} aria-hidden={true} />}
+                tone="accent"
+              >
+                <DetailRow label="Notlar" value={selectedLicense.notes} />
+              </DetailSection>
 
-                <DetailRow
-                  label="Koltuk sayısı"
-                  value={selectedLicense.seat_count}
-                />
-
-                <DetailRow
-                  label="Bağlı varlık"
-                  value={
-                    selectedLicense.assigned_asset_name
-                      ? `${selectedLicense.assigned_asset_inventory_code ?? ""} ${selectedLicense.assigned_asset_name}`
-                      : null
-                  }
-                />
-
-                <DetailRow
-                  label="Başlangıç tarihi"
-                  value={formatDate(selectedLicense.start_date)}
-                />
-
-                <DetailRow
-                  label="Bitiş / yenileme tarihi"
-                  value={formatDate(selectedLicense.end_date)}
-                />
-
-                <DetailRow
-                  label="Kalan gün"
-                  value={
-                    selectedLicense.days_until_end === null ||
-                    selectedLicense.days_until_end === undefined
-                      ? "-"
-                      : selectedLicense.days_until_end
-                  }
-                />
-
-                <DetailRow
-                  label="Yenileme maliyeti"
-                  value={formatCurrency(selectedLicense.renewal_cost)}
-                />
-
-                <DetailRow
-                  label="Faturalama"
-                  value={
-                    selectedLicense.billing_cycle_label ??
-                    selectedLicense.billing_cycle
-                  }
-                />
-
-                <DetailRow
-                  label="Otomatik yenileme"
-                  value={selectedLicense.auto_renew ? "Evet" : "Hayır"}
-                />
-
-                <DetailRow
-                  label="Silinme tarihi"
-                  value={
-                    selectedLicense.is_deleted
-                      ? formatDate(selectedLicense.deleted_at)
-                      : null
-                  }
-                />
-              </div>
-
-              <DetailRow label="Notlar" value={selectedLicense.notes} />
+              <DetailSection
+                title="Sistem bilgisi"
+                icon={<IconHistory size={17} aria-hidden={true} />}
+                tone="success"
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Oluşturulma tarihi"
+                    value={formatDate(selectedLicense.created_at)}
+                  />
+                  <DetailRow
+                    label="Güncellenme tarihi"
+                    value={formatDate(selectedLicense.updated_at)}
+                  />
+                </div>
+              </DetailSection>
             </div>
-          )}
-        </SlideOverPanel>
+          )}        </SlideOverPanel>
 
         <SlideOverPanel
           open={Boolean(formMode)}
