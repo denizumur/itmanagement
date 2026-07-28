@@ -1,13 +1,20 @@
 import {
   IconAlertTriangle,
+  IconArchive,
   IconBell,
-  IconCheck,
+  IconCalendarDue,
+  IconDatabase,
+  IconEyeOff,
+  IconFilter,
+  IconInfoCircle,
   IconClock,
   IconRefresh,
   IconSearch,
+  IconSparkles,
   IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { ErrorState } from "../components/common/ErrorState";
@@ -17,7 +24,6 @@ import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
 import { AppToast } from "../components/ui/AppToast";
 import { GlowButton } from "../components/ui/GlowButton";
-import { PageHeader } from "../components/ui/PageHeader";
 import { PageTransition } from "../components/ui/PageTransition";
 import { SlideOverPanel } from "../components/ui/SlideOverPanel";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -234,16 +240,124 @@ function DetailRow({
   value,
 }: {
   label: string;
-  value?: string | number | null;
+  value?: ReactNode;
 }) {
   const displayValue =
     value === undefined || value === null || value === "" ? "-" : value;
 
   return (
-    <div className="rounded-app border border-border bg-surface-1 p-md">
-      <p className="text-caption text-text-secondary">{label}</p>
-      <p className="mt-xs text-body text-text-primary">{displayValue}</p>
+    <div className="rounded-2xl border border-border-subtle bg-surface-0/85 p-md shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+        {label}
+      </p>
+      <div className="mt-xs text-body font-medium text-text-primary">
+        {displayValue}
+      </div>
     </div>
+  );
+}
+
+function DetailSection({
+  title,
+  icon,
+  tone = "accent",
+  children,
+}: {
+  title: string;
+  icon: ReactNode;
+  tone?: "accent" | "success" | "warning" | "danger" | "neutral";
+  children: ReactNode;
+}) {
+  const toneClasses = {
+    accent: "border-accent/20 bg-accent-bg text-accent",
+    success: "border-success/20 bg-success-bg text-success",
+    warning: "border-warning/25 bg-warning-bg text-warning",
+    danger: "border-danger/25 bg-danger-bg text-danger",
+    neutral: "border-border-subtle bg-surface-2 text-text-secondary",
+  };
+
+  return (
+    <section className="rounded-panel border border-border-subtle bg-surface-1/80 p-md shadow-panel">
+      <div className="mb-md flex items-center gap-sm">
+        <span
+          className={`inline-flex size-9 items-center justify-center rounded-2xl border shadow-sm ${toneClasses[tone]}`}
+        >
+          {icon}
+        </span>
+        <h3 className="text-body font-semibold text-text-primary">{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function FilterChip({
+  label,
+  value,
+  onRemove,
+}: {
+  label: string;
+  value: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-xs rounded-full border border-accent/25 bg-accent-bg px-sm py-xs text-caption font-semibold text-accent shadow-sm">
+      <span>
+        {label}: {value}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="rounded-full p-0.5 transition hover:bg-accent/10 focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none"
+        aria-label={`${label} filtresini kaldır`}
+        title={`${label} filtresini kaldır`}
+      >
+        <IconX size={13} aria-hidden={true} />
+      </button>
+    </span>
+  );
+}
+
+function SourceMark({ reminder }: { reminder: Reminder }) {
+  const sourceLabel = getSourceLabel(reminder);
+
+  return (
+    <div className="flex min-w-[150px] items-center gap-sm">
+      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-2xl border border-accent/20 bg-accent-bg text-xs font-bold uppercase text-accent shadow-sm">
+        {sourceLabel.slice(0, 2)}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate font-semibold text-text-primary">{sourceLabel}</p>
+        <p className="text-caption text-text-secondary">
+          Kaynak ID: {reminder.source_id}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function IconActionButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex size-9 items-center justify-center rounded-2xl border border-border-subtle bg-surface-0/90 text-text-secondary shadow-sm transition hover:-translate-y-0.5 hover:border-accent hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+      aria-label={label}
+      title={label}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -279,14 +393,12 @@ function buildEffectiveReminderTableState({
 function buildReminderColumns({
   userCanManage,
   isSubmitting,
-  onSelectReminder,
   onSnoozeToday,
   onDismiss,
   onCancel,
 }: {
   userCanManage: boolean;
   isSubmitting: boolean;
-  onSelectReminder: (reminder: Reminder) => void;
   onSnoozeToday: (reminder: Reminder) => void;
   onDismiss: (reminder: Reminder) => void;
   onCancel: (reminder: Reminder) => void;
@@ -294,12 +406,17 @@ function buildReminderColumns({
   return [
     {
       key: "title",
-      label: "Hatırlatıcı",
+      label: "Hatırlatma",
       sortable: true,
       sortKey: "title",
       render: (reminder) => (
-        <div>
-          <p className="text-text-primary">{reminder.title}</p>
+        <div className="min-w-[280px]">
+          <div className="flex flex-wrap items-center gap-xs">
+            <p className="font-semibold text-text-primary">{reminder.title}</p>
+            <span className="rounded-full border border-accent/20 bg-accent-bg px-sm py-[2px] text-[11px] font-semibold text-accent">
+              {getSourceLabel(reminder)}
+            </span>
+          </div>
           <p className="max-w-[420px] truncate text-caption text-text-secondary">
             {reminder.message}
           </p>
@@ -311,24 +428,26 @@ function buildReminderColumns({
       label: "Kaynak",
       sortable: true,
       sortKey: "source_type",
-      render: (reminder) => (
-        <div className="text-text-secondary">
-          <p>{getSourceLabel(reminder)}</p>
-          <p className="text-caption">Kaynak ID: {reminder.source_id}</p>
-        </div>
-      ),
+      render: (reminder) => <SourceMark reminder={reminder} />,
     },
     {
       key: "due_date",
-      label: "Son tarih",
+      label: "Risk / Tarih",
       sortable: true,
       sortKey: "due_date",
       render: (reminder) => (
-        <div className="text-text-secondary">
-          <p className="text-body text-text-primary">
+        <div className="min-w-[150px]">
+          <p className="text-body font-semibold text-text-primary">
             {formatDate(reminder.due_date)}
           </p>
-          <p className="text-caption">{getDueLabel(reminder)}</p>
+          <div className="mt-xs flex flex-wrap gap-xs">
+            <StatusBadge variant={getTimeStatusVariant(reminder)}>
+              {getTimeStatusLabel(reminder)}
+            </StatusBadge>
+            <span className="rounded-full border border-border-subtle bg-surface-0 px-sm py-[2px] text-caption text-text-secondary">
+              {getDueLabel(reminder)}
+            </span>
+          </div>
         </div>
       ),
     },
@@ -338,9 +457,14 @@ function buildReminderColumns({
       sortable: true,
       sortKey: "scheduled_for",
       render: (reminder) => (
-        <span className="text-text-secondary">
-          {formatDate(reminder.scheduled_for)}
-        </span>
+        <div className="min-w-[135px] rounded-2xl border border-border-subtle bg-surface-0/80 px-sm py-xs shadow-sm">
+          <p className="font-medium text-text-primary">
+            {formatDate(reminder.scheduled_for)}
+          </p>
+          <p className="text-caption text-text-secondary">
+            Eşik: {reminder.threshold_days} gün
+          </p>
+        </div>
       ),
     },
     {
@@ -349,14 +473,14 @@ function buildReminderColumns({
       sortable: true,
       sortKey: "channel",
       render: (reminder) => (
-        <span className="text-text-secondary">
+        <span className="inline-flex rounded-full border border-border-subtle bg-surface-0 px-sm py-xs text-caption font-semibold text-text-secondary shadow-sm">
           {reminder.channel_label ?? reminder.channel}
         </span>
       ),
     },
     {
       key: "status",
-      label: "Zaman / İşlem",
+      label: "Durum",
       sortable: true,
       sortKey: "status",
       render: (reminder) => (
@@ -364,7 +488,6 @@ function buildReminderColumns({
           <StatusBadge variant={getTimeStatusVariant(reminder)}>
             {getTimeStatusLabel(reminder)}
           </StatusBadge>
-
           <StatusBadge variant={getActionStatusVariant(reminder)}>
             {getActionStatusLabel(reminder)}
           </StatusBadge>
@@ -373,50 +496,42 @@ function buildReminderColumns({
     },
     {
       key: "actions",
-      label: "İşlem",
+      label: "Aksiyon",
       className: "text-right",
       render: (reminder) => (
-        <div className="flex justify-end gap-sm">
-          <GlowButton variant="ghost" onClick={() => onSelectReminder(reminder)}>
-            Detay
-          </GlowButton>
-
+        <div className="flex justify-end gap-xs">
           {userCanManage && reminder.status === "pending" ? (
             <>
-              <GlowButton
-                variant="ghost"
+              <IconActionButton
+                label="Bugün gizle"
                 onClick={() => onSnoozeToday(reminder)}
                 disabled={isSubmitting}
-                icon={<IconClock size={16} aria-hidden={true} />}
               >
-                Bugün Gizle
-              </GlowButton>
-
-              <GlowButton
-                variant="ghost"
+                <IconEyeOff size={16} aria-hidden={true} />
+              </IconActionButton>
+              <IconActionButton
+                label="Kalıcı kapat"
                 onClick={() => onDismiss(reminder)}
                 disabled={isSubmitting}
-                icon={<IconCheck size={16} aria-hidden={true} />}
               >
-                Kalıcı Kapat
-              </GlowButton>
-
-              <GlowButton
-                variant="ghost"
+                <IconArchive size={16} aria-hidden={true} />
+              </IconActionButton>
+              <IconActionButton
+                label="İptal"
                 onClick={() => onCancel(reminder)}
                 disabled={isSubmitting}
-                icon={<IconX size={16} aria-hidden={true} />}
               >
-                İptal
-              </GlowButton>
+                <IconX size={16} aria-hidden={true} />
+              </IconActionButton>
             </>
-          ) : null}
+          ) : (
+            <span className="text-caption text-text-muted">Aksiyon yok</span>
+          )}
         </div>
       ),
     },
   ];
 }
-
 export function RemindersPage() {
   const { user } = useAuth();
   const userCanManage = canManage(user?.role);
@@ -448,6 +563,22 @@ export function RemindersPage() {
     typeof state.filters.visible === "string" ? state.filters.visible : "true";
 
   const visibleOnly = selectedVisible === "true";
+  const selectedSourceLabel =
+    sourceTypeOptions.find((option) => option.value === selectedSourceType)
+      ?.label ?? "";
+  const selectedActionStatusLabel =
+    actionStatusOptions.find((option) => option.value === selectedActionStatus)
+      ?.label ?? "";
+  const selectedTimeStatusLabel =
+    timeStatusOptions.find((option) => option.value === selectedTimeStatus)
+      ?.label ?? "";
+  const hasActiveFilters = Boolean(
+    state.search ||
+      selectedSourceType ||
+      selectedTimeStatus ||
+      selectedActionStatus !== "pending" ||
+      !visibleOnly
+  );
 
   const effectiveTableState = useMemo(
     () =>
@@ -505,7 +636,7 @@ export function RemindersPage() {
 
   async function handleSnoozeToday(reminder: Reminder) {
     const confirmed = window.confirm(
-      `"${reminder.title}" hatırlatıcısı bugün gizlenecek. Yarın hâlâ geçerliyse tekrar görünecek. Devam edilsin mi?`
+      `"${reminder.title}" hatırlatıcısı bugün gizlenecek. Yarın hala geçerliyse tekrar görünecek. Devam edilsin mi?`
     );
 
     if (!confirmed) {
@@ -518,7 +649,7 @@ export function RemindersPage() {
       setToast({
         type: "success",
         message:
-          "Hatırlatıcı bugün gizlendi. Yarın hâlâ geçerliyse tekrar görünür.",
+          "Hatırlatıcı bugün gizlendi. Yarın hala geçerliyse tekrar görünür.",
       });
 
       if (selectedReminder?.id === reminder.id) {
@@ -607,12 +738,11 @@ export function RemindersPage() {
       buildReminderColumns({
         userCanManage,
         isSubmitting,
-        onSelectReminder: setSelectedReminder,
         onSnoozeToday: handleSnoozeToday,
         onDismiss: handleDismiss,
         onCancel: handleCancel,
       }),
-    [userCanManage, isSubmitting, selectedReminder?.id]
+    [userCanManage, isSubmitting]
   );
 
   if (isInitialLoading) {
@@ -644,86 +774,94 @@ export function RemindersPage() {
   return (
     <AppShell>
       <PageTransition>
-        <PageHeader
-          eyebrow="Operasyonel Hatırlatıcılar"
-          title="Hatırlatıcılar"
-          description="Garanti, bakım, lisans ve ileride ticket SLA kaynaklı görünür hatırlatıcıları takip et."
-          actions={
-            <>
-              <GlowButton
-                variant="ghost"
-                onClick={refetchAll}
-                disabled={remindersQuery.isFetching || isSubmitting}
-                icon={<IconRefresh size={16} aria-hidden={true} />}
-              >
-                {remindersQuery.isFetching ? "Yenileniyor" : "Veriyi yenile"}
-              </GlowButton>
+        <section className="relative overflow-hidden rounded-panel border border-border-strong/60 bg-surface-1/85 shadow-panel backdrop-blur-sm">
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_15%_20%,rgba(79,70,229,0.18),transparent_28%),radial-gradient(circle_at_85%_10%,rgba(20,184,166,0.16),transparent_24%)]" />
+          <div className="relative flex flex-col gap-lg p-lg">
+            <div className="flex flex-col gap-md xl:flex-row xl:items-start xl:justify-between">
+              <div className="max-w-3xl">
+                <div className="inline-flex items-center gap-xs rounded-full border border-accent/25 bg-accent-bg px-sm py-xs text-caption font-semibold text-accent shadow-sm">
+                  <IconSparkles size={14} aria-hidden={true} />
+                  Reminder Risk Operations Console
+                </div>
+                <h1 className="mt-sm text-h1 text-text-primary">
+                  Hatırlatma Operasyon Merkezi
+                </h1>
+                <p className="mt-xs max-w-2xl text-body text-text-secondary">
+                  Geciken, yaklaşan ve gizlenen operasyon sinyallerini tek ekrandan takip et.
+                </p>
+              </div>
 
-              {userCanManage && (
+              <div className="flex flex-wrap gap-sm">
                 <GlowButton
-                  onClick={handleGenerate}
-                  disabled={isSubmitting}
-                  icon={<IconBell size={16} aria-hidden={true} />}
+                  variant="ghost"
+                  onClick={refetchAll}
+                  disabled={remindersQuery.isFetching || isSubmitting}
+                  icon={<IconRefresh size={16} aria-hidden={true} />}
                 >
-                  Hatırlatıcı üret
+                  {remindersQuery.isFetching ? "Yenileniyor" : "Veriyi yenile"}
                 </GlowButton>
-              )}
-            </>
-          }
-        />
 
-        <section className="mt-lg flex flex-wrap gap-sm">
-          <MiniMetricCard
-            label="Gösterilen kayıt"
-            value={tableData?.count ?? reminders.length}
-            icon={<IconBell size={15} aria-hidden={true} />}
-            tone="accent"
-          />
+                {userCanManage && (
+                  <GlowButton
+                    onClick={handleGenerate}
+                    disabled={isSubmitting}
+                    icon={<IconBell size={16} aria-hidden={true} />}
+                  >
+                    Hatırlatıcı üret
+                  </GlowButton>
+                )}
+              </div>
+            </div>
 
-          <MiniMetricCard
-            label="Görünür bekleyen"
-            value={summary?.visible_pending ?? 0}
-            icon={<IconBell size={15} aria-hidden={true} />}
-            tone="accent"
-          />
-
-          <MiniMetricCard
-            label="Geciken"
-            value={summary?.overdue_due_date ?? 0}
-            icon={<IconAlertTriangle size={15} aria-hidden={true} />}
-            tone="danger"
-          />
-
-          <MiniMetricCard
-            label="Bugün"
-            value={summary?.due_today ?? 0}
-            icon={<IconClock size={15} aria-hidden={true} />}
-            tone="warning"
-          />
-
-          <MiniMetricCard
-            label="7 gün"
-            value={summary?.upcoming_7_days ?? 0}
-            icon={<IconClock size={15} aria-hidden={true} />}
-            tone="warning"
-          />
-
-          <MiniMetricCard
-            label="Bugün gizlenen"
-            value={summary?.snoozed_today ?? 0}
-            icon={<IconCheck size={15} aria-hidden={true} />}
-          />
+            <div className="grid gap-sm sm:grid-cols-2 xl:grid-cols-6">
+              <MiniMetricCard
+                label="Toplam reminder"
+                value={summary?.total ?? tableData?.count ?? reminders.length}
+                icon={<IconBell size={15} aria-hidden={true} />}
+                tone="accent"
+              />
+              <MiniMetricCard
+                label="Görünür bekleyen"
+                value={summary?.visible_pending ?? 0}
+                icon={<IconInfoCircle size={15} aria-hidden={true} />}
+                tone="accent"
+              />
+              <MiniMetricCard
+                label="Geciken"
+                value={summary?.overdue_due_date ?? 0}
+                icon={<IconAlertTriangle size={15} aria-hidden={true} />}
+                tone="danger"
+              />
+              <MiniMetricCard
+                label="Bugün"
+                value={summary?.due_today ?? 0}
+                icon={<IconClock size={15} aria-hidden={true} />}
+                tone="warning"
+              />
+              <MiniMetricCard
+                label="7 gün"
+                value={summary?.upcoming_7_days ?? 0}
+                icon={<IconCalendarDue size={15} aria-hidden={true} />}
+                tone="warning"
+              />
+              <MiniMetricCard
+                label="Bugün gizlenen"
+                value={summary?.snoozed_today ?? 0}
+                icon={<IconEyeOff size={15} aria-hidden={true} />}
+              />
+            </div>
+          </div>
         </section>
 
-        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
-          <div className="grid gap-md xl:grid-cols-[1fr_200px_220px_220px_240px_auto]">
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
-              <IconSearch
-                size={18}
-                className="text-text-secondary"
-                aria-hidden={true}
-              />
+        <section className="mt-lg rounded-panel border border-border-subtle bg-surface-1/80 p-md shadow-panel backdrop-blur-sm">
+          <div className="mb-sm flex items-center gap-xs text-caption font-semibold uppercase tracking-[0.08em] text-text-muted">
+            <IconFilter size={14} aria-hidden={true} />
+            Risk command bar
+          </div>
 
+          <div className="grid gap-sm xl:grid-cols-[minmax(260px,1fr)_180px_190px_180px_220px_auto]">
+            <label className="flex items-center gap-sm rounded-2xl border border-border-subtle bg-surface-0/90 px-md py-sm shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 motion-reduce:transition-none">
+              <IconSearch size={18} className="text-text-secondary" aria-hidden={true} />
               <input
                 className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
                 placeholder="Başlık, mesaj veya oluşturan ara..."
@@ -733,11 +871,9 @@ export function RemindersPage() {
             </label>
 
             <select
-              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              className="rounded-2xl border border-border-subtle bg-surface-0/90 px-md py-sm text-body text-text-primary shadow-sm transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 motion-reduce:transition-none"
               value={selectedSourceType}
-              onChange={(event) =>
-                setFilter("source_type", event.target.value || null)
-              }
+              onChange={(event) => setFilter("source_type", event.target.value || null)}
               aria-label="Kaynak filtresi"
             >
               {sourceTypeOptions.map((option) => (
@@ -748,7 +884,7 @@ export function RemindersPage() {
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none disabled:opacity-60"
+              className="rounded-2xl border border-border-subtle bg-surface-0/90 px-md py-sm text-body text-text-primary shadow-sm transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60 motion-reduce:transition-none"
               value={selectedActionStatus}
               onChange={(event) => setFilter("status", event.target.value)}
               aria-label="İşlem durumu filtresi"
@@ -762,11 +898,9 @@ export function RemindersPage() {
             </select>
 
             <select
-              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              className="rounded-2xl border border-border-subtle bg-surface-0/90 px-md py-sm text-body text-text-primary shadow-sm transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 motion-reduce:transition-none"
               value={selectedTimeStatus}
-              onChange={(event) =>
-                setFilter("time_status", event.target.value || null)
-              }
+              onChange={(event) => setFilter("time_status", event.target.value || null)}
               aria-label="Zaman durumu filtresi"
             >
               {timeStatusOptions.map((option) => (
@@ -776,7 +910,7 @@ export function RemindersPage() {
               ))}
             </select>
 
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel">
+            <label className="flex items-center gap-sm rounded-2xl border border-border-subtle bg-surface-0/90 px-md py-sm text-body text-text-primary shadow-sm transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 motion-reduce:transition-none">
               <input
                 type="checkbox"
                 checked={visibleOnly}
@@ -788,11 +922,31 @@ export function RemindersPage() {
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+              className="inline-flex items-center justify-center rounded-2xl border border-border-subtle bg-surface-0/80 px-md py-sm text-body font-semibold text-text-secondary shadow-sm transition hover:border-accent hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none"
             >
               Temizle
             </button>
           </div>
+
+          {hasActiveFilters ? (
+            <div className="mt-md flex flex-wrap gap-xs">
+              {state.search ? (
+                <FilterChip label="Arama" value={state.search} onRemove={() => setSearch("")} />
+              ) : null}
+              {selectedSourceType ? (
+                <FilterChip label="Kaynak" value={selectedSourceLabel} onRemove={() => setFilter("source_type", null)} />
+              ) : null}
+              {selectedTimeStatus ? (
+                <FilterChip label="Zaman" value={selectedTimeStatusLabel} onRemove={() => setFilter("time_status", null)} />
+              ) : null}
+              {selectedActionStatus !== "pending" ? (
+                <FilterChip label="İşlem" value={selectedActionStatusLabel} onRemove={() => setFilter("status", "pending")} />
+              ) : null}
+              {!visibleOnly ? (
+                <FilterChip label="Görünür" value="Tüm kayıtlar" onRemove={() => handleVisibleOnlyChange(true)} />
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="mt-lg flex flex-col gap-md">
@@ -804,6 +958,8 @@ export function RemindersPage() {
             onSortChange={setSort}
             isLoading={remindersQuery.isLoading}
             emptyMessage="Filtrelere uygun hatırlatıcı bulunamadı."
+            onViewDetails={setSelectedReminder}
+            viewDetailsLabel="Hatırlatma detayını gör"
           />
 
           <TablePagination
@@ -824,124 +980,122 @@ export function RemindersPage() {
           onClose={() => setSelectedReminder(null)}
         >
           {selectedReminder && (
-            <div className="space-y-md">
-              <div className="flex items-center justify-between gap-md rounded-panel border border-border bg-surface-1 p-md shadow-panel">
-                <div>
-                  <p className="text-caption text-text-secondary">
-                    Zaman / İşlem
-                  </p>
-
-                  <div className="mt-xs flex flex-wrap gap-xs">
-                    <StatusBadge variant={getTimeStatusVariant(selectedReminder)}>
-                      {getTimeStatusLabel(selectedReminder)}
-                    </StatusBadge>
-
-                    <StatusBadge variant={getActionStatusVariant(selectedReminder)}>
-                      {getActionStatusLabel(selectedReminder)}
-                    </StatusBadge>
+            <div className="flex flex-col gap-lg">
+              <section className="overflow-hidden rounded-panel border border-warning/20 bg-surface-0 shadow-panel">
+                <div className="h-1 bg-warning" />
+                <div className="flex flex-col gap-md p-md lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-xs">
+                      <StatusBadge variant={getTimeStatusVariant(selectedReminder)}>
+                        {getTimeStatusLabel(selectedReminder)}
+                      </StatusBadge>
+                      <StatusBadge variant={getActionStatusVariant(selectedReminder)}>
+                        {getActionStatusLabel(selectedReminder)}
+                      </StatusBadge>
+                      {selectedReminder.is_snoozed_today ? (
+                        <StatusBadge variant="neutral">Bugün gizlenen</StatusBadge>
+                      ) : null}
+                    </div>
+                    <h3 className="mt-sm text-lg font-semibold text-text-primary">
+                      {selectedReminder.title}
+                    </h3>
+                    <p className="mt-xs text-body leading-7 text-text-secondary">
+                      {selectedReminder.message}
+                    </p>
+                    <div className="mt-sm flex flex-wrap gap-xs">
+                      <span className="rounded-full border border-accent/20 bg-accent-bg px-sm py-[2px] text-caption font-semibold text-accent">
+                        {getSourceLabel(selectedReminder)}
+                      </span>
+                      <span className="rounded-full border border-warning/25 bg-warning-bg px-sm py-[2px] text-caption font-semibold text-warning">
+                        {formatDate(selectedReminder.due_date)} · {getDueLabel(selectedReminder)}
+                      </span>
+                    </div>
                   </div>
+
+                  {userCanManage && selectedReminder.status === "pending" && (
+                    <div className="flex flex-wrap justify-end gap-sm">
+                      <GlowButton
+                        variant="ghost"
+                        icon={<IconEyeOff size={16} aria-hidden={true} />}
+                        onClick={() => handleSnoozeToday(selectedReminder)}
+                        disabled={isSubmitting}
+                      >
+                        Bugün Gizle
+                      </GlowButton>
+                      <GlowButton
+                        variant="ghost"
+                        icon={<IconArchive size={16} aria-hidden={true} />}
+                        onClick={() => handleDismiss(selectedReminder)}
+                        disabled={isSubmitting}
+                      >
+                        Kalıcı Kapat
+                      </GlowButton>
+                      <GlowButton
+                        variant="ghost"
+                        icon={<IconX size={16} aria-hidden={true} />}
+                        onClick={() => handleCancel(selectedReminder)}
+                        disabled={isSubmitting}
+                      >
+                        İptal
+                      </GlowButton>
+                    </div>
+                  )}
                 </div>
+              </section>
 
-                {userCanManage && selectedReminder.status === "pending" && (
-                  <div className="flex flex-wrap justify-end gap-sm">
-                    <GlowButton
-                      variant="ghost"
-                      icon={<IconClock size={16} aria-hidden={true} />}
-                      onClick={() => handleSnoozeToday(selectedReminder)}
-                      disabled={isSubmitting}
-                    >
-                      Bugün Gizle
-                    </GlowButton>
+              <DetailSection title="Hatırlatma Bilgisi" icon={<IconBell size={17} aria-hidden={true} />} tone="accent">
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow label="Başlık" value={selectedReminder.title} />
+                  <DetailRow label="Kanal" value={selectedReminder.channel_label ?? selectedReminder.channel} />
+                  <DetailRow label="Oluşturan" value={selectedReminder.created_by_username} />
+                  <DetailRow label="Reminder ID" value={selectedReminder.id} />
+                </div>
+              </DetailSection>
 
-                    <GlowButton
-                      variant="ghost"
-                      icon={<IconCheck size={16} aria-hidden={true} />}
-                      onClick={() => handleDismiss(selectedReminder)}
-                      disabled={isSubmitting}
-                    >
-                      Kalıcı Kapat
-                    </GlowButton>
+              <DetailSection title="Risk / Zamanlama" icon={<IconCalendarDue size={17} aria-hidden={true} />} tone={getTimeStatusVariant(selectedReminder)}>
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow label="Son tarih" value={formatDate(selectedReminder.due_date)} />
+                  <DetailRow label="Kalan gün" value={getDueLabel(selectedReminder)} />
+                  <DetailRow label="Zaman durumu" value={getTimeStatusLabel(selectedReminder)} />
+                  <DetailRow label="Gösterim tarihi" value={formatDate(selectedReminder.scheduled_for)} />
+                  <DetailRow label="Eşik" value={`${selectedReminder.threshold_days} gün önce`} />
+                  <DetailRow label="Bugün görünür mü" value={selectedReminder.is_visible_today ? "Evet" : "Hayır"} />
+                </div>
+              </DetailSection>
 
-                    <GlowButton
-                      variant="ghost"
-                      icon={<IconX size={16} aria-hidden={true} />}
-                      onClick={() => handleCancel(selectedReminder)}
-                      disabled={isSubmitting}
-                    >
-                      İptal
-                    </GlowButton>
-                  </div>
-                )}
-              </div>
+              <DetailSection title="Kaynak" icon={<IconDatabase size={17} aria-hidden={true} />} tone="success">
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow label="Kaynak türü" value={getSourceLabel(selectedReminder)} />
+                  <DetailRow label="Kaynak ID" value={selectedReminder.source_id} />
+                </div>
+              </DetailSection>
 
-              <div className="grid gap-md sm:grid-cols-2">
-                <DetailRow
-                  label="Kaynak"
-                  value={getSourceLabel(selectedReminder)}
-                />
-                <DetailRow
-                  label="Kaynak ID"
-                  value={selectedReminder.source_id}
-                />
-                <DetailRow
-                  label="Son tarih"
-                  value={formatDate(selectedReminder.due_date)}
-                />
-                <DetailRow
-                  label="Kalan gün"
-                  value={getDueLabel(selectedReminder)}
-                />
-                <DetailRow
-                  label="Zaman durumu"
-                  value={getTimeStatusLabel(selectedReminder)}
-                />
-                <DetailRow
-                  label="İşlem durumu"
-                  value={getActionStatusLabel(selectedReminder)}
-                />
-                <DetailRow
-                  label="Gösterim tarihi"
-                  value={formatDate(selectedReminder.scheduled_for)}
-                />
-                <DetailRow
-                  label="Eşik"
-                  value={`${selectedReminder.threshold_days} gün önce`}
-                />
-                <DetailRow
-                  label="Kanal"
-                  value={selectedReminder.channel_label ?? selectedReminder.channel}
-                />
-                <DetailRow
-                  label="Oluşturan"
-                  value={selectedReminder.created_by_username}
-                />
-                <DetailRow
-                  label="Bildirim zamanı"
-                  value={formatDate(selectedReminder.notified_at)}
-                />
-                <DetailRow
-                  label="Bugün gizlenme tarihi"
-                  value={formatDate(selectedReminder.snoozed_until)}
-                />
-                <DetailRow
-                  label="Bugün gizlenme zamanı"
-                  value={formatDate(selectedReminder.snoozed_at)}
-                />
-                <DetailRow
-                  label="Kalıcı kapatma zamanı"
-                  value={formatDate(selectedReminder.dismissed_at)}
-                />
-                <DetailRow
-                  label="İptal zamanı"
-                  value={formatDate(selectedReminder.cancelled_at)}
-                />
-              </div>
+              <DetailSection title="Aksiyon Durumu" icon={<IconArchive size={17} aria-hidden={true} />} tone={getActionStatusVariant(selectedReminder)}>
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow label="İşlem durumu" value={getActionStatusLabel(selectedReminder)} />
+                  <DetailRow label="Bildirim zamanı" value={formatDate(selectedReminder.notified_at)} />
+                  <DetailRow label="Bugün gizlenme tarihi" value={formatDate(selectedReminder.snoozed_until)} />
+                  <DetailRow label="Bugün gizlenme zamanı" value={formatDate(selectedReminder.snoozed_at)} />
+                  <DetailRow label="Kalıcı kapatma zamanı" value={formatDate(selectedReminder.dismissed_at)} />
+                  <DetailRow label="İptal zamanı" value={formatDate(selectedReminder.cancelled_at)} />
+                </div>
+              </DetailSection>
 
-              <DetailRow label="Mesaj" value={selectedReminder.message} />
+              <DetailSection title="Notlar" icon={<IconInfoCircle size={17} aria-hidden={true} />} tone="neutral">
+                <div className="rounded-2xl border border-border-subtle bg-surface-0/90 p-md text-body leading-7 text-text-secondary shadow-sm">
+                  {selectedReminder.message || "-"}
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Sistem bilgisi" icon={<IconClock size={17} aria-hidden={true} />} tone="success">
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow label="Oluşturulma" value={formatDate(selectedReminder.created_at)} />
+                  <DetailRow label="Güncellenme" value={formatDate(selectedReminder.updated_at)} />
+                </div>
+              </DetailSection>
             </div>
           )}
         </SlideOverPanel>
-
         {toast && (
           <AppToast
             type={toast.type}
