@@ -1,9 +1,16 @@
 import {
+  IconCalendarDue,
   IconClipboardList,
+  IconDeviceDesktop,
+  IconHistory,
+  IconNotes,
   IconPlus,
   IconRefresh,
   IconRotateClockwise,
   IconSearch,
+  IconShieldCheck,
+  IconSparkles,
+  IconX,
   IconUserCheck,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
@@ -40,6 +47,7 @@ import {
   getAssignmentEmployeeName,
   getAssignmentJobTitleName,
 } from "../lib/assignments";
+import { cn } from "../lib/cn";
 import { canManage } from "../lib/rbac";
 import type {
   Assignment,
@@ -144,12 +152,162 @@ function DetailRow({
   value: ReactNode;
 }) {
   return (
-    <div className="rounded-app border border-border bg-surface-2 px-md py-sm">
+    <div className="rounded-2xl border border-border-subtle bg-surface-0/90 p-md shadow-sm transition hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-panel focus-within:ring-2 focus-within:ring-accent/20 motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <p className="text-caption text-text-secondary">{label}</p>
       <div className="mt-xs text-body font-medium text-text-primary">
         {value || "-"}
       </div>
     </div>
+  );
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function DetailSection({
+  title,
+  icon,
+  tone = "accent",
+  children,
+}: {
+  title: string;
+  icon: ReactNode;
+  tone?: "accent" | "success" | "warning" | "danger";
+  children: ReactNode;
+}) {
+  const toneClasses = {
+    accent: "border-accent/20 bg-accent-bg text-accent",
+    success: "border-success/20 bg-success-bg text-success",
+    warning: "border-warning/25 bg-warning-bg text-warning",
+    danger: "border-danger/25 bg-danger-bg text-danger",
+  };
+
+  return (
+    <section className="rounded-panel border border-border-subtle bg-surface-1/80 p-md shadow-panel">
+      <div className="mb-md flex items-center gap-sm">
+        <span
+          className={cn(
+            "inline-flex size-9 items-center justify-center rounded-2xl border shadow-sm",
+            toneClasses[tone]
+          )}
+        >
+          {icon}
+        </span>
+        <h3 className="text-body font-semibold text-text-primary">{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function EntityAvatar({
+  label,
+  icon,
+  tone = "accent",
+}: {
+  label: string;
+  icon: ReactNode;
+  tone?: "accent" | "warning";
+}) {
+  const initial = label.slice(0, 1).toLocaleUpperCase("tr-TR") || "?";
+  const toneClasses =
+    tone === "warning"
+      ? "border-warning/25 bg-warning-bg text-warning"
+      : "border-accent/25 bg-accent-bg text-accent";
+
+  return (
+    <span
+      className={cn(
+        "relative inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border text-body font-semibold shadow-sm",
+        toneClasses
+      )}
+    >
+      <span aria-hidden={true}>{initial}</span>
+      <span className="absolute -right-1 -top-1 rounded-full border border-surface-1 bg-surface-1 text-text-secondary">
+        {icon}
+      </span>
+    </span>
+  );
+}
+
+function DateChip({
+  label,
+  value,
+  tone = "accent",
+}: {
+  label: string;
+  value?: string | null;
+  tone?: "accent" | "success" | "warning";
+}) {
+  const toneClasses = {
+    accent: "border-accent/25 bg-accent-bg/70 text-accent",
+    success: "border-success/25 bg-success-bg/70 text-success",
+    warning: "border-warning/25 bg-warning-bg/70 text-warning",
+  };
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-xs rounded-xl border px-sm py-xs text-caption font-medium shadow-sm transition hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        toneClasses[tone]
+      )}
+    >
+      <IconCalendarDue size={14} aria-hidden={true} />
+      <span>{label}</span>
+      <span className="text-text-primary">{formatDate(value)}</span>
+    </span>
+  );
+}
+
+function FilterChip({
+  label,
+  value,
+  onRemove,
+}: {
+  label: string;
+  value: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-xs rounded-full border border-accent/25 bg-accent-bg px-sm py-xs text-caption font-semibold text-accent shadow-sm">
+      <span>
+        {label}: {value}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="rounded-full p-0.5 transition hover:bg-accent/10 focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none"
+        aria-label={`${label} filtresini kaldır`}
+        title={`${label} filtresini kaldır`}
+      >
+        <IconX size={13} aria-hidden={true} />
+      </button>
+    </span>
+  );
+}
+
+function AssignmentStatusBadge({ assignment }: { assignment: Assignment }) {
+  return isAssignmentActive(assignment) ? (
+    <StatusBadge variant="accent">Aktif zimmet</StatusBadge>
+  ) : (
+    <StatusBadge variant="success">İade edilmiş</StatusBadge>
   );
 }
 
@@ -168,31 +326,61 @@ function buildAssignmentColumns({
       label: "Varlık",
       sortable: true,
       sortKey: "asset__name",
-      render: (assignment) => (
-        <div>
-          <p className="text-text-primary">
-            {getAssignmentAssetName(assignment)}
-          </p>
-          <p className="text-caption text-text-secondary">
-            {getAssignmentAssetCode(assignment) ?? "-"}
-          </p>
-        </div>
-      ),
+      render: (assignment) => {
+        const assetName = getAssignmentAssetName(assignment);
+        const assetCode = getAssignmentAssetCode(assignment) ?? "-";
+
+        return (
+          <div className="flex min-w-[230px] items-center gap-sm">
+            <EntityAvatar
+              label={assetName}
+              icon={<IconDeviceDesktop size={15} aria-hidden={true} />}
+            />
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-text-primary">
+                {assetName}
+              </p>
+              <span className="mt-xs inline-flex max-w-full rounded-full border border-border-subtle bg-surface-0 px-sm py-[2px] text-[11px] font-medium text-text-secondary shadow-sm">
+                <span className="truncate">{assetCode}</span>
+              </span>
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: "employee",
       label: "Personel",
       sortable: true,
       sortKey: "employee__full_name",
-      render: (assignment) => (
-        <p className="text-text-primary">
-          {getAssignmentEmployeeName(assignment)}
-        </p>
-      ),
+      render: (assignment) => {
+        const employeeName = getAssignmentEmployeeName(assignment);
+        const departmentName = getAssignmentDepartmentName(assignment);
+        const jobTitleName = getAssignmentJobTitleName(assignment);
+
+        return (
+          <div className="flex min-w-[220px] items-center gap-sm">
+            <EntityAvatar
+              label={employeeName}
+              tone="warning"
+              icon={<IconUserCheck size={15} aria-hidden={true} />}
+            />
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-text-primary">
+                {employeeName}
+              </p>
+              <p className="truncate text-caption text-text-secondary">
+                {[departmentName, jobTitleName].filter(Boolean).join(" / ") ||
+                  "-"}
+              </p>
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: "department",
-      label: "Departman / Görev",
+      label: "Birim",
       sortable: true,
       sortKey: "employee__department__name",
       render: (assignment) => {
@@ -200,56 +388,73 @@ function buildAssignmentColumns({
         const jobTitleName = getAssignmentJobTitleName(assignment);
 
         return (
-          <div className="text-text-secondary">
-            <p>{departmentName ?? "-"}</p>
-            {jobTitleName ? <p className="text-caption">{jobTitleName}</p> : null}
+          <div className="min-w-[170px] rounded-2xl border border-border-subtle bg-surface-0/80 px-sm py-xs shadow-sm">
+            <p className="text-body font-medium text-text-primary">
+              {departmentName ?? "-"}
+            </p>
+            {jobTitleName ? (
+              <p className="text-caption text-text-secondary">{jobTitleName}</p>
+            ) : null}
           </div>
         );
       },
     },
     {
-      key: "assigned_at",
-      label: "Zimmet Tarihi",
+      key: "timeline",
+      label: "Tarihler",
       sortable: true,
       sortKey: "assigned_at",
-      render: (assignment) => formatDate(assignment.assigned_at),
-    },
-    {
-      key: "returned_at",
-      label: "İade Tarihi",
-      sortable: true,
-      sortKey: "returned_at",
-      render: (assignment) => formatDate(assignment.returned_at),
+      render: (assignment) => (
+        <div className="flex min-w-[190px] flex-col gap-xs">
+          <DateChip
+            label="Zimmet"
+            value={assignment.assigned_at}
+            tone="warning"
+          />
+          <DateChip
+            label="İade"
+            value={assignment.returned_at}
+            tone={isAssignmentActive(assignment) ? "accent" : "success"}
+          />
+        </div>
+      ),
     },
     {
       key: "status",
       label: "Durum",
-      render: (assignment) =>
-        isAssignmentActive(assignment) ? (
-          <StatusBadge variant="accent">Aktif zimmet</StatusBadge>
-        ) : (
-          <StatusBadge variant="success">İade edilmiş</StatusBadge>
-        ),
+      render: (assignment) => (
+        <div className="flex flex-col gap-xs">
+          <AssignmentStatusBadge assignment={assignment} />
+          {assignment.notes || assignment.return_notes ? (
+            <span className="inline-flex items-center gap-xs rounded-full border border-border-subtle bg-surface-0 px-sm py-[2px] text-[11px] font-medium text-text-secondary shadow-sm">
+              <IconNotes size={13} aria-hidden={true} />
+              Not var
+            </span>
+          ) : null}
+        </div>
+      ),
     },
     {
       key: "actions",
-      label: "İşlem",
+      label: "İade",
       className: "text-right",
       render: (assignment) => (
-        <div className="flex justify-end gap-sm">
+        <div className="flex justify-end">
           {userCanManage && isAssignmentActive(assignment) ? (
-            <GlowButton
-              variant="ghost"
+            <button
+              type="button"
               disabled={isSubmitting}
               onClick={() => onReturnAssignment(assignment)}
-              icon={<IconRotateClockwise size={16} aria-hidden={true} />}
+              className="inline-flex size-9 items-center justify-center rounded-xl border border-warning/30 bg-warning-bg text-warning shadow-sm transition hover:border-warning hover:bg-warning-bg focus:outline-none focus:ring-2 focus:ring-warning/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+              aria-label={`${getAssignmentAssetName(assignment)} zimmetini iade al`}
+              title="İade al"
             >
-              İade al
-            </GlowButton>
+              <IconRotateClockwise size={16} aria-hidden={true} />
+            </button>
           ) : (
-            <span className="text-caption text-text-secondary">
+            <span className="inline-flex items-center rounded-full border border-border-subtle bg-surface-0 px-sm py-xs text-caption text-text-secondary shadow-sm">
               {isAssignmentActive(assignment)
-                ? "Sadece görüntüleme"
+                ? "Salt okunur"
                 : "İade tamamlandı"}
             </span>
           )}
@@ -318,14 +523,6 @@ export function AssignmentsPage() {
       }),
     [assets, activeAssignmentMap]
   );
-
-  const uniqueEmployeeCount = useMemo(() => {
-    const names = new Set(
-      activeAssignments.map((assignment) => getAssignmentEmployeeName(assignment))
-    );
-
-    return names.size;
-  }, [activeAssignments]);
 
   const isSubmitting =
     createAssignmentMutation.isPending || returnAssignmentMutation.isPending;
@@ -428,6 +625,15 @@ export function AssignmentsPage() {
     [userCanManage, isSubmitting, selectedAssignment]
   );
 
+  const totalAssignments = assignmentTableData?.count ?? assignments.length;
+  const activeAssignmentCount = summary?.active ?? activeAssignments.length;
+  const returnedAssignmentCount = summary?.returned ?? 0;
+  const last30Count = summary?.assigned_last_30_days ?? 0;
+  const selectedActiveLabel =
+    activeFilterOptions.find((option) => option.value === selectedActiveFilter)
+      ?.label ?? "";
+  const hasActiveFilters = Boolean(state.search || selectedActiveFilter);
+
   if (isInitialLoading) {
     return (
       <AppShell>
@@ -498,53 +704,66 @@ export function AssignmentsPage() {
           }
         />
 
-        <section className="mt-lg flex flex-wrap gap-sm">
-          <MiniMetricCard
-            label="Gösterilen kayıt"
-            value={assignmentTableData?.count ?? assignments.length}
-            icon={<IconClipboardList size={15} aria-hidden={true} />}
-            tone="accent"
-          />
+        <section className="mt-lg overflow-hidden rounded-panel border border-border-strong/60 bg-surface-1/75 shadow-panel backdrop-blur-sm">
+          <div className="relative grid gap-md border-b border-border-subtle/80 p-md lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,var(--surface-1),transparent),radial-gradient(circle_at_0%_0%,var(--bg-warning),transparent_34%),radial-gradient(circle_at_88%_0%,var(--bg-accent),transparent_28%)] opacity-80" />
 
-          <MiniMetricCard
-            label="Aktif zimmet"
-            value={summary?.active ?? activeAssignments.length}
-            icon={<IconClipboardList size={15} aria-hidden={true} />}
-            tone="success"
-          />
+            <div className="relative min-w-0">
+              <div className="flex flex-wrap items-center gap-sm">
+                <span className="inline-flex items-center gap-xs rounded-full border border-warning/25 bg-warning-bg/70 px-sm py-xs text-caption font-semibold text-warning shadow-sm">
+                  <IconSparkles size={14} aria-hidden={true} />
+                  Ownership Operations Console
+                </span>
+                <span className="inline-flex items-center gap-xs rounded-full border border-border bg-surface-0/80 px-sm py-xs text-caption text-text-secondary shadow-sm">
+                  Zimmet Operasyon Merkezi
+                </span>
+              </div>
 
-          <MiniMetricCard
-            label="İade edilmiş"
-            value={summary?.returned ?? 0}
-            icon={<IconRotateClockwise size={15} aria-hidden={true} />}
-            tone="warning"
-          />
+              <p className="mt-sm max-w-3xl text-body leading-7 text-text-secondary">
+                Aktif zimmetleri, iade süreçlerini ve cihaz sahipliğini tek
+                ekrandan takip et; personel, varlık ve tarih sinyallerini hızlı
+                tara.
+              </p>
+            </div>
 
-          <MiniMetricCard
-            label="Zimmetli personel"
-            value={uniqueEmployeeCount}
-            icon={<IconUserCheck size={15} aria-hidden={true} />}
-            tone="success"
-          />
+            <div className="relative grid grid-cols-2 gap-xs sm:grid-cols-4 lg:min-w-[520px]">
+              <MiniMetricCard
+                label="Toplam"
+                value={totalAssignments}
+                icon={<IconClipboardList size={14} aria-hidden={true} />}
+                tone="accent"
+              />
+              <MiniMetricCard
+                label="Aktif"
+                value={activeAssignmentCount}
+                icon={<IconShieldCheck size={14} aria-hidden={true} />}
+                tone="success"
+              />
+              <MiniMetricCard
+                label="İade"
+                value={returnedAssignmentCount}
+                icon={<IconRotateClockwise size={14} aria-hidden={true} />}
+                tone="warning"
+              />
+              <MiniMetricCard
+                label="Son 30 gün"
+                value={last30Count}
+                icon={<IconCalendarDue size={14} aria-hidden={true} />}
+                tone="danger"
+              />
+            </div>
+          </div>
 
-          <MiniMetricCard
-            label="Zimmetlenebilir varlık"
-            value={assignableAssets.length}
-            icon={<IconClipboardList size={15} aria-hidden={true} />}
-          />
-        </section>
-
-        <section className="mt-lg rounded-panel border border-border bg-surface-1 p-md shadow-panel">
-          <div className="grid gap-md lg:grid-cols-[1fr_220px_auto]">
-            <label className="flex items-center gap-sm rounded-app border border-border bg-surface-2 px-md py-sm shadow-panel">
+          <div className="grid gap-sm p-md lg:grid-cols-[1fr_210px_auto]">
+            <label className="flex min-h-10 items-center gap-sm rounded-xl border border-warning/25 bg-surface-0/85 px-md py-xs shadow-sm transition focus-within:border-warning focus-within:ring-2 focus-within:ring-warning/20 motion-reduce:transition-none">
               <IconSearch
                 size={18}
-                className="text-text-secondary"
+                className="text-warning"
                 aria-hidden={true}
               />
 
               <input
-                className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
+                className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-muted focus:outline-none"
                 placeholder="Varlık, envanter kodu, personel veya departman ara..."
                 value={state.search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -552,7 +771,7 @@ export function AssignmentsPage() {
             </label>
 
             <select
-              className="rounded-app border border-border bg-surface-2 px-md py-sm text-body text-text-primary shadow-panel focus:outline-none"
+              className="min-h-10 rounded-xl border border-border bg-surface-0/85 px-sm py-xs text-body text-text-primary shadow-sm outline-none transition focus:border-warning focus:ring-2 focus:ring-warning/20 motion-reduce:transition-none"
               value={selectedActiveFilter}
               onChange={(event) => setFilter("active", event.target.value || null)}
               aria-label="Zimmet durumu filtresi"
@@ -567,11 +786,31 @@ export function AssignmentsPage() {
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center justify-center rounded-app border border-border px-md py-sm text-body text-text-primary transition hover:border-accent hover:text-accent"
+              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-border bg-surface-0/85 px-md py-xs text-body font-medium text-text-primary shadow-sm transition hover:border-warning hover:bg-warning-bg hover:text-warning focus:outline-none focus:ring-2 focus:ring-warning/25 motion-reduce:transition-none"
             >
               Temizle
             </button>
           </div>
+
+          {hasActiveFilters ? (
+            <div className="flex flex-wrap items-center gap-sm border-t border-border-subtle/80 px-md py-sm">
+              {state.search ? (
+                <FilterChip
+                  label="Arama"
+                  value={state.search}
+                  onRemove={() => setSearch("")}
+                />
+              ) : null}
+
+              {selectedActiveFilter ? (
+                <FilterChip
+                  label="Durum"
+                  value={selectedActiveLabel}
+                  onRemove={() => setFilter("active", null)}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="mt-lg flex flex-col gap-md">
@@ -584,6 +823,7 @@ export function AssignmentsPage() {
             isLoading={assignmentsQuery.isLoading}
             emptyMessage="Zimmet kaydı bulunamadı."
             onViewDetails={setSelectedAssignment}
+            viewDetailsLabel="Zimmet detayını gör"
             getRowClassName={(assignment) =>
               selectedAssignment?.id === assignment.id ? "bg-surface-2" : ""
             }
@@ -631,61 +871,157 @@ export function AssignmentsPage() {
         >
           {selectedAssignment ? (
             <div className="space-y-md">
-              <div className="flex flex-wrap items-center justify-between gap-sm">
-                {isAssignmentActive(selectedAssignment) ? (
-                  <StatusBadge variant="accent">Aktif zimmet</StatusBadge>
-                ) : (
-                  <StatusBadge variant="success">İade edilmiş</StatusBadge>
-                )}
+              <section className="overflow-hidden rounded-panel border border-warning/20 bg-surface-0 shadow-panel">
+                <div className="h-1 bg-warning" />
+                <div className="flex flex-wrap items-center justify-between gap-md">
+                  <div className="flex min-w-0 items-center gap-md p-md">
+                    <EntityAvatar
+                      label={getAssignmentAssetName(selectedAssignment)}
+                      icon={<IconDeviceDesktop size={15} aria-hidden={true} />}
+                    />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-sm">
+                        <h3 className="truncate text-lg font-semibold text-text-primary">
+                          {getAssignmentAssetName(selectedAssignment)}
+                        </h3>
+                        <AssignmentStatusBadge assignment={selectedAssignment} />
+                      </div>
+                      <div className="mt-xs flex flex-wrap gap-xs">
+                        <span className="rounded-full border border-border-subtle bg-surface-1 px-sm py-[2px] text-caption font-medium text-text-secondary">
+                          {getAssignmentAssetCode(selectedAssignment) ?? "-"}
+                        </span>
+                        <span className="rounded-full border border-warning/20 bg-warning-bg px-sm py-[2px] text-caption font-medium text-warning">
+                          {getAssignmentEmployeeName(selectedAssignment)}
+                        </span>
+                        <span className="rounded-full border border-border-subtle bg-surface-1 px-sm py-[2px] text-caption text-text-secondary">
+                          Zimmet: {formatDate(selectedAssignment.assigned_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-                {userCanManage && isAssignmentActive(selectedAssignment) ? (
-                  <GlowButton
-                    variant="ghost"
-                    disabled={isSubmitting}
-                    onClick={() => handleReturnAssignment(selectedAssignment)}
-                    icon={<IconRotateClockwise size={16} aria-hidden={true} />}
-                  >
-                    İade al
-                  </GlowButton>
-                ) : null}
-              </div>
+                  <div className="flex flex-wrap items-center gap-sm p-md">
+                    {userCanManage && isAssignmentActive(selectedAssignment) ? (
+                      <GlowButton
+                        variant="ghost"
+                        disabled={isSubmitting}
+                        onClick={() => handleReturnAssignment(selectedAssignment)}
+                        icon={
+                          <IconRotateClockwise size={16} aria-hidden={true} />
+                        }
+                      >
+                        İade al
+                      </GlowButton>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
 
-              <div className="grid gap-sm sm:grid-cols-2">
-                <DetailRow
-                  label="Varlık"
-                  value={getAssignmentAssetName(selectedAssignment)}
-                />
+              <DetailSection
+                title="Zimmet Bilgisi"
+                icon={<IconClipboardList size={17} aria-hidden={true} />}
+                tone="warning"
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Durum"
+                    value={<AssignmentStatusBadge assignment={selectedAssignment} />}
+                  />
+                  <DetailRow
+                    label="Zimmet kaydı"
+                    value={`#${selectedAssignment.id}`}
+                  />
+                </div>
+              </DetailSection>
 
-                <DetailRow
-                  label="Envanter Kodu"
-                  value={getAssignmentAssetCode(selectedAssignment) ?? "-"}
-                />
+              <DetailSection
+                title="Personel"
+                icon={<IconUserCheck size={17} aria-hidden={true} />}
+                tone="warning"
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Personel"
+                    value={getAssignmentEmployeeName(selectedAssignment)}
+                  />
+                  <DetailRow
+                    label="Departman"
+                    value={getAssignmentDepartmentName(selectedAssignment) ?? "-"}
+                  />
+                  <DetailRow
+                    label="Görev"
+                    value={getAssignmentJobTitleName(selectedAssignment) ?? "-"}
+                  />
+                </div>
+              </DetailSection>
 
-                <DetailRow
-                  label="Personel"
-                  value={getAssignmentEmployeeName(selectedAssignment)}
-                />
+              <DetailSection
+                title="Varlık"
+                icon={<IconDeviceDesktop size={17} aria-hidden={true} />}
+                tone="accent"
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Varlık"
+                    value={getAssignmentAssetName(selectedAssignment)}
+                  />
+                  <DetailRow
+                    label="Envanter kodu"
+                    value={getAssignmentAssetCode(selectedAssignment) ?? "-"}
+                  />
+                </div>
+              </DetailSection>
 
-                <DetailRow
-                  label="Departman"
-                  value={getAssignmentDepartmentName(selectedAssignment) ?? "-"}
-                />
+              <DetailSection
+                title="Tarihler"
+                icon={<IconCalendarDue size={17} aria-hidden={true} />}
+                tone={isAssignmentActive(selectedAssignment) ? "accent" : "success"}
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Zimmet tarihi"
+                    value={formatDate(selectedAssignment.assigned_at)}
+                  />
+                  <DetailRow
+                    label="İade tarihi"
+                    value={formatDate(selectedAssignment.returned_at)}
+                  />
+                </div>
+              </DetailSection>
 
-                <DetailRow
-                  label="Görev"
-                  value={getAssignmentJobTitleName(selectedAssignment) ?? "-"}
-                />
+              <DetailSection
+                title="Notlar"
+                icon={<IconNotes size={17} aria-hidden={true} />}
+                tone="accent"
+              >
+                <div className="grid gap-md">
+                  <DetailRow
+                    label="Zimmet notu"
+                    value={selectedAssignment.notes ?? "-"}
+                  />
+                  <DetailRow
+                    label="İade notu"
+                    value={selectedAssignment.return_notes ?? "-"}
+                  />
+                </div>
+              </DetailSection>
 
-                <DetailRow
-                  label="Zimmet Tarihi"
-                  value={formatDate(selectedAssignment.assigned_at)}
-                />
-
-                <DetailRow
-                  label="İade Tarihi"
-                  value={formatDate(selectedAssignment.returned_at)}
-                />
-              </div>
+              <DetailSection
+                title="Sistem bilgisi"
+                icon={<IconHistory size={17} aria-hidden={true} />}
+                tone="success"
+              >
+                <div className="grid gap-md sm:grid-cols-2">
+                  <DetailRow
+                    label="Oluşturulma tarihi"
+                    value={formatDateTime(selectedAssignment.created_at)}
+                  />
+                  <DetailRow
+                    label="Güncellenme tarihi"
+                    value={formatDateTime(selectedAssignment.updated_at)}
+                  />
+                </div>
+              </DetailSection>
             </div>
           ) : null}
         </SlideOverPanel>
