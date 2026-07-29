@@ -13,3 +13,11 @@ frontend/dist/
 # İşletim Sistemi ve Editör
 .DS_Store
 .vscode/
+
+# Backup artifacts
+backups/**/*.sql
+backups/**/*.sql.gz
+backups/**/*.dump
+backups/**/*.zip
+backups/**/*.tar
+backups/**/*.tar.gz
