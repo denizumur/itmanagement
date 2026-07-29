@@ -12,6 +12,31 @@ function Write-Step {
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $frontendDir = Join-Path $repoRoot "frontend"
+$envFile = Join-Path $repoRoot ".env"
+$playwrightCli = Join-Path $frontendDir "node_modules\@playwright\test\cli.js"
+
+Write-Warning "Bu runner sadece local/dev smoke icindir. Smoke kullanici sifrelerini resetler; production'da calistirmayin."
+
+if (Test-Path -LiteralPath $envFile) {
+    $djangoEnvLine = Get-Content -LiteralPath $envFile |
+        Where-Object { $_ -match "^\s*DJANGO_ENV\s*=\s*production\s*$" } |
+        Select-Object -First 1
+
+    if ($djangoEnvLine) {
+        Write-Error "DJANGO_ENV=production tespit edildi. E2E smoke runner production ortamda calismaz."
+        exit 1
+    }
+}
+
+if (-not (Get-Command $NodePath -ErrorAction SilentlyContinue)) {
+    Write-Error "Node executable bulunamadi: $NodePath. -NodePath ile node.exe yolunu verin."
+    exit 1
+}
+
+if (-not (Test-Path -LiteralPath $playwrightCli)) {
+    Write-Error "Playwright CLI bulunamadi. Frontend dependency kurulumunu ve @playwright/test paketini kontrol edin."
+    exit 1
+}
 
 Write-Step "Local/dev Docker Compose servisleri baslatiliyor."
 & docker compose up -d
@@ -78,7 +103,7 @@ finally {
 Write-Step "Playwright smoke suite calistiriliyor."
 Push-Location $frontendDir
 try {
-    & $NodePath node_modules/@playwright/test/cli.js test
+    & $NodePath $playwrightCli test
     exit $LASTEXITCODE
 }
 finally {

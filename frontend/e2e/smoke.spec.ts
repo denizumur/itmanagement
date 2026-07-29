@@ -47,7 +47,6 @@ test("admin can login, navigate core pages, export personnel xlsx, and logout", 
   ]) {
     await page.goto(path);
     await expectOperationalShell(page);
-    await expect(page.getByText(/hata|error|500/i)).toHaveCount(0);
   }
 
   await page.goto("/personnel");

@@ -139,7 +139,23 @@ Excel export testi dosyayi Excel ile acmaz. Playwright download stream'ini okuyu
 
 ## CI entegrasyonu durumu
 
-P6'da CI job eklenmedi. Once local smoke stabilitesi hedeflendi. CI entegrasyonu P6b veya ayri bir fazda Docker Compose servisleri, browser install cache ve artifact politikasi netlestirilerek eklenmelidir.
+P6 ve P6b'de CI job eklenmedi. Once local smoke stabilitesi, audit temizligi ve artifact ignore guvencesi hedeflendi. CI entegrasyonu P6c veya ayri bir fazda Docker Compose servisleri, browser install cache ve artifact upload politikasi netlestirilerek eklenmelidir.
+
+## npm audit notu
+
+P6b'de `npm audit` incelendi. High severity uyarilar `brace-expansion`, `postcss` ve `react-router` paketlerinden geliyordu. `npm audit fix` force kullanmadan calistirildi ve package-lock seviyesinde semver uyumlu guncellemelerle audit sonucu 0 vulnerability oldu.
+
+## Artifact ignore notu
+
+Playwright runtime artifactleri git'e girmemelidir. `frontend/.gitignore` su dizinleri ignore eder:
+
+- `test-results`
+- `playwright-report`
+- `blob-report`
+- `e2e-results`
+- `screenshots`
+- `videos`
+- `traces`
 
 ## Production uyarisi
 
