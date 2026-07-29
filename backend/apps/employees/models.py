@@ -176,8 +176,14 @@ class EmployeeImportJob(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["status", "created_at"]),
-            models.Index(fields=["actor", "created_at"]),
+            models.Index(
+                fields=["status", "created_at"],
+                name="employees_e_status_f8cdf9_idx",
+            ),
+            models.Index(
+                fields=["actor", "created_at"],
+                name="employees_e_actor_i_d59db1_idx",
+            ),
         ]
 
     def __str__(self):
