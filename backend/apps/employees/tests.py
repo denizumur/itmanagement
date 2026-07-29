@@ -5,6 +5,7 @@ from io import BytesIO, StringIO
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from openpyxl import load_workbook
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -294,6 +295,34 @@ class EmployeeApiTests(APITestCase):
     def export_xlsx_workbook(self, response):
         return load_workbook(BytesIO(response.content))
 
+    def create_import_upload(self, rows, filename="personnel-import.xlsx"):
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        worksheet = workbook.active
+        for row in rows:
+            worksheet.append(row)
+
+        stream = BytesIO()
+        workbook.save(stream)
+
+        return SimpleUploadedFile(
+            filename,
+            stream.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    def create_csv_import_upload(self, rows, filename="personnel-import.csv"):
+        stream = StringIO()
+        writer = csv.writer(stream, delimiter=";")
+        writer.writerows(rows)
+
+        return SimpleUploadedFile(
+            filename,
+            ("\ufeff" + stream.getvalue()).encode("utf-8"),
+            content_type="text/csv",
+        )
+
     def exported_employee_xlsx_row(self, response, employee):
         worksheet = self.export_xlsx_workbook(response)["Personel"]
 
@@ -302,6 +331,374 @@ class EmployeeApiTests(APITestCase):
                 return row
 
         self.fail(f"Employee {employee.id} row not found in XLSX export")
+
+    def test_employee_import_dry_run_xlsx_returns_preview_without_db_write(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "E-posta", "Departman", "Unvan"],
+                ["Çağrı Şahin", "IMP-001", "cagri.import@example.com", "Yeni Departman", "Yeni Unvan"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["total_rows"], 1)
+        self.assertEqual(response.data["valid_rows"], 1)
+        self.assertEqual(response.data["error_rows"], 0)
+        self.assertNotIn("commit_rows", response.data)
+        self.assertFalse(Employee.objects.filter(employee_code="IMP-001").exists())
+
+    def test_employee_import_dry_run_csv_returns_preview_without_db_write(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_csv_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "E-posta", "Aktif Mi"],
+                ["İdil Aksoy", "IMP-CSV-001", "idil.import@example.com", "Evet"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["format"], "csv")
+        self.assertEqual(response.data["valid_rows"], 1)
+        self.assertFalse(Employee.objects.filter(employee_code="IMP-CSV-001").exists())
+
+    def test_employee_import_dry_run_requires_admin_role(self):
+        self.client.force_authenticate(user=self.technician_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu"],
+                ["Teknisyen Import", "IMP-TECH-001"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_employee_import_commit_blocks_error_rows(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu"],
+                ["", "IMP-ERR-001"],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        commit_response = self.client.post(
+            "/api/employees/import/commit/",
+            {
+                "import_id": dry_run_response.data["import_id"],
+                "mode": "create_only",
+            },
+            format="json",
+        )
+
+        self.assertEqual(dry_run_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(dry_run_response.data["error_rows"], 1)
+        self.assertEqual(commit_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Employee.objects.filter(employee_code="IMP-ERR-001").exists())
+
+    def test_employee_import_commit_creates_employee_master_data_and_audit_log(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "E-posta", "Departman", "Unvan", "Manager"],
+                [
+                    "Yeni Personel",
+                    "IMP-OK-001",
+                    "yeni.personel@example.com",
+                    "Import Departmanı",
+                    "Import Uzmanı",
+                    "manager@example.com",
+                ],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        self.assertEqual(dry_run_response.status_code, status.HTTP_200_OK)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            commit_response = self.client.post(
+                "/api/employees/import/commit/",
+                {
+                    "import_id": dry_run_response.data["import_id"],
+                    "mode": "create_only",
+                },
+                format="json",
+            )
+
+        self.assertEqual(commit_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(commit_response.data["created_count"], 1)
+
+        imported_employee = Employee.objects.get(employee_code="IMP-OK-001")
+        self.assertTrue(imported_employee.imported_from_excel)
+        self.assertEqual(imported_employee.manager, self.manager)
+        self.assertEqual(imported_employee.department.name, "Import Departmanı")
+        self.assertEqual(imported_employee.job_title.name, "Import Uzmanı")
+
+        audit_log = AuditLog.objects.filter(
+            action=AuditLog.Action.CREATE,
+            entity_type="employees.Import",
+            metadata__operation="employee_import_commit",
+        ).first()
+
+        self.assertIsNotNone(audit_log)
+        self.assertEqual(audit_log.actor, self.admin_user)
+        metadata = audit_log.metadata
+        self.assertEqual(metadata["module"], "employees")
+        self.assertEqual(metadata["operation"], "employee_import_commit")
+        self.assertEqual(metadata["import_id"], dry_run_response.data["import_id"])
+        self.assertEqual(metadata["file_name"], "personnel-import.xlsx")
+        self.assertEqual(metadata["format"], "xlsx")
+        self.assertEqual(metadata["total_rows"], 1)
+        self.assertEqual(metadata["created_count"], 1)
+        self.assertEqual(metadata["skipped_count"], 0)
+        self.assertEqual(metadata["error_count"], 0)
+        self.assertEqual(metadata["warning_count"], 1)
+        self.assertEqual(metadata["created_department_count"], 1)
+        self.assertEqual(metadata["created_job_title_count"], 1)
+        self.assertNotIn("rows", metadata)
+        self.assertNotIn("row_data", metadata)
+        self.assertNotIn("commit_rows", metadata)
+        self.assertNotIn("emails", metadata)
+        self.assertNotIn("phones", metadata)
+        self.assertNotIn("yeni.personel@example.com", str(metadata))
+        self.assertNotIn("manager@example.com", str(metadata))
+
+    def test_employee_import_rejects_formula_cells(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "E-posta"],
+                ["=HYPERLINK(\"https://example.com\")", "IMP-FORM-001", "formula@example.com"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["error_rows"], 1)
+        self.assertFalse(Employee.objects.filter(employee_code="IMP-FORM-001").exists())
+
+    def test_employee_import_dry_run_supports_split_turkish_name_headers_xlsx(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                [
+                    "Kullanıcı Adı",
+                    "Adı",
+                    "Soyadı",
+                    "E-Posta adresi",
+                    "Departman",
+                    "Meslek",
+                    "Durum",
+                    "Test_Dosyasi_Durumu",
+                ],
+                [
+                    "ahmet.yilmaz",
+                    "Ahmet",
+                    "Yılmaz",
+                    "ahmet.yilmaz@example.com",
+                    "İDARİ VE MALİ İŞLER MÜDÜRLÜĞÜ",
+                    "BİLGİ İŞLEM",
+                    "Aktif",
+                    "OK",
+                ],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["valid_rows"], 1)
+        self.assertEqual(response.data["error_rows"], 0)
+        self.assertIn("Test_Dosyasi_Durumu", response.data["unknown_headers"])
+
+        normalized = response.data["rows"][0]["normalized"]
+        self.assertEqual(normalized["full_name"], "Ahmet Yılmaz")
+        self.assertEqual(normalized["email"], "ahmet.yilmaz@example.com")
+        self.assertEqual(normalized["department_name"], "İDARİ VE MALİ İŞLER MÜDÜRLÜĞÜ")
+        self.assertEqual(normalized["job_title_name"], "BİLGİ İŞLEM")
+        self.assertTrue(normalized["is_active"])
+        self.assertEqual(normalized["user_username"], "ahmet.yilmaz")
+        self.assertFalse(Employee.objects.filter(email="ahmet.yilmaz@example.com").exists())
+
+    def test_employee_import_commit_supports_split_turkish_name_headers_xlsx(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                [
+                    "Kullanıcı Adı",
+                    "Adı",
+                    "Soyadı",
+                    "E-Posta adresi",
+                    "Departman",
+                    "Meslek",
+                    "Durum",
+                    "Test_Dosyasi_Durumu",
+                ],
+                [
+                    "ahmet.yilmaz",
+                    "Ahmet",
+                    "Yılmaz",
+                    "ahmet.yilmaz@example.com",
+                    "İDARİ VE MALİ İŞLER MÜDÜRLÜĞÜ",
+                    "BİLGİ İŞLEM",
+                    "Aktif",
+                    "OK",
+                ],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        self.assertEqual(dry_run_response.status_code, status.HTTP_200_OK)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            commit_response = self.client.post(
+                "/api/employees/import/commit/",
+                {
+                    "import_id": dry_run_response.data["import_id"],
+                    "mode": "create_only",
+                },
+                format="json",
+            )
+
+        self.assertEqual(commit_response.status_code, status.HTTP_200_OK)
+        employee = Employee.objects.get(email="ahmet.yilmaz@example.com")
+        self.assertEqual(employee.full_name, "Ahmet Yılmaz")
+        self.assertEqual(employee.department.name, "İDARİ VE MALİ İŞLER MÜDÜRLÜĞÜ")
+        self.assertEqual(employee.job_title.name, "BİLGİ İŞLEM")
+        self.assertTrue(employee.is_active)
+        self.assertIsNone(employee.user)
+
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action=AuditLog.Action.CREATE,
+                entity_type="employees.Import",
+                metadata__operation="employee_import_commit",
+                metadata__import_id=dry_run_response.data["import_id"],
+            ).exists(),
+        )
+
+    def test_employee_import_full_name_takes_precedence_over_split_name(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Adı", "Soyadı"],
+                ["Ahmet Can Yılmaz", "Ahmet", "Yılmaz"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["rows"][0]["normalized"]["full_name"],
+            "Ahmet Can Yılmaz",
+        )
+
+    def test_employee_import_missing_name_errors_when_no_full_name_or_split_name(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["E-posta", "Departman"],
+                ["noname@example.com", "Import Departmanı"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["error_rows"], 1)
+        self.assertEqual(
+            response.data["rows"][0]["errors"][0]["message"],
+            "Ad Soyad zorunludur.",
+        )
+
+    def test_employee_import_unknown_headers_are_warnings_not_errors(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Test_Dosyasi_Durumu"],
+                ["Bilinmeyen Kolon", "OK"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["error_rows"], 0)
+        self.assertIn("Test_Dosyasi_Durumu", response.data["unknown_headers"])
+
+    def test_employee_import_status_alias_durum(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Durum"],
+                ["Aktif Personel", "Aktif"],
+                ["Pasif Personel", "Pasif"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["valid_rows"], 2)
+        self.assertTrue(response.data["rows"][0]["normalized"]["is_active"])
+        self.assertFalse(response.data["rows"][1]["normalized"]["is_active"])
 
     def test_repair_mojibake_for_export_handles_mixed_latin1_cp1252_turkish_text(self):
         self.assertEqual(

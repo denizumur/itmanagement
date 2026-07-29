@@ -12,6 +12,43 @@ const EMPLOYEES_ENDPOINT = "/api/employees/";
 const EMPLOYEES_TABLE_ENDPOINT = "/api/employees/table/";
 const EMPLOYEES_EXPORT_ENDPOINT = "/api/employees/export/";
 const EMPLOYEES_EXCEL_EXPORT_ENDPOINT = "/api/employees/export.xlsx/";
+const EMPLOYEES_IMPORT_DRY_RUN_ENDPOINT = "/api/employees/import/dry-run/";
+const EMPLOYEES_IMPORT_COMMIT_ENDPOINT = "/api/employees/import/commit/";
+
+export type EmployeeImportRow = {
+  row_number: number;
+  status: "valid" | "warning" | "error";
+  normalized: Record<string, unknown>;
+  errors: Array<{ field: string; message: string }>;
+  warnings: Array<{ field: string; message: string }>;
+};
+
+export type EmployeeImportDryRunResponse = {
+  import_id: string;
+  file_name: string;
+  format: "csv" | "xlsx";
+  total_rows: number;
+  valid_rows: number;
+  error_rows: number;
+  warning_rows: number;
+  rows: EmployeeImportRow[];
+  summary: {
+    creates: number;
+    updates: number;
+    skipped: number;
+  };
+};
+
+export type EmployeeImportCommitResponse = {
+  import_id: string;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+  error_count: number;
+  warning_count: number;
+  created_department_count: number;
+  created_job_title_count: number;
+};
 
 function extractResults<T>(responseData: T[] | PaginatedEmployeeResponse<T>) {
   if (Array.isArray(responseData)) {
@@ -117,4 +154,33 @@ export async function downloadEmployeesExcelExport(state: TableQueryState) {
   );
 
   triggerFileDownload(response.data, fileName);
+}
+
+export async function dryRunEmployeeImport(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await api.post<EmployeeImportDryRunResponse>(
+    EMPLOYEES_IMPORT_DRY_RUN_ENDPOINT,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+
+  return response.data;
+}
+
+export async function commitEmployeeImport(importId: string) {
+  const response = await api.post<EmployeeImportCommitResponse>(
+    EMPLOYEES_IMPORT_COMMIT_ENDPOINT,
+    {
+      import_id: importId,
+      mode: "create_only",
+    }
+  );
+
+  return response.data;
 }

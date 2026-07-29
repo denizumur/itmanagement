@@ -1,6 +1,9 @@
 import csv
+from uuid import uuid4
 from io import BytesIO, StringIO
 
+from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
@@ -11,12 +14,13 @@ from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import IsTechnicianOrAdminRole, IsViewerOrAboveRole
+from apps.accounts.permissions import IsAdminRole, IsTechnicianOrAdminRole, IsViewerOrAboveRole
 from apps.audit.models import AuditLog
 from apps.audit.services import create_audit_log
 from apps.common.pagination import StandardResultsPagination
 from apps.employees.filters import EmployeeFilterSet
-from apps.employees.models import Employee
+from apps.employees.importing import parse_employee_import
+from apps.employees.models import Department, Employee, JobTitle
 from apps.employees.serializers import EmployeeDetailSerializer, EmployeeListSerializer
 
 
@@ -46,6 +50,9 @@ EMPLOYEE_ORDERING_FIELDS = [
     "manager__full_name",
     "user__username",
 ]
+
+EMPLOYEE_IMPORT_CACHE_TTL_SECONDS = 30 * 60
+EMPLOYEE_IMPORT_CACHE_PREFIX = "employees_import:"
 
 
 MOJIBAKE_MARKERS = (
@@ -514,3 +521,162 @@ class EmployeeExcelExportAPIView(APIView):
         )
 
         return apply_export_response_headers(response, filename)
+
+
+class EmployeeImportDryRunAPIView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def post(self, request):
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response(
+                {"detail": "Import dosyası zorunludur."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            parsed = parse_employee_import(uploaded_file)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        import_id = str(uuid4())
+        parsed["import_id"] = import_id
+        cache.set(
+            f"{EMPLOYEE_IMPORT_CACHE_PREFIX}{import_id}",
+            {**parsed, "committed": False},
+            timeout=EMPLOYEE_IMPORT_CACHE_TTL_SECONDS,
+        )
+
+        response_data = {key: value for key, value in parsed.items() if key != "commit_rows"}
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+class EmployeeImportCommitAPIView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def post(self, request):
+        import_id = request.data.get("import_id")
+        mode = request.data.get("mode", "create_only")
+
+        if mode != "create_only":
+            return Response(
+                {"detail": "P7 aşamasında sadece create_only desteklenir."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cached = cache.get(f"{EMPLOYEE_IMPORT_CACHE_PREFIX}{import_id}")
+        if not cached:
+            return Response(
+                {"detail": "Import sonucu bulunamadı veya süresi doldu."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if cached.get("committed"):
+            return Response(
+                {"detail": "Bu import daha önce commit edildi."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if cached.get("error_rows", 0) > 0:
+            return Response(
+                {"detail": "Hatalı satır varken import commit edilemez."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created_departments = 0
+        created_job_titles = 0
+        created_employees = []
+
+        with transaction.atomic():
+            for row in cached.get("commit_rows", []):
+                employee_code = row.get("employee_code") or None
+                email = row.get("email", "")
+                external_hr_id = row.get("external_hr_id", "")
+
+                duplicate_query = Q()
+                if employee_code:
+                    duplicate_query |= Q(employee_code=employee_code)
+                if email:
+                    duplicate_query |= Q(email=email)
+                if external_hr_id:
+                    duplicate_query |= Q(external_hr_id=external_hr_id)
+
+                if duplicate_query and Employee.objects.filter(duplicate_query).exists():
+                    transaction.set_rollback(True)
+                    return Response(
+                        {"detail": "Commit sırasında duplicate personel tespit edildi."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                department = None
+                if row.get("department_name"):
+                    department, created = Department.objects.get_or_create(
+                        name=row["department_name"],
+                    )
+                    created_departments += int(created)
+
+                job_title = None
+                if row.get("job_title_name"):
+                    job_title, created = JobTitle.objects.get_or_create(
+                        name=row["job_title_name"],
+                    )
+                    created_job_titles += int(created)
+
+                employee = Employee.objects.create(
+                    full_name=row["full_name"],
+                    employee_code=employee_code,
+                    email=email,
+                    phone=row.get("phone", ""),
+                    is_active=row.get("is_active", True),
+                    department=department,
+                    job_title=job_title,
+                    manager_id=row.get("manager_id"),
+                    external_hr_id=external_hr_id,
+                    sync_source=row.get("sync_source") or Employee.SyncSource.EXCEL,
+                    imported_from_excel=True,
+                    import_batch_id=import_id,
+                )
+                created_employees.append(employee)
+
+            create_audit_log(
+                request=request,
+                action=AuditLog.Action.CREATE,
+                entity_type="employees.Import",
+                entity_id=import_id,
+                entity_repr=f"Employee import {import_id}",
+                metadata={
+                    "module": "employees",
+                    "operation": "employee_import_commit",
+                    "import_id": import_id,
+                    "file_name": cached.get("file_name"),
+                    "format": cached.get("format"),
+                    "total_rows": cached.get("total_rows"),
+                    "created_count": len(created_employees),
+                    "updated_count": 0,
+                    "skipped_count": 0,
+                    "error_count": cached.get("error_rows"),
+                    "warning_count": cached.get("warning_rows"),
+                    "created_department_count": created_departments,
+                    "created_job_title_count": created_job_titles,
+                },
+            )
+
+        cache.set(
+            f"{EMPLOYEE_IMPORT_CACHE_PREFIX}{import_id}",
+            {**cached, "committed": True},
+            timeout=EMPLOYEE_IMPORT_CACHE_TTL_SECONDS,
+        )
+
+        return Response(
+            {
+                "import_id": import_id,
+                "created_count": len(created_employees),
+                "updated_count": 0,
+                "skipped_count": 0,
+                "error_count": 0,
+                "warning_count": cached.get("warning_rows", 0),
+                "created_department_count": created_departments,
+                "created_job_title_count": created_job_titles,
+            },
+            status=status.HTTP_200_OK,
+        )

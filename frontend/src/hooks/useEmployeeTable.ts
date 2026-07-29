@@ -1,7 +1,9 @@
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import {
+  commitEmployeeImport,
   downloadEmployeesExcelExport,
   downloadEmployeesExport,
+  dryRunEmployeeImport,
   getEmployeeDetail,
   getEmployeesTable,
 } from "../api/employees";
@@ -32,5 +34,17 @@ export function useEmployeeExport() {
 export function useEmployeeCsvExport() {
   return useMutation({
     mutationFn: (state: TableQueryState) => downloadEmployeesExport(state),
+  });
+}
+
+export function useEmployeeImportDryRun() {
+  return useMutation({
+    mutationFn: (file: File) => dryRunEmployeeImport(file),
+  });
+}
+
+export function useEmployeeImportCommit() {
+  return useMutation({
+    mutationFn: (importId: string) => commitEmployeeImport(importId),
   });
 }

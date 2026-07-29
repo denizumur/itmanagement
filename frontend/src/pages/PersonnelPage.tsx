@@ -11,13 +11,15 @@ import {
   IconShieldCheck,
   IconSparkles,
   IconTicket,
+  IconUpload,
   IconUserCircle,
   IconUserCheck,
   IconUsers,
   IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
+import type { EmployeeImportDryRunResponse } from "../api/employees";
 import { useAuth } from "../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
@@ -25,6 +27,8 @@ import { TablePagination } from "../components/common/TablePagination";
 import { AppShell } from "../components/layout/AppShell";
 import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import {
+  useEmployeeImportCommit,
+  useEmployeeImportDryRun,
   useEmployeeDetail,
   useEmployeeExport,
   useEmployeeTable,
@@ -773,11 +777,16 @@ const columns: DataTableColumn<Employee>[] = [
 export function PersonnelPage() {
   const { user } = useAuth();
   const userCanExport = canManage(user?.role);
+  const userCanImport = user?.role === "admin";
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(
     null
   );
   const [, setToast] = useState<ToastState | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] =
+    useState<EmployeeImportDryRunResponse | null>(null);
+  const [importError, setImportError] = useState("");
 
   const {
     state,
@@ -796,6 +805,8 @@ export function PersonnelPage() {
   const employeesQuery = useEmployeeTable(state);
   const employeeDetailQuery = useEmployeeDetail(selectedEmployeeId);
   const employeeExportMutation = useEmployeeExport();
+  const employeeImportDryRunMutation = useEmployeeImportDryRun();
+  const employeeImportCommitMutation = useEmployeeImportCommit();
 
   const data = employeesQuery.data;
   const employees = data?.results ?? [];
@@ -859,6 +870,65 @@ export function PersonnelPage() {
         message:
           "Personel export alınamadı. Yetkini veya filtreleri kontrol et.",
       });
+    }
+  }
+
+  function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+
+    setImportError("");
+    setImportPreview(null);
+    setImportFile(file);
+
+    if (!file) {
+      return;
+    }
+
+    const extension = file.name.split(".").pop()?.toLocaleLowerCase("tr-TR");
+    if (extension !== "xlsx" && extension !== "csv") {
+      setImportFile(null);
+      setImportError("Sadece .xlsx ve .csv dosyaları desteklenir.");
+    }
+  }
+
+  async function handleImportDryRun() {
+    if (!importFile) {
+      setImportError("Önce bir .xlsx veya .csv dosyası seç.");
+      return;
+    }
+
+    setImportError("");
+
+    try {
+      const preview = await employeeImportDryRunMutation.mutateAsync(importFile);
+      setImportPreview(preview);
+    } catch {
+      setImportPreview(null);
+      setImportError("Import ön kontrolü tamamlanamadı. Dosyayı ve yetkini kontrol et.");
+    }
+  }
+
+  async function handleImportCommit() {
+    if (!importPreview || importPreview.error_rows > 0) {
+      return;
+    }
+
+    setImportError("");
+
+    try {
+      const result = await employeeImportCommitMutation.mutateAsync(
+        importPreview.import_id
+      );
+
+      setToast({
+        type: "success",
+        message: `${result.created_count} personel import edildi.`,
+      });
+      setImportFile(null);
+      setImportPreview(null);
+      refetchAll();
+    } catch {
+      setImportError("Import commit tamamlanamadı. Preview süresi veya veri çakışmalarını kontrol et.");
     }
   }
 
@@ -1030,6 +1100,152 @@ export function PersonnelPage() {
             </div>
           ) : null}
         </section>
+        {userCanImport ? (
+          <section className="rounded-panel border border-success/25 bg-surface-1/80 p-md shadow-panel backdrop-blur-sm">
+            <div className="grid gap-md xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+              <div>
+                <div className="flex flex-wrap items-center gap-sm">
+                  <span className="inline-flex items-center gap-xs rounded-full border border-success/25 bg-success-bg px-sm py-xs text-caption font-semibold text-success">
+                    <IconUpload size={14} aria-hidden={true} />
+                    HR Import
+                  </span>
+                  <span className="text-caption text-text-secondary">
+                    Dry-run zorunlu; hatalı satır varsa commit kapalıdır.
+                  </span>
+                </div>
+
+                <div className="mt-sm grid gap-sm lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+                  <label className="flex min-h-10 items-center rounded-xl border border-border bg-surface-0/85 px-md py-xs text-body text-text-primary shadow-sm transition focus-within:border-success focus-within:ring-2 focus-within:ring-success/20 motion-reduce:transition-none">
+                    <input
+                      type="file"
+                      accept=".xlsx,.csv"
+                      data-testid="employee-import-file"
+                      onChange={handleImportFileChange}
+                      className="min-w-0 flex-1 text-caption file:mr-sm file:rounded-lg file:border-0 file:bg-success-bg file:px-sm file:py-xs file:text-caption file:font-semibold file:text-success"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    data-testid="employee-import-dry-run"
+                    onClick={handleImportDryRun}
+                    disabled={!importFile || employeeImportDryRunMutation.isPending}
+                    className="inline-flex min-h-10 items-center justify-center gap-xs rounded-xl border border-success/30 bg-success-bg px-md py-xs text-body font-medium text-success shadow-sm transition hover:border-success focus:outline-none focus:ring-2 focus:ring-success/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+                  >
+                    <IconSearch size={16} aria-hidden={true} />
+                    {employeeImportDryRunMutation.isPending ? "Kontrol ediliyor" : "Ön Kontrol"}
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="employee-import-commit"
+                    onClick={handleImportCommit}
+                    disabled={
+                      !importPreview ||
+                      importPreview.error_rows > 0 ||
+                      employeeImportCommitMutation.isPending
+                    }
+                    className="inline-flex min-h-10 items-center justify-center gap-xs rounded-xl border border-accent/30 bg-accent-bg px-md py-xs text-body font-medium text-accent shadow-sm transition hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+                  >
+                    <IconUserCheck size={16} aria-hidden={true} />
+                    {employeeImportCommitMutation.isPending ? "Aktarılıyor" : "Commit"}
+                  </button>
+                </div>
+
+                {importFile ? (
+                  <p className="mt-xs text-caption text-text-secondary">
+                    Seçilen dosya: {importFile.name}
+                  </p>
+                ) : null}
+
+                {importError ? (
+                  <div className="mt-sm rounded-xl border border-danger/30 bg-danger/10 px-md py-sm text-body text-danger">
+                    {importError}
+                  </div>
+                ) : null}
+              </div>
+
+              {importPreview ? (
+                <div className="grid min-w-[280px] grid-cols-2 gap-xs sm:grid-cols-4 xl:grid-cols-2">
+                  <MiniMetricCard label="Satır" value={importPreview.total_rows} tone="accent" />
+                  <MiniMetricCard label="Geçerli" value={importPreview.valid_rows} tone="success" />
+                  <MiniMetricCard label="Uyarı" value={importPreview.warning_rows} tone="warning" />
+                  <MiniMetricCard label="Hata" value={importPreview.error_rows} tone="danger" />
+                </div>
+              ) : null}
+            </div>
+
+            {importPreview ? (
+              <div className="mt-md overflow-hidden rounded-xl border border-border-subtle bg-surface-0/80">
+                <div className="flex flex-wrap items-center justify-between gap-sm border-b border-border-subtle px-md py-sm">
+                  <div>
+                    <p className="text-body font-semibold text-text-primary">
+                      Import Preview
+                    </p>
+                    <p className="text-caption text-text-secondary">
+                      {importPreview.file_name} · {importPreview.format.toLocaleUpperCase("tr-TR")}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-border bg-surface-2 px-sm py-xs text-caption text-text-secondary">
+                    Create-only · Upsert yok
+                  </span>
+                </div>
+
+                <div className="max-h-72 overflow-auto">
+                  <table className="min-w-full text-left text-caption">
+                    <thead className="sticky top-0 bg-surface-1 text-text-secondary">
+                      <tr>
+                        <th className="px-md py-xs font-semibold">Satır</th>
+                        <th className="px-md py-xs font-semibold">Durum</th>
+                        <th className="px-md py-xs font-semibold">Ad Soyad</th>
+                        <th className="px-md py-xs font-semibold">E-posta</th>
+                        <th className="px-md py-xs font-semibold">Mesaj</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreview.rows.slice(0, 20).map((row) => {
+                        const messages = [...row.errors, ...row.warnings]
+                          .map((item) => `${item.field}: ${item.message}`)
+                          .join(" · ");
+                        const statusTone =
+                          row.status === "error"
+                            ? "text-danger"
+                            : row.status === "warning"
+                              ? "text-warning"
+                              : "text-success";
+
+                        return (
+                          <tr key={row.row_number} className="border-t border-border-subtle">
+                            <td className="px-md py-sm text-text-secondary">
+                              {row.row_number}
+                            </td>
+                            <td className={cn("px-md py-sm font-semibold", statusTone)}>
+                              {row.status === "error"
+                                ? "Hata"
+                                : row.status === "warning"
+                                  ? "Uyarı"
+                                  : "Geçerli"}
+                            </td>
+                            <td className="px-md py-sm text-text-primary">
+                              {String(row.normalized.full_name ?? "-")}
+                            </td>
+                            <td className="px-md py-sm text-text-secondary">
+                              {String(row.normalized.email ?? "-")}
+                            </td>
+                            <td className="max-w-[360px] px-md py-sm text-text-secondary">
+                              {messages || "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         {employeesQuery.isError ? (
           <div className="rounded-panel border border-danger/30 bg-danger/10 p-md text-body text-danger">
             Personel tablosu yüklenemedi.
