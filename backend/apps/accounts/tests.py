@@ -2,11 +2,14 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.models import UserProfile
+from apps.accounts.models import UserInvitation, UserProfile
+from apps.audit.models import AuditLog
+from apps.employees.models import Employee
 from apps.accounts.throttles import LoginRateThrottle
 from config.settings import production as production_settings
 from config.settings.base import build_default_cache_config
@@ -397,3 +400,261 @@ class AuthSecuritySettingsTests(APITestCase):
             settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["login"],
             "5/5m",
         )
+
+
+class UserInvitationTests(APITestCase):
+    def create_user_with_role(self, username, role, *, is_active=True, password=None):
+        user_model = get_user_model()
+        user = user_model.objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password=password,
+        )
+        user.is_active = is_active
+        if password is None:
+            user.set_unusable_password()
+        user.save(update_fields=["is_active", "password"])
+        user.profile.role = role
+        user.profile.save(update_fields=["role"])
+        return user
+
+    def setUp(self):
+        self.admin_user = self.create_user_with_role(
+            "invite-admin",
+            UserProfile.Role.ADMIN,
+            password="StrongPass123!",
+        )
+        self.technician_user = self.create_user_with_role(
+            "invite-technician",
+            UserProfile.Role.TECHNICIAN,
+            password="StrongPass123!",
+        )
+        self.inactive_user = self.create_user_with_role(
+            "inactive-imported",
+            UserProfile.Role.REQUESTER,
+            is_active=False,
+        )
+
+    def create_invitation(self, user=None, actor=None):
+        self.client.force_authenticate(user=actor or self.admin_user)
+        response = self.client.post(
+            "/api/auth/invitations/",
+            {"user_id": (user or self.inactive_user).id},
+            format="json",
+        )
+        self.client.force_authenticate(user=None)
+        return response
+
+    def token_from_activation_url(self, activation_url):
+        return activation_url.split("token=", 1)[1]
+
+    def test_admin_can_create_invitation_for_inactive_unusable_user(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.create_invitation()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        token = self.token_from_activation_url(response.data["activation_url"])
+        invitation = UserInvitation.objects.get(id=response.data["invitation_id"])
+
+        self.assertNotEqual(invitation.token_hash, token)
+        self.assertEqual(len(invitation.token_hash), 64)
+        self.assertEqual(invitation.status, UserInvitation.Status.PENDING)
+
+        audit_log = AuditLog.objects.filter(
+            entity_type="accounts.UserInvitation",
+            metadata__operation="user_invitation_create",
+        ).first()
+        self.assertIsNotNone(audit_log)
+        self.assertNotIn(token, str(audit_log.metadata))
+
+    def test_non_admin_cannot_create_invitation(self):
+        response = self.create_invitation(actor=self.technician_user)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_cannot_create_invitation_for_active_user(self):
+        response = self.create_invitation(user=self.technician_user)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_creating_new_invitation_revokes_previous_pending(self):
+        first_response = self.create_invitation()
+        second_response = self.create_invitation()
+
+        self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second_response.status_code, status.HTTP_201_CREATED)
+        first_invitation = UserInvitation.objects.get(id=first_response.data["invitation_id"])
+        second_invitation = UserInvitation.objects.get(id=second_response.data["invitation_id"])
+        self.assertEqual(first_invitation.status, UserInvitation.Status.REVOKED)
+        self.assertEqual(second_invitation.status, UserInvitation.Status.PENDING)
+
+    def test_accept_invitation_sets_password_and_activates_user(self):
+        response = self.create_invitation()
+        token = self.token_from_activation_url(response.data["activation_url"])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            accept_response = self.client.post(
+                "/api/auth/invitations/accept/",
+                {
+                    "token": token,
+                    "password": "NewStrongPass123!",
+                    "password_confirm": "NewStrongPass123!",
+                },
+                format="json",
+            )
+
+        self.assertEqual(accept_response.status_code, status.HTTP_200_OK)
+        self.inactive_user.refresh_from_db()
+        self.assertTrue(self.inactive_user.is_active)
+        self.assertTrue(self.inactive_user.has_usable_password())
+        invitation = UserInvitation.objects.get(id=response.data["invitation_id"])
+        self.assertEqual(invitation.status, UserInvitation.Status.ACCEPTED)
+        self.assertIsNotNone(invitation.accepted_at)
+        self.assertTrue(
+            AuditLog.objects.filter(
+                entity_type="accounts.UserInvitation",
+                metadata__operation="user_invitation_accept",
+            ).exists(),
+        )
+
+    def test_accept_invitation_rejects_expired_token(self):
+        response = self.create_invitation()
+        token = self.token_from_activation_url(response.data["activation_url"])
+        invitation = UserInvitation.objects.get(id=response.data["invitation_id"])
+        invitation.expires_at = timezone.now() - timezone.timedelta(minutes=1)
+        invitation.save(update_fields=["expires_at"])
+
+        accept_response = self.client.post(
+            "/api/auth/invitations/accept/",
+            {
+                "token": token,
+                "password": "NewStrongPass123!",
+                "password_confirm": "NewStrongPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(accept_response.status_code, status.HTTP_410_GONE)
+
+    def test_accept_invitation_rejects_reused_token(self):
+        response = self.create_invitation()
+        token = self.token_from_activation_url(response.data["activation_url"])
+        payload = {
+            "token": token,
+            "password": "NewStrongPass123!",
+            "password_confirm": "NewStrongPass123!",
+        }
+
+        first_response = self.client.post("/api/auth/invitations/accept/", payload, format="json")
+        second_response = self.client.post("/api/auth/invitations/accept/", payload, format="json")
+
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_accept_invitation_rejects_invalid_token(self):
+        response = self.client.post(
+            "/api/auth/invitations/accept/",
+            {
+                "token": "invalid-token",
+                "password": "NewStrongPass123!",
+                "password_confirm": "NewStrongPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_accept_invitation_rejects_password_mismatch(self):
+        response = self.create_invitation()
+        token = self.token_from_activation_url(response.data["activation_url"])
+
+        accept_response = self.client.post(
+            "/api/auth/invitations/accept/",
+            {
+                "token": token,
+                "password": "NewStrongPass123!",
+                "password_confirm": "DifferentPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(accept_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_accept_invitation_uses_django_password_validation(self):
+        response = self.create_invitation()
+        token = self.token_from_activation_url(response.data["activation_url"])
+
+        accept_response = self.client.post(
+            "/api/auth/invitations/accept/",
+            {
+                "token": token,
+                "password": "123",
+                "password_confirm": "123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(accept_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", accept_response.data)
+
+    def test_token_hash_only_no_raw_token_in_db_or_audit(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.create_invitation()
+
+        token = self.token_from_activation_url(response.data["activation_url"])
+        self.assertFalse(UserInvitation.objects.filter(token_hash=token).exists())
+        self.assertFalse(AuditLog.objects.filter(metadata__icontains=token).exists())
+
+    def test_revoke_invitation_admin_only_and_rejects_accepted(self):
+        response = self.create_invitation()
+        invitation_id = response.data["invitation_id"]
+
+        self.client.force_authenticate(user=self.technician_user)
+        forbidden_response = self.client.post(
+            f"/api/auth/invitations/{invitation_id}/revoke/",
+            {},
+            format="json",
+        )
+        self.assertEqual(forbidden_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(user=self.admin_user)
+        revoke_response = self.client.post(
+            f"/api/auth/invitations/{invitation_id}/revoke/",
+            {},
+            format="json",
+        )
+        self.assertEqual(revoke_response.status_code, status.HTTP_200_OK)
+
+        accepted_response = self.create_invitation()
+        accepted_id = accepted_response.data["invitation_id"]
+        token = self.token_from_activation_url(accepted_response.data["activation_url"])
+        self.client.force_authenticate(user=None)
+        self.client.post(
+            "/api/auth/invitations/accept/",
+            {
+                "token": token,
+                "password": "NewStrongPass123!",
+                "password_confirm": "NewStrongPass123!",
+            },
+            format="json",
+        )
+        self.client.force_authenticate(user=self.admin_user)
+        accepted_revoke_response = self.client.post(
+            f"/api/auth/invitations/{accepted_id}/revoke/",
+            {},
+            format="json",
+        )
+        self.assertEqual(accepted_revoke_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_imported_inactive_user_can_receive_invitation(self):
+        Employee.objects.create(
+            user=self.inactive_user,
+            full_name="Imported Invite User",
+            email="imported.invite@example.com",
+            imported_from_excel=True,
+        )
+
+        response = self.create_invitation(user=self.inactive_user)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("/activate-account?token=", response.data["activation_url"])

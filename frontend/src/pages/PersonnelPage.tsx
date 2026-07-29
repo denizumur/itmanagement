@@ -1,5 +1,6 @@
 import {
   IconBriefcase,
+  IconCopy,
   IconDeviceLaptop,
   IconDownload,
   IconHistory,
@@ -20,6 +21,7 @@ import {
 import { useMemo, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import type { EmployeeImportDryRunResponse } from "../api/employees";
+import { createUserInvitation } from "../api/accounts";
 import { useAuth } from "../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
@@ -384,16 +386,48 @@ function EmployeeDetailPanel({
   detail,
   isLoading,
   isError,
+  canInviteUsers,
   onClose,
 }: {
   detail?: EmployeeDetailResponse;
   isLoading: boolean;
   isError: boolean;
+  canInviteUsers: boolean;
   onClose: () => void;
 }) {
   const employee = detail?.employee;
   const user = detail?.user;
   const summary = detail?.summary;
+  const [invitationUrl, setInvitationUrl] = useState("");
+  const [invitationError, setInvitationError] = useState("");
+  const [isCreatingInvitation, setIsCreatingInvitation] = useState(false);
+
+  async function handleCreateInvitation() {
+    if (!user) {
+      return;
+    }
+
+    setInvitationError("");
+    setInvitationUrl("");
+    setIsCreatingInvitation(true);
+
+    try {
+      const response = await createUserInvitation(user.id);
+      setInvitationUrl(response.activation_url);
+    } catch {
+      setInvitationError("Davet linki oluşturulamadı.");
+    } finally {
+      setIsCreatingInvitation(false);
+    }
+  }
+
+  async function handleCopyInvitation() {
+    if (!invitationUrl) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(invitationUrl);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-sm">
@@ -481,11 +515,58 @@ function EmployeeDetailPanel({
                     </div>
                   </div>
 
-                  <AuditHistoryLink
-                    entityType="employees.Employee"
-                    entityId={employee.id}
-                  />
+                  <div className="flex flex-col items-end gap-xs">
+                    <AuditHistoryLink
+                      entityType="employees.Employee"
+                      entityId={employee.id}
+                    />
+                    {canInviteUsers && user && !user.is_active ? (
+                      <button
+                        type="button"
+                        onClick={handleCreateInvitation}
+                        disabled={isCreatingInvitation}
+                        className="inline-flex items-center gap-xs rounded-full border border-accent/30 bg-accent-bg px-sm py-xs text-caption font-semibold text-accent transition hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+                      >
+                        <IconShieldCheck size={14} aria-hidden={true} />
+                        {isCreatingInvitation ? "Oluşturuluyor" : "Davet Linki Oluştur"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
+
+                {invitationUrl || invitationError ? (
+                  <div className="border-t border-border-subtle px-md pb-md">
+                    {invitationUrl ? (
+                      <div className="rounded-xl border border-success/30 bg-success-bg p-sm text-caption text-success">
+                        <p className="font-semibold">Davet linki oluşturuldu.</p>
+                        <p className="mt-xs text-text-secondary">
+                          Bu link kullanıcıya güvenli kanaldan iletilmelidir.
+                        </p>
+                        <div className="mt-sm flex gap-xs">
+                          <input
+                            readOnly
+                            value={invitationUrl}
+                            className="min-w-0 flex-1 rounded-lg border border-border bg-surface-0 px-sm py-xs text-text-primary"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCopyInvitation}
+                            className="inline-flex items-center justify-center rounded-lg border border-success/30 bg-surface-0 px-sm text-success transition hover:border-success focus:outline-none focus:ring-2 focus:ring-success/25 motion-reduce:transition-none"
+                            aria-label="Davet linkini kopyala"
+                            title="Davet linkini kopyala"
+                          >
+                            <IconCopy size={16} aria-hidden={true} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    {invitationError ? (
+                      <div className="rounded-xl border border-danger/30 bg-danger/10 p-sm text-caption text-danger">
+                        {invitationError}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </section>
 
               <section className="grid gap-sm sm:grid-cols-2 xl:grid-cols-4">
@@ -1375,6 +1456,7 @@ export function PersonnelPage() {
           detail={employeeDetailQuery.data}
           isLoading={employeeDetailQuery.isLoading}
           isError={employeeDetailQuery.isError}
+          canInviteUsers={user?.role === "admin"}
           onClose={() => setSelectedEmployeeId(null)}
         />
       ) : null}

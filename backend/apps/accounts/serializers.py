@@ -55,3 +55,21 @@ class CurrentUserSerializer(serializers.Serializer):
             return user.profile.role
 
         return None
+
+
+class InvitationCreateSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+
+
+class InvitationAcceptSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+    password_confirm = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password_confirm"]:
+            raise serializers.ValidationError(
+                {"password_confirm": "Şifre tekrarı eşleşmiyor."},
+            )
+
+        return attrs

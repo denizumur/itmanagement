@@ -4,6 +4,7 @@ import { AssetsPage } from "./pages/AssetsPage";
 import { AssignmentsPage } from "./pages/AssignmentsPage";
 import { AuditLogsPage } from "./pages/AuditLogsPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ActivateAccountPage } from "./pages/ActivateAccountPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
@@ -24,6 +25,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/activate-account" element={<ActivateAccountPage />} />
 
       <Route
         element={
