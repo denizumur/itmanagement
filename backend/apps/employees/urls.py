@@ -6,12 +6,18 @@ from apps.employees.views import (
     EmployeeExportAPIView,
     EmployeeImportCommitAPIView,
     EmployeeImportDryRunAPIView,
+    EmployeeImportErrorReportAPIView,
+    EmployeeImportHistoryAPIView,
+    EmployeeImportHistoryDetailAPIView,
     EmployeeListAPIView,
     EmployeeTableListAPIView,
 )
 
 urlpatterns = [
     path("table/", EmployeeTableListAPIView.as_view(), name="employee-table-list"),
+    path("import/history/", EmployeeImportHistoryAPIView.as_view(), name="employee-import-history"),
+    path("import/history/<int:pk>/", EmployeeImportHistoryDetailAPIView.as_view(), name="employee-import-history-detail"),
+    path("import/<str:import_id>/errors.csv/", EmployeeImportErrorReportAPIView.as_view(), name="employee-import-error-report"),
     path("import/dry-run/", EmployeeImportDryRunAPIView.as_view(), name="employee-import-dry-run"),
     path("import/commit/", EmployeeImportCommitAPIView.as_view(), name="employee-import-commit"),
     path("export.xlsx/", EmployeeExcelExportAPIView.as_view(), name="employee-excel-export"),

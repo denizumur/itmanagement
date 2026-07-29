@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class Department(models.Model):
@@ -129,3 +130,55 @@ class Employee(models.Model):
             return f"{self.full_name} - {self.department.name}"
 
         return self.full_name
+
+
+class EmployeeImportJob(models.Model):
+    class Status(models.TextChoices):
+        DRY_RUN = "dry_run", "Dry-run"
+        COMMITTED = "committed", "Committed"
+        FAILED = "failed", "Failed"
+        EXPIRED = "expired", "Expired"
+
+    import_id = models.CharField(max_length=100, unique=True, db_index=True)
+    file_name = models.CharField(max_length=255)
+    file_format = models.CharField(max_length=10)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRY_RUN,
+        db_index=True,
+    )
+    mode = models.CharField(max_length=30, default="create_only")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="employee_import_jobs",
+    )
+    total_rows = models.PositiveIntegerField(default=0)
+    valid_rows = models.PositiveIntegerField(default=0)
+    error_rows = models.PositiveIntegerField(default=0)
+    warning_rows = models.PositiveIntegerField(default=0)
+    created_count = models.PositiveIntegerField(default=0)
+    skipped_count = models.PositiveIntegerField(default=0)
+    created_department_count = models.PositiveIntegerField(default=0)
+    created_job_title_count = models.PositiveIntegerField(default=0)
+    created_user_count = models.PositiveIntegerField(default=0)
+    linked_user_count = models.PositiveIntegerField(default=0)
+    file_size = models.PositiveIntegerField(default=0)
+    unknown_headers = models.JSONField(default=list, blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    committed_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["actor", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.file_name} ({self.status})"

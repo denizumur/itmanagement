@@ -1,10 +1,12 @@
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import {
   commitEmployeeImport,
+  downloadEmployeeImportErrorReport,
   downloadEmployeesExcelExport,
   downloadEmployeesExport,
   dryRunEmployeeImport,
   getEmployeeDetail,
+  getEmployeeImportHistory,
   getEmployeesTable,
 } from "../api/employees";
 import type { TableQueryState } from "../types/table";
@@ -46,5 +48,19 @@ export function useEmployeeImportDryRun() {
 export function useEmployeeImportCommit() {
   return useMutation({
     mutationFn: (importId: string) => commitEmployeeImport(importId),
+  });
+}
+
+export function useEmployeeImportHistory(enabled = true) {
+  return useQuery({
+    queryKey: ["employees", "import-history"],
+    queryFn: () => getEmployeeImportHistory(5),
+    enabled,
+  });
+}
+
+export function useEmployeeImportErrorReport() {
+  return useMutation({
+    mutationFn: (importId: string) => downloadEmployeeImportErrorReport(importId),
   });
 }

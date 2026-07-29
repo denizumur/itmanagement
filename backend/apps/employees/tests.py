@@ -12,7 +12,7 @@ from rest_framework.test import APITestCase
 from apps.accounts.models import UserProfile
 from apps.assignments.models import Assignment
 from apps.audit.models import AuditLog
-from apps.employees.models import Department, Employee, JobTitle
+from apps.employees.models import Department, Employee, EmployeeImportJob, JobTitle
 from apps.employees.views import repair_mojibake_for_export
 from apps.inventory.models import Asset, AssetCategory
 from apps.tickets.models import Ticket
@@ -699,6 +699,409 @@ class EmployeeApiTests(APITestCase):
         self.assertEqual(response.data["valid_rows"], 2)
         self.assertTrue(response.data["rows"][0]["normalized"]["is_active"])
         self.assertFalse(response.data["rows"][1]["normalized"]["is_active"])
+
+    def test_employee_import_history_created_on_dry_run_without_pii(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "E-posta"],
+                ["History Personel", "history.personel@example.com"],
+            ],
+            filename="history-import.xlsx",
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        job = EmployeeImportJob.objects.get(import_id=response.data["import_id"])
+        self.assertEqual(job.status, EmployeeImportJob.Status.DRY_RUN)
+        self.assertEqual(job.file_name, "history-import.xlsx")
+        self.assertEqual(job.total_rows, 1)
+        self.assertNotIn("history.personel@example.com", str(job.summary))
+        self.assertFalse(hasattr(job, "rows"))
+
+    def test_employee_import_history_updated_on_commit(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu"],
+                ["History Commit", "IMP-HISTORY-001"],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        commit_response = self.client.post(
+            "/api/employees/import/commit/",
+            {
+                "import_id": dry_run_response.data["import_id"],
+                "mode": "create_only",
+            },
+            format="json",
+        )
+
+        self.assertEqual(commit_response.status_code, status.HTTP_200_OK)
+        job = EmployeeImportJob.objects.get(import_id=dry_run_response.data["import_id"])
+        self.assertEqual(job.status, EmployeeImportJob.Status.COMMITTED)
+        self.assertEqual(job.created_count, 1)
+        self.assertIsNotNone(job.committed_at)
+
+    def test_employee_import_history_admin_only(self):
+        self.client.force_authenticate(user=self.technician_user)
+
+        response = self.client.get("/api/employees/import/history/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_employee_import_error_report_csv_returns_errors_and_warnings_without_pii(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "E-posta", "Telefon", "Departman"],
+                ["", "secret.person@example.com", "5559998877", "Yeni Rapor Departmanı"],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        response = self.client.get(
+            f"/api/employees/import/{dry_run_response.data['import_id']}/errors.csv/",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.content.startswith(codecs.BOM_UTF8))
+        content = response.content.decode("utf-8-sig")
+        self.assertIn("Satır;Durum;Alan;Mesaj;Değer", content)
+        self.assertIn("Ad Soyad zorunludur.", content)
+        self.assertIn("Commit sırasında yeni master data oluşturulacak.", content)
+        self.assertNotIn("secret.person@example.com", content)
+        self.assertNotIn("5559998877", content)
+
+    def test_employee_import_dry_run_user_action_none_without_user_fields(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad"],
+                ["User None Personel"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["rows"][0]["normalized"]["user_action"], "none")
+
+    def test_employee_import_dry_run_user_action_link_existing_user(self):
+        link_user = self.create_user_with_role("link-user", UserProfile.Role.REQUESTER)
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "User Username", "User Email", "User Role"],
+                ["Link Personel", link_user.username, link_user.email, UserProfile.Role.REQUESTER],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        normalized = response.data["rows"][0]["normalized"]
+        self.assertEqual(normalized["user_action"], "link_existing")
+        self.assertEqual(normalized["user_id"], link_user.id)
+
+    def test_employee_import_dry_run_user_conflict_username_email_different_users(self):
+        username_user = self.create_user_with_role("conflict-username", UserProfile.Role.REQUESTER)
+        email_user = self.create_user_with_role("conflict-email", UserProfile.Role.REQUESTER)
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "User Username", "User Email", "User Role"],
+                ["Conflict Personel", username_user.username, email_user.email, UserProfile.Role.REQUESTER],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["error_rows"], 1)
+        self.assertEqual(response.data["rows"][0]["normalized"]["user_action"], "conflict")
+
+    def test_employee_import_dry_run_user_existing_already_linked_to_other_employee(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "User Username", "User Email", "User Role"],
+                [
+                    "Already Linked",
+                    self.requester_user.username,
+                    self.requester_user.email,
+                    UserProfile.Role.REQUESTER,
+                ],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["error_rows"], 1)
+        self.assertEqual(response.data["rows"][0]["normalized"]["user_action"], "conflict")
+
+    def test_employee_import_dry_run_new_user_requires_role(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "User Username", "User Email"],
+                ["Needs Role", "needs.role", "needs.role@example.com"],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["error_rows"], 1)
+        self.assertEqual(response.data["rows"][0]["normalized"]["user_action"], "invalid")
+
+    def test_employee_import_dry_run_blocks_admin_role_import(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "User Username", "User Email", "User Role"],
+                ["Admin Import", "admin.import", "admin.import@example.com", UserProfile.Role.ADMIN],
+            ],
+        )
+
+        response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["error_rows"], 1)
+        self.assertEqual(response.data["rows"][0]["normalized"]["user_action"], "invalid")
+
+    def test_employee_import_commit_links_existing_user_to_employee(self):
+        link_user = self.create_user_with_role("commit-link-user", UserProfile.Role.REQUESTER)
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "User Username", "User Email", "User Role"],
+                [
+                    "Commit Link",
+                    "IMP-LINK-001",
+                    link_user.username,
+                    link_user.email,
+                    UserProfile.Role.REQUESTER,
+                ],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        commit_response = self.client.post(
+            "/api/employees/import/commit/",
+            {
+                "import_id": dry_run_response.data["import_id"],
+                "mode": "create_only",
+            },
+            format="json",
+        )
+
+        self.assertEqual(commit_response.status_code, status.HTTP_200_OK)
+        employee = Employee.objects.get(employee_code="IMP-LINK-001")
+        self.assertEqual(employee.user, link_user)
+        self.assertEqual(commit_response.data["linked_user_count"], 1)
+
+    def test_employee_import_commit_creates_inactive_user_with_unusable_password(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "User Username", "User Email", "User Role"],
+                [
+                    "New User Import",
+                    "IMP-USER-001",
+                    "new.import.user",
+                    "new.import.user@example.com",
+                    UserProfile.Role.REQUESTER,
+                ],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        commit_response = self.client.post(
+            "/api/employees/import/commit/",
+            {
+                "import_id": dry_run_response.data["import_id"],
+                "mode": "create_only",
+            },
+            format="json",
+        )
+
+        self.assertEqual(commit_response.status_code, status.HTTP_200_OK)
+        user = User.objects.get(username="new.import.user")
+        self.assertFalse(user.is_active)
+        self.assertFalse(user.has_usable_password())
+        self.assertEqual(user.profile.role, UserProfile.Role.REQUESTER)
+        employee = Employee.objects.get(employee_code="IMP-USER-001")
+        self.assertEqual(employee.user, user)
+        self.assertEqual(commit_response.data["created_user_count"], 1)
+
+    def test_employee_import_commit_blocks_when_user_conflict_errors(self):
+        username_user = self.create_user_with_role("block-conflict-username", UserProfile.Role.REQUESTER)
+        email_user = self.create_user_with_role("block-conflict-email", UserProfile.Role.REQUESTER)
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "User Username", "User Email", "User Role"],
+                [
+                    "Blocked Conflict",
+                    "IMP-CONFLICT-001",
+                    username_user.username,
+                    email_user.email,
+                    UserProfile.Role.REQUESTER,
+                ],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        commit_response = self.client.post(
+            "/api/employees/import/commit/",
+            {
+                "import_id": dry_run_response.data["import_id"],
+                "mode": "create_only",
+            },
+            format="json",
+        )
+
+        self.assertEqual(commit_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Employee.objects.filter(employee_code="IMP-CONFLICT-001").exists())
+
+    def test_employee_import_commit_audit_metadata_includes_user_counts_without_pii(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "User Username", "User Email", "User Role"],
+                [
+                    "Audit User Import",
+                    "IMP-AUDIT-USER-001",
+                    "audit.import.user",
+                    "audit.import.user@example.com",
+                    UserProfile.Role.REQUESTER,
+                ],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            commit_response = self.client.post(
+                "/api/employees/import/commit/",
+                {
+                    "import_id": dry_run_response.data["import_id"],
+                    "mode": "create_only",
+                },
+                format="json",
+            )
+
+        self.assertEqual(commit_response.status_code, status.HTTP_200_OK)
+        audit_log = AuditLog.objects.filter(
+            action=AuditLog.Action.CREATE,
+            entity_type="employees.Import",
+            metadata__operation="employee_import_commit",
+            metadata__import_id=dry_run_response.data["import_id"],
+        ).first()
+
+        self.assertIsNotNone(audit_log)
+        metadata = audit_log.metadata
+        self.assertEqual(metadata["created_user_count"], 1)
+        self.assertEqual(metadata["linked_user_count"], 0)
+        self.assertEqual(metadata["inactive_user_created_count"], 1)
+        self.assertNotIn("audit.import.user@example.com", str(metadata))
+
+    def test_employee_import_commit_idempotency_no_duplicate_users(self):
+        self.client.force_authenticate(user=self.admin_user)
+        upload = self.create_import_upload(
+            [
+                ["Ad Soyad", "Personel Kodu", "User Username", "User Email", "User Role"],
+                [
+                    "Idempotent User",
+                    "IMP-IDEMP-001",
+                    "idempotent.user",
+                    "idempotent.user@example.com",
+                    UserProfile.Role.REQUESTER,
+                ],
+            ],
+        )
+
+        dry_run_response = self.client.post(
+            "/api/employees/import/dry-run/",
+            {"file": upload},
+            format="multipart",
+        )
+        first_response = self.client.post(
+            "/api/employees/import/commit/",
+            {
+                "import_id": dry_run_response.data["import_id"],
+                "mode": "create_only",
+            },
+            format="json",
+        )
+        second_response = self.client.post(
+            "/api/employees/import/commit/",
+            {
+                "import_id": dry_run_response.data["import_id"],
+                "mode": "create_only",
+            },
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(User.objects.filter(username="idempotent.user").count(), 1)
 
     def test_repair_mojibake_for_export_handles_mixed_latin1_cp1252_turkish_text(self):
         self.assertEqual(

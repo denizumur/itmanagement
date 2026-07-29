@@ -14,6 +14,7 @@ const EMPLOYEES_EXPORT_ENDPOINT = "/api/employees/export/";
 const EMPLOYEES_EXCEL_EXPORT_ENDPOINT = "/api/employees/export.xlsx/";
 const EMPLOYEES_IMPORT_DRY_RUN_ENDPOINT = "/api/employees/import/dry-run/";
 const EMPLOYEES_IMPORT_COMMIT_ENDPOINT = "/api/employees/import/commit/";
+const EMPLOYEES_IMPORT_HISTORY_ENDPOINT = "/api/employees/import/history/";
 
 export type EmployeeImportRow = {
   row_number: number;
@@ -36,6 +37,13 @@ export type EmployeeImportDryRunResponse = {
     creates: number;
     updates: number;
     skipped: number;
+    user_actions?: {
+      none: number;
+      link_existing: number;
+      create_new: number;
+      conflict: number;
+      invalid: number;
+    };
   };
 };
 
@@ -48,6 +56,26 @@ export type EmployeeImportCommitResponse = {
   warning_count: number;
   created_department_count: number;
   created_job_title_count: number;
+  created_user_count: number;
+  linked_user_count: number;
+};
+
+export type EmployeeImportHistoryItem = {
+  id: number;
+  import_id: string;
+  file_name: string;
+  file_format: string;
+  status: string;
+  mode: string;
+  actor: string;
+  total_rows: number;
+  valid_rows: number;
+  error_rows: number;
+  warning_rows: number;
+  created_count: number;
+  created_user_count: number;
+  linked_user_count: number;
+  created_at: string | null;
 };
 
 function extractResults<T>(responseData: T[] | PaginatedEmployeeResponse<T>) {
@@ -183,4 +211,26 @@ export async function commitEmployeeImport(importId: string) {
   );
 
   return response.data;
+}
+
+export async function getEmployeeImportHistory(limit = 5) {
+  const response = await api.get<EmployeeImportHistoryItem[]>(
+    EMPLOYEES_IMPORT_HISTORY_ENDPOINT,
+    {
+      params: { limit },
+    }
+  );
+
+  return response.data;
+}
+
+export async function downloadEmployeeImportErrorReport(importId: string) {
+  const response = await api.get<Blob>(
+    `/api/employees/import/${importId}/errors.csv/`,
+    {
+      responseType: "blob",
+    }
+  );
+
+  triggerFileDownload(response.data, `employee-import-errors-${importId}.csv`);
 }

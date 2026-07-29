@@ -3,11 +3,14 @@ import re
 import unicodedata
 from io import BytesIO, StringIO
 
+from django.contrib.auth import get_user_model
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 
 from apps.accounts.models import UserProfile
 from apps.employees.models import Department, Employee, JobTitle
+
+User = get_user_model()
 
 
 FIELD_HEADERS = {
@@ -35,6 +38,7 @@ MAX_LENGTHS = {
 }
 
 ALLOWED_ROLES = {choice.value for choice in UserProfile.Role}
+IMPORT_CREATABLE_ROLES = ALLOWED_ROLES - {UserProfile.Role.ADMIN}
 ALLOWED_SYNC_SOURCES = {choice.value for choice in Employee.SyncSource}
 MOJIBAKE_MARKERS = ("Ã", "Ä", "Å", "Â", "�")
 
@@ -104,6 +108,149 @@ def validate_email_value(value, field_label, errors):
         validate_email(value)
     except ValidationError:
         errors.append({"field": field_label, "message": "Geçerli bir e-posta girin."})
+
+
+def profile_role(user):
+    profile = getattr(user, "profile", None)
+    return getattr(profile, "role", "")
+
+
+def user_linked_employee(user):
+    try:
+        return user.employee_profile
+    except Employee.DoesNotExist:
+        return None
+
+
+def analyze_user_action(normalized, errors, warnings):
+    username = normalized.get("user_username", "").strip()
+    user_email = normalized.get("user_email", "").strip()
+    role = normalized.get("user_role", "").strip()
+
+    user_info = {
+        "action": "none",
+        "label": "Kullanıcı yok",
+        "role": role,
+        "message": "",
+    }
+
+    if not username and not user_email:
+        normalized["user_action"] = user_info["action"]
+        normalized["user_action_label"] = user_info["label"]
+        normalized["user_info"] = user_info
+        return user_info
+
+    if role == UserProfile.Role.ADMIN:
+        user_info.update(
+            {
+                "action": "invalid",
+                "label": "Admin rolü engellendi",
+                "message": "Import ile admin kullanıcı oluşturulamaz veya bağlanamaz.",
+            },
+        )
+        errors.append({"field": "user_role", "message": user_info["message"]})
+        normalized["user_action"] = user_info["action"]
+        normalized["user_action_label"] = user_info["label"]
+        normalized["user_info"] = user_info
+        return user_info
+
+    username_user = User.objects.filter(username=username).first() if username else None
+    email_users = list(User.objects.filter(email=user_email)) if user_email else []
+    email_user = email_users[0] if len(email_users) == 1 else None
+
+    if len(email_users) > 1:
+        user_info.update(
+            {
+                "action": "conflict",
+                "label": "Kullanıcı çakışması",
+                "message": "User email birden fazla kullanıcıyla eşleşiyor.",
+            },
+        )
+        errors.append({"field": "user_email", "message": user_info["message"]})
+    elif username_user and email_user and username_user.id != email_user.id:
+        user_info.update(
+            {
+                "action": "conflict",
+                "label": "Kullanıcı çakışması",
+                "message": "Kullanıcı adı ve user email farklı kullanıcılarla eşleşiyor.",
+            },
+        )
+        errors.append({"field": "user_username", "message": user_info["message"]})
+    else:
+        existing_user = username_user or email_user
+        if existing_user:
+            linked_employee = user_linked_employee(existing_user)
+            if linked_employee:
+                user_info.update(
+                    {
+                        "action": "conflict",
+                        "label": "Kullanıcı çakışması",
+                        "message": "Mevcut kullanıcı başka bir personel kaydına bağlı.",
+                    },
+                )
+                errors.append({"field": "user_username", "message": user_info["message"]})
+            elif role and profile_role(existing_user) != role:
+                user_info.update(
+                    {
+                        "action": "conflict",
+                        "label": "Rol çakışması",
+                        "message": "Mevcut kullanıcı rolü import rolüyle eşleşmiyor.",
+                    },
+                )
+                errors.append({"field": "user_role", "message": user_info["message"]})
+            else:
+                user_info.update(
+                    {
+                        "action": "link_existing",
+                        "label": "Mevcut kullanıcı bağlanacak",
+                        "role": profile_role(existing_user) or role,
+                        "message": "Mevcut kullanıcı personel kaydına bağlanacak.",
+                    },
+                )
+                normalized["user_id"] = existing_user.id
+                warnings.append({"field": "user_username", "message": user_info["message"]})
+        elif username and user_email:
+            if not role:
+                user_info.update(
+                    {
+                        "action": "invalid",
+                        "label": "Rol gerekli",
+                        "message": "Yeni kullanıcı oluşturmak için user_role zorunludur.",
+                    },
+                )
+                errors.append({"field": "user_role", "message": user_info["message"]})
+            elif role not in IMPORT_CREATABLE_ROLES:
+                user_info.update(
+                    {
+                        "action": "invalid",
+                        "label": "Rol engellendi",
+                        "message": "Bu rol import ile oluşturulamaz.",
+                    },
+                )
+                errors.append({"field": "user_role", "message": user_info["message"]})
+            else:
+                user_info.update(
+                    {
+                        "action": "create_new",
+                        "label": "Yeni pasif kullanıcı oluşturulacak",
+                        "message": "Yeni pasif kullanıcı oluşturulacak; aktivasyon P7c/N6 kapsamındadır.",
+                    },
+                )
+                warnings.append({"field": "user_username", "message": user_info["message"]})
+        else:
+            user_info.update(
+                {
+                    "action": "none",
+                    "label": "Kullanıcı yok",
+                    "message": "Kullanıcı bağlamak için user_username ve user_email birlikte gerekir.",
+                },
+            )
+            warnings.append({"field": "user_username", "message": user_info["message"]})
+
+    normalized["user_action"] = user_info["action"]
+    normalized["user_action_label"] = user_info["label"]
+    normalized["user_info"] = user_info
+    return user_info
 
 
 def parse_csv_upload(uploaded_file):
@@ -217,14 +364,6 @@ def parse_employee_import(uploaded_file):
         if not full_name:
             errors.append({"field": "full_name", "message": "Ad Soyad zorunludur."})
 
-        if normalized.get("user_username"):
-            warnings.append(
-                {
-                    "field": "user_username",
-                    "message": "Kullanıcı hesabı bağlama P7b kapsamındadır.",
-                },
-            )
-
         for field, max_length in MAX_LENGTHS.items():
             if len(normalized.get(field, "")) > max_length:
                 errors.append({"field": field, "message": f"Maksimum {max_length} karakter olmalı."})
@@ -243,6 +382,8 @@ def parse_employee_import(uploaded_file):
         role = normalized.get("user_role", "")
         if role and role not in ALLOWED_ROLES:
             errors.append({"field": "user_role", "message": "Bilinmeyen rol."})
+
+        analyze_user_action(normalized, errors, warnings)
 
         sync_source = normalized.get("sync_source", "") or Employee.SyncSource.EXCEL
         if sync_source not in ALLOWED_SYNC_SOURCES:
@@ -293,6 +434,13 @@ def parse_employee_import(uploaded_file):
     error_rows = sum(1 for row in rows if row["errors"])
     warning_rows = sum(1 for row in rows if row["warnings"])
     valid_rows = sum(1 for row in rows if not row["errors"])
+    user_action_counts = {
+        "none": sum(1 for row in rows if row["normalized"].get("user_action") == "none"),
+        "link_existing": sum(1 for row in rows if row["normalized"].get("user_action") == "link_existing"),
+        "create_new": sum(1 for row in rows if row["normalized"].get("user_action") == "create_new"),
+        "conflict": sum(1 for row in rows if row["normalized"].get("user_action") == "conflict"),
+        "invalid": sum(1 for row in rows if row["normalized"].get("user_action") == "invalid"),
+    }
     return {
         "file_name": file_name,
         "format": extension,
@@ -305,5 +453,10 @@ def parse_employee_import(uploaded_file):
         "unknown_headers": unknown_headers,
         "rows": rows[:100],
         "commit_rows": [row["normalized"] for row in rows if not row["errors"]],
-        "summary": {"creates": valid_rows, "updates": 0, "skipped": error_rows},
+        "summary": {
+            "creates": valid_rows,
+            "updates": 0,
+            "skipped": error_rows,
+            "user_actions": user_action_counts,
+        },
     }

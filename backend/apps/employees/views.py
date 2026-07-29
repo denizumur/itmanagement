@@ -2,6 +2,7 @@ import csv
 from uuid import uuid4
 from io import BytesIO, StringIO
 
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
@@ -14,13 +15,14 @@ from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import UserProfile
 from apps.accounts.permissions import IsAdminRole, IsTechnicianOrAdminRole, IsViewerOrAboveRole
 from apps.audit.models import AuditLog
 from apps.audit.services import create_audit_log
 from apps.common.pagination import StandardResultsPagination
 from apps.employees.filters import EmployeeFilterSet
 from apps.employees.importing import parse_employee_import
-from apps.employees.models import Department, Employee, JobTitle
+from apps.employees.models import Department, Employee, EmployeeImportJob, JobTitle
 from apps.employees.serializers import EmployeeDetailSerializer, EmployeeListSerializer
 
 
@@ -53,6 +55,8 @@ EMPLOYEE_ORDERING_FIELDS = [
 
 EMPLOYEE_IMPORT_CACHE_TTL_SECONDS = 30 * 60
 EMPLOYEE_IMPORT_CACHE_PREFIX = "employees_import:"
+EMPLOYEE_IMPORT_ERROR_REPORT_FIELDS_TO_MASK = {"email", "user_email", "phone"}
+User = get_user_model()
 
 
 MOJIBAKE_MARKERS = (
@@ -523,6 +527,137 @@ class EmployeeExcelExportAPIView(APIView):
         return apply_export_response_headers(response, filename)
 
 
+def employee_import_job_response(job):
+    actor = job.actor
+    return {
+        "id": job.id,
+        "import_id": job.import_id,
+        "file_name": job.file_name,
+        "file_format": job.file_format,
+        "status": job.status,
+        "mode": job.mode,
+        "actor": actor.username if actor else "",
+        "total_rows": job.total_rows,
+        "valid_rows": job.valid_rows,
+        "error_rows": job.error_rows,
+        "warning_rows": job.warning_rows,
+        "created_count": job.created_count,
+        "skipped_count": job.skipped_count,
+        "created_department_count": job.created_department_count,
+        "created_job_title_count": job.created_job_title_count,
+        "created_user_count": job.created_user_count,
+        "linked_user_count": job.linked_user_count,
+        "file_size": job.file_size,
+        "unknown_headers": job.unknown_headers,
+        "summary": job.summary,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "committed_at": job.committed_at.isoformat() if job.committed_at else None,
+        "expires_at": job.expires_at.isoformat() if job.expires_at else None,
+    }
+
+
+def get_cached_import(import_id):
+    return cache.get(f"{EMPLOYEE_IMPORT_CACHE_PREFIX}{import_id}")
+
+
+def masked_report_value(field, value):
+    value = str(value or "")
+    if field in EMPLOYEE_IMPORT_ERROR_REPORT_FIELDS_TO_MASK:
+        return ""
+    if len(value) > 80:
+        return f"{value[:77]}..."
+    return value
+
+
+def resolve_import_user(row):
+    action = row.get("user_action")
+    if action == "link_existing":
+        user_id = row.get("user_id")
+        if user_id:
+            return User.objects.get(id=user_id), False
+
+        username = row.get("user_username", "")
+        user_email = row.get("user_email", "")
+        return (
+            User.objects.filter(Q(username=username) | Q(email=user_email)).first(),
+            False,
+        )
+
+    if action == "create_new":
+        user = User(
+            username=row["user_username"],
+            email=row["user_email"],
+            is_active=False,
+        )
+        user.set_unusable_password()
+        user.save()
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.role = row["user_role"]
+        profile.save(update_fields=["role"])
+        return user, True
+
+    return None, False
+
+
+class EmployeeImportHistoryAPIView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        limit = min(int(request.query_params.get("limit", 20)), 100)
+        jobs = EmployeeImportJob.objects.select_related("actor").order_by("-created_at")[:limit]
+        return Response([employee_import_job_response(job) for job in jobs])
+
+
+class EmployeeImportHistoryDetailAPIView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def get(self, request, pk):
+        try:
+            job = EmployeeImportJob.objects.select_related("actor").get(pk=pk)
+        except EmployeeImportJob.DoesNotExist:
+            return Response({"detail": "Import geçmişi bulunamadı."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(employee_import_job_response(job))
+
+
+class EmployeeImportErrorReportAPIView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def get(self, request, import_id):
+        cached = get_cached_import(import_id)
+        if not cached:
+            return Response(
+                {"detail": "Import sonucu bulunamadı veya süresi doldu."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        csv_buffer = StringIO(newline="")
+        writer = csv.writer(csv_buffer, delimiter=";")
+        writer.writerow(["Satır", "Durum", "Alan", "Mesaj", "Değer"])
+
+        for row in cached.get("rows", []):
+            normalized = row.get("normalized", {})
+            for item_type, items in (("Hata", row.get("errors", [])), ("Uyarı", row.get("warnings", []))):
+                for item in items:
+                    field = item.get("field", "")
+                    writer.writerow(
+                        [
+                            row.get("row_number", ""),
+                            item_type,
+                            field,
+                            item.get("message", ""),
+                            masked_report_value(field, normalized.get(field, "")),
+                        ],
+                    )
+
+        csv_bytes = csv_buffer.getvalue().encode("utf-8-sig")
+        response = HttpResponse(csv_bytes, content_type="text/csv; charset=utf-8")
+        return apply_export_response_headers(
+            response,
+            f"employee-import-errors-{import_id}.csv",
+        )
+
+
 class EmployeeImportDryRunAPIView(APIView):
     permission_classes = [IsAdminRole]
 
@@ -541,6 +676,26 @@ class EmployeeImportDryRunAPIView(APIView):
 
         import_id = str(uuid4())
         parsed["import_id"] = import_id
+        expires_at = timezone.now() + timezone.timedelta(
+            seconds=EMPLOYEE_IMPORT_CACHE_TTL_SECONDS,
+        )
+        job = EmployeeImportJob.objects.create(
+            import_id=import_id,
+            file_name=parsed["file_name"],
+            file_format=parsed["format"],
+            status=EmployeeImportJob.Status.DRY_RUN,
+            actor=request.user if request.user.is_authenticated else None,
+            total_rows=parsed["total_rows"],
+            valid_rows=parsed["valid_rows"],
+            error_rows=parsed["error_rows"],
+            warning_rows=parsed["warning_rows"],
+            skipped_count=parsed["error_rows"],
+            file_size=getattr(uploaded_file, "size", 0) or 0,
+            unknown_headers=parsed.get("unknown_headers", []),
+            summary=parsed.get("summary", {}),
+            expires_at=expires_at,
+        )
+        parsed["job_id"] = job.id
         cache.set(
             f"{EMPLOYEE_IMPORT_CACHE_PREFIX}{import_id}",
             {**parsed, "committed": False},
@@ -564,7 +719,7 @@ class EmployeeImportCommitAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        cached = cache.get(f"{EMPLOYEE_IMPORT_CACHE_PREFIX}{import_id}")
+        cached = get_cached_import(import_id)
         if not cached:
             return Response(
                 {"detail": "Import sonucu bulunamadı veya süresi doldu."},
@@ -585,6 +740,8 @@ class EmployeeImportCommitAPIView(APIView):
 
         created_departments = 0
         created_job_titles = 0
+        created_users = 0
+        linked_users = 0
         created_employees = []
 
         with transaction.atomic():
@@ -608,6 +765,29 @@ class EmployeeImportCommitAPIView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
+                if row.get("user_action") == "create_new":
+                    if User.objects.filter(
+                        Q(username=row.get("user_username", ""))
+                        | Q(email=row.get("user_email", ""))
+                    ).exists():
+                        transaction.set_rollback(True)
+                        return Response(
+                            {"detail": "Commit sırasında kullanıcı duplicate tespit edildi."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                linked_user, was_created = resolve_import_user(row)
+                if linked_user and Employee.objects.filter(user=linked_user).exists():
+                    transaction.set_rollback(True)
+                    return Response(
+                        {"detail": "Commit sırasında kullanıcı zaten bağlı görünüyor."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if was_created:
+                    created_users += 1
+                elif linked_user:
+                    linked_users += 1
+
                 department = None
                 if row.get("department_name"):
                     department, created = Department.objects.get_or_create(
@@ -623,6 +803,7 @@ class EmployeeImportCommitAPIView(APIView):
                     created_job_titles += int(created)
 
                 employee = Employee.objects.create(
+                    user=linked_user,
                     full_name=row["full_name"],
                     employee_code=employee_code,
                     email=email,
@@ -658,6 +839,36 @@ class EmployeeImportCommitAPIView(APIView):
                     "warning_count": cached.get("warning_rows"),
                     "created_department_count": created_departments,
                     "created_job_title_count": created_job_titles,
+                    "created_user_count": created_users,
+                    "linked_user_count": linked_users,
+                    "user_conflict_count": cached.get("summary", {}).get("user_actions", {}).get("conflict", 0),
+                    "inactive_user_created_count": created_users,
+                    "admin_role_blocked_count": sum(
+                        1
+                        for row in cached.get("rows", [])
+                        for error in row.get("errors", [])
+                        if error.get("field") == "user_role"
+                        and "admin" in error.get("message", "").lower()
+                    ),
+                },
+            )
+
+            EmployeeImportJob.objects.filter(import_id=import_id).update(
+                status=EmployeeImportJob.Status.COMMITTED,
+                committed_at=timezone.now(),
+                created_count=len(created_employees),
+                skipped_count=0,
+                created_department_count=created_departments,
+                created_job_title_count=created_job_titles,
+                created_user_count=created_users,
+                linked_user_count=linked_users,
+                summary={
+                    **cached.get("summary", {}),
+                    "commit": {
+                        "created_count": len(created_employees),
+                        "created_user_count": created_users,
+                        "linked_user_count": linked_users,
+                    },
                 },
             )
 
@@ -677,6 +888,8 @@ class EmployeeImportCommitAPIView(APIView):
                 "warning_count": cached.get("warning_rows", 0),
                 "created_department_count": created_departments,
                 "created_job_title_count": created_job_titles,
+                "created_user_count": created_users,
+                "linked_user_count": linked_users,
             },
             status=status.HTTP_200_OK,
         )

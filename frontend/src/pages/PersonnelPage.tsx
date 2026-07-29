@@ -29,6 +29,8 @@ import { AuditHistoryLink } from "../components/audit/AuditHistoryLink";
 import {
   useEmployeeImportCommit,
   useEmployeeImportDryRun,
+  useEmployeeImportErrorReport,
+  useEmployeeImportHistory,
   useEmployeeDetail,
   useEmployeeExport,
   useEmployeeTable,
@@ -807,6 +809,8 @@ export function PersonnelPage() {
   const employeeExportMutation = useEmployeeExport();
   const employeeImportDryRunMutation = useEmployeeImportDryRun();
   const employeeImportCommitMutation = useEmployeeImportCommit();
+  const employeeImportErrorReportMutation = useEmployeeImportErrorReport();
+  const employeeImportHistoryQuery = useEmployeeImportHistory(userCanImport);
 
   const data = employeesQuery.data;
   const employees = data?.results ?? [];
@@ -902,6 +906,7 @@ export function PersonnelPage() {
     try {
       const preview = await employeeImportDryRunMutation.mutateAsync(importFile);
       setImportPreview(preview);
+      employeeImportHistoryQuery.refetch();
     } catch {
       setImportPreview(null);
       setImportError("Import ön kontrolü tamamlanamadı. Dosyayı ve yetkini kontrol et.");
@@ -927,8 +932,21 @@ export function PersonnelPage() {
       setImportFile(null);
       setImportPreview(null);
       refetchAll();
+      employeeImportHistoryQuery.refetch();
     } catch {
       setImportError("Import commit tamamlanamadı. Preview süresi veya veri çakışmalarını kontrol et.");
+    }
+  }
+
+  async function handleImportErrorReportDownload() {
+    if (!importPreview) {
+      return;
+    }
+
+    try {
+      await employeeImportErrorReportMutation.mutateAsync(importPreview.import_id);
+    } catch {
+      setImportError("Hata raporu indirilemedi. Preview süresi dolmuş olabilir.");
     }
   }
 
@@ -1171,6 +1189,24 @@ export function PersonnelPage() {
                   <MiniMetricCard label="Geçerli" value={importPreview.valid_rows} tone="success" />
                   <MiniMetricCard label="Uyarı" value={importPreview.warning_rows} tone="warning" />
                   <MiniMetricCard label="Hata" value={importPreview.error_rows} tone="danger" />
+                  <MiniMetricCard
+                    label="User oluştur"
+                    value={importPreview.summary.user_actions?.create_new ?? 0}
+                    tone="accent"
+                  />
+                  <MiniMetricCard
+                    label="User bağla"
+                    value={importPreview.summary.user_actions?.link_existing ?? 0}
+                    tone="success"
+                  />
+                  <MiniMetricCard
+                    label="User çakışma"
+                    value={
+                      (importPreview.summary.user_actions?.conflict ?? 0) +
+                      (importPreview.summary.user_actions?.invalid ?? 0)
+                    }
+                    tone="danger"
+                  />
                 </div>
               ) : null}
             </div>
@@ -1186,9 +1222,22 @@ export function PersonnelPage() {
                       {importPreview.file_name} · {importPreview.format.toLocaleUpperCase("tr-TR")}
                     </p>
                   </div>
-                  <span className="rounded-full border border-border bg-surface-2 px-sm py-xs text-caption text-text-secondary">
-                    Create-only · Upsert yok
-                  </span>
+                  <div className="flex flex-wrap gap-xs">
+                    {(importPreview.error_rows > 0 || importPreview.warning_rows > 0) ? (
+                      <button
+                        type="button"
+                        onClick={handleImportErrorReportDownload}
+                        disabled={employeeImportErrorReportMutation.isPending}
+                        className="inline-flex items-center gap-xs rounded-full border border-warning/30 bg-warning-bg px-sm py-xs text-caption font-semibold text-warning transition hover:border-warning focus:outline-none focus:ring-2 focus:ring-warning/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+                      >
+                        <IconDownload size={14} aria-hidden={true} />
+                        Hata Raporu İndir
+                      </button>
+                    ) : null}
+                    <span className="rounded-full border border-border bg-surface-2 px-sm py-xs text-caption text-text-secondary">
+                      Create-only · Upsert yok
+                    </span>
+                  </div>
                 </div>
 
                 <div className="max-h-72 overflow-auto">
@@ -1199,6 +1248,8 @@ export function PersonnelPage() {
                         <th className="px-md py-xs font-semibold">Durum</th>
                         <th className="px-md py-xs font-semibold">Ad Soyad</th>
                         <th className="px-md py-xs font-semibold">E-posta</th>
+                        <th className="px-md py-xs font-semibold">User Action</th>
+                        <th className="px-md py-xs font-semibold">Rol</th>
                         <th className="px-md py-xs font-semibold">Mesaj</th>
                       </tr>
                     </thead>
@@ -1232,6 +1283,12 @@ export function PersonnelPage() {
                             <td className="px-md py-sm text-text-secondary">
                               {String(row.normalized.email ?? "-")}
                             </td>
+                            <td className="px-md py-sm text-text-secondary">
+                              {String(row.normalized.user_action_label ?? "Kullanıcı yok")}
+                            </td>
+                            <td className="px-md py-sm text-text-secondary">
+                              {String(row.normalized.user_role ?? "-")}
+                            </td>
                             <td className="max-w-[360px] px-md py-sm text-text-secondary">
                               {messages || "-"}
                             </td>
@@ -1240,6 +1297,41 @@ export function PersonnelPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            ) : null}
+
+            {employeeImportHistoryQuery.data?.length ? (
+              <div className="mt-md rounded-xl border border-border-subtle bg-surface-0/70 px-md py-sm">
+                <div className="mb-sm flex items-center justify-between gap-sm">
+                  <p className="text-body font-semibold text-text-primary">
+                    Son Importlar
+                  </p>
+                  <span className="text-caption text-text-secondary">
+                    Son {employeeImportHistoryQuery.data.length} kayıt
+                  </span>
+                </div>
+                <div className="grid gap-xs lg:grid-cols-5">
+                  {employeeImportHistoryQuery.data.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-border-subtle bg-surface-1/75 p-sm"
+                    >
+                      <p className="truncate text-caption font-semibold text-text-primary">
+                        {item.file_name}
+                      </p>
+                      <p className="mt-xs text-caption text-text-secondary">
+                        {item.status} · {item.total_rows} satır
+                      </p>
+                      <p className="mt-xs text-caption text-text-secondary">
+                        Oluşan: {item.created_count} · User:{" "}
+                        {item.created_user_count + item.linked_user_count}
+                      </p>
+                      <p className="mt-xs truncate text-caption text-text-muted">
+                        {item.actor || "Sistem"} · {formatDateTime(item.created_at)}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : null}
