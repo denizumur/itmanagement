@@ -257,6 +257,7 @@ export function LoginPage() {
               />
               <input
                 id="username"
+                data-testid="login-username"
                 className="min-w-0 flex-1 bg-transparent text-text-primary placeholder:text-text-secondary focus:outline-none"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
@@ -282,6 +283,7 @@ export function LoginPage() {
               />
               <input
                 id="password"
+                data-testid="login-password"
                 type="password"
                 className="min-w-0 flex-1 bg-transparent text-text-primary placeholder:text-text-secondary focus:outline-none"
                 value={password}
@@ -316,6 +318,7 @@ export function LoginPage() {
 
           <motion.button
             type="submit"
+            data-testid="login-submit"
             className="login-primary-button mt-lg flex w-full items-center justify-center gap-sm rounded-app px-md py-md text-body font-medium text-surface-1"
             onMouseDown={handleButtonMouseDown}
             whileTap={{

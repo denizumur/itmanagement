@@ -35,7 +35,7 @@ export function AppShell({ children, reminderCount = 0 }: AppShellProps) {
   }
 
   return (
-    <div className="app-bg min-h-screen text-text-primary">
+    <div className="app-bg min-h-screen text-text-primary" data-testid="app-shell">
       <div className="flex min-h-screen">
         <Sidebar
           collapsed={sidebarCollapsed}

@@ -1246,7 +1246,10 @@ export function TicketsQueuePage() {
           </div>
         </section>
 
-        <section className="mt-lg grid min-h-[calc(100vh-310px)] gap-lg xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)_260px]">
+        <section
+          className="mt-lg grid min-h-[calc(100vh-310px)] gap-lg xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)_260px]"
+          data-testid="ticket-inbox"
+        >
           <div className="min-h-0">
             <TicketInboxList
               tickets={tickets}

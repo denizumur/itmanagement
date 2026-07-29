@@ -30,7 +30,7 @@ export function SimplePortalShell({
     "Kullanıcı";
 
   return (
-    <div className="app-bg min-h-screen text-text-primary">
+    <div className="app-bg min-h-screen text-text-primary" data-testid="portal-shell">
       <header className="sticky top-0 z-30 border-b border-border-subtle bg-surface-1/90 px-md py-sm backdrop-blur md:px-lg">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-md">
           <div className="flex min-w-0 items-center gap-sm">
