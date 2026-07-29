@@ -113,6 +113,28 @@ DATABASES = {
     }
 }
 
+
+def build_default_cache_config(cache_url):
+    if cache_url:
+        return {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": cache_url,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            },
+        }
+
+    return {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "it-inventory-local-cache",
+    }
+
+
+CACHE_URL = env("REDIS_URL", default=env("CACHE_URL", default=None))
+CACHES = {
+    "default": build_default_cache_config(CACHE_URL),
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
