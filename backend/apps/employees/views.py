@@ -5,9 +5,6 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
-from openpyxl.utils import get_column_letter
 from rest_framework import status
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import ListAPIView, RetrieveAPIView
@@ -436,6 +433,21 @@ class EmployeeExcelExportAPIView(APIView):
     permission_classes = [IsTechnicianOrAdminRole]
 
     def get(self, request):
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill
+            from openpyxl.utils import get_column_letter
+        except ModuleNotFoundError:
+            return Response(
+                {
+                    "detail": (
+                        "Excel export dependency is not available. "
+                        "Please try again later."
+                    ),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         queryset, errors = get_filtered_employee_queryset_for_export(request)
 
         if errors:
