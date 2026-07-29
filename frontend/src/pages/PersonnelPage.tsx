@@ -851,7 +851,7 @@ export function PersonnelPage() {
 
       setToast({
         type: "success",
-        message: "Personel export dosyası indirildi.",
+        message: "Personel Excel dosyası indirildi.",
       });
     } catch {
       setToast({
@@ -984,7 +984,9 @@ export function PersonnelPage() {
                   className="inline-flex min-h-10 items-center justify-center gap-xs rounded-xl border border-accent/30 bg-accent-bg px-md py-xs text-body font-medium text-accent shadow-sm transition hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
                 >
                   <IconDownload size={16} aria-hidden={true} />
-                  {employeeExportMutation.isPending ? "Hazırlanıyor" : "CSV"}
+                  {employeeExportMutation.isPending
+                    ? "Hazırlanıyor"
+                    : "Excel'e Aktar"}
                 </button>
               ) : null}
 

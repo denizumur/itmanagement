@@ -1,10 +1,13 @@
 import csv
-from io import StringIO
+from io import BytesIO, StringIO
 
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 from rest_framework import status
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import ListAPIView, RetrieveAPIView
@@ -46,6 +49,22 @@ EMPLOYEE_ORDERING_FIELDS = [
     "manager__full_name",
     "user__username",
 ]
+
+
+MOJIBAKE_MARKERS = (
+    "\u00c3",
+    "\u00c4",
+    "\u00c5",
+    "\u00c2",
+    "\u00c3\u0192",
+    "\u00c3\u201e",
+    "\u00c3\u2026",
+    "\u00c3\u201a",
+    "\u00c5\u201c",
+    "\u00c5\u00b8",
+    "\x9c",
+    "\x9e",
+)
 
 
 def employee_base_queryset():
@@ -156,6 +175,171 @@ def user_role(employee):
     return profile.role
 
 
+def looks_like_mojibake(value):
+    return any(marker in value for marker in MOJIBAKE_MARKERS)
+
+
+def encode_mojibake_bytes(value):
+    repaired_bytes = bytearray()
+
+    for character in value:
+        codepoint = ord(character)
+
+        if codepoint <= 255:
+            repaired_bytes.append(codepoint)
+            continue
+
+        try:
+            repaired_bytes.extend(character.encode("cp1252"))
+        except UnicodeError:
+            return None
+
+    return bytes(repaired_bytes)
+
+
+def repair_mojibake_for_export(value):
+    if not isinstance(value, str):
+        return value
+
+    if not looks_like_mojibake(value):
+        return value
+
+    repaired = value
+
+    for _ in range(4):
+        candidates = []
+
+        for encoding in ("latin1", "cp1252"):
+            try:
+                candidates.append(repaired.encode(encoding).decode("utf-8"))
+            except UnicodeError:
+                continue
+
+        mojibake_bytes = encode_mojibake_bytes(repaired)
+
+        if mojibake_bytes is not None:
+            try:
+                candidates.append(mojibake_bytes.decode("utf-8"))
+            except UnicodeError:
+                pass
+
+        current_marker_count = sum(
+            repaired.count(marker) for marker in MOJIBAKE_MARKERS
+        )
+
+        for candidate in candidates:
+            candidate_marker_count = sum(
+                candidate.count(marker) for marker in MOJIBAKE_MARKERS
+            )
+
+            if candidate == repaired or candidate_marker_count >= current_marker_count:
+                continue
+
+            repaired = candidate
+            break
+        else:
+            break
+
+    return repaired
+
+
+def safe_csv_cell(value):
+    value = repair_mojibake_for_export(value)
+
+    if not isinstance(value, str):
+        return value
+
+    if value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+
+    return value
+
+
+def write_safe_csv_row(writer, row):
+    writer.writerow([safe_csv_cell(value) for value in row])
+
+
+EMPLOYEE_EXPORT_HEADERS = [
+    "ID",
+    "Ad Soyad",
+    "Personel Kodu",
+    "E-posta",
+    "Telefon",
+    "Aktif Mi",
+    "Departman",
+    "Unvan",
+    "Manager",
+    "User Username",
+    "User Email",
+    "User Role",
+    "Sync Source",
+    "External HR ID",
+    "Oluşturulma",
+    "Güncellenme",
+]
+
+
+def employee_export_row(employee):
+    return [
+        employee.id,
+        employee.full_name,
+        employee.employee_code or "",
+        employee.email or "",
+        employee.phone or "",
+        "Evet" if employee.is_active else "Hayır",
+        employee.department.name if employee.department else "",
+        employee.job_title.name if employee.job_title else "",
+        employee.manager.full_name if employee.manager else "",
+        employee.user.username if employee.user else "",
+        employee.user.email if employee.user else "",
+        user_role(employee),
+        employee.sync_source,
+        employee.external_hr_id,
+        employee.created_at.replace(tzinfo=None) if employee.created_at else "",
+        employee.updated_at.replace(tzinfo=None) if employee.updated_at else "",
+    ]
+
+
+def safe_excel_cell(value):
+    value = repair_mojibake_for_export(value)
+
+    if not isinstance(value, str):
+        return value
+
+    if value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+
+    return value
+
+
+def apply_export_response_headers(response, filename):
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response["Cache-Control"] = "no-store"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+
+    return response
+
+
+def create_employee_export_audit_log(request, *, export_format, row_count):
+    create_audit_log(
+        request=request,
+        action=AuditLog.Action.EXPORT,
+        entity_type="employees.Employee",
+        entity_id="",
+        entity_repr="Employee Export",
+        metadata={
+            "module": "employees",
+            "operation": "employee_export",
+            "format": export_format,
+            "row_count": row_count,
+            "exported_count": row_count,
+            "filters": get_export_filters_snapshot(request.query_params),
+            "applied_filters": get_export_filters_snapshot(request.query_params),
+        },
+    )
+
+
 class EmployeeListAPIView(ListAPIView):
     """
     Legacy endpoint.
@@ -220,66 +404,23 @@ class EmployeeExportAPIView(APIView):
         today = timezone.localdate().isoformat()
         filename = f"personnel-export-{today}.csv"
 
-        create_audit_log(
-            request=request,
-            action=AuditLog.Action.EXPORT,
-            entity_type="employees.Employee",
-            entity_id="",
-            entity_repr="Employee CSV Export",
-            metadata={
-                "module": "employees",
-                "operation": "employee_export",
-                "format": "csv",
-                "row_count": row_count,
-                "filters": get_export_filters_snapshot(request.query_params),
-            },
+        create_employee_export_audit_log(
+            request,
+            export_format="csv",
+            row_count=row_count,
         )
 
         csv_buffer = StringIO(newline="")
-        writer = csv.writer(csv_buffer)
+        csv_buffer.write("sep=;\r\n")
+        writer = csv.writer(csv_buffer, delimiter=";")
 
-        writer.writerow(
-            [
-                "ID",
-                "Ad Soyad",
-                "Personel Kodu",
-                "E-posta",
-                "Telefon",
-                "Aktif Mi",
-                "Departman",
-                "Unvan",
-                "Manager",
-                "User Username",
-                "User Email",
-                "User Role",
-                "Sync Source",
-                "External HR ID",
-                "Oluşturulma",
-                "Güncellenme",
-            ]
-        )
+        write_safe_csv_row(writer, EMPLOYEE_EXPORT_HEADERS)
 
         for employee in queryset:
-            writer.writerow(
-                [
-                    employee.id,
-                    employee.full_name,
-                    employee.employee_code or "",
-                    employee.email or "",
-                    employee.phone or "",
-                    "Evet" if employee.is_active else "Hayır",
-                    employee.department.name if employee.department else "",
-                    employee.job_title.name if employee.job_title else "",
-                    employee.manager.full_name if employee.manager else "",
-                    employee.user.username if employee.user else "",
-                    employee.user.email if employee.user else "",
-                    user_role(employee),
-                    employee.sync_source,
-                    employee.external_hr_id,
-                    employee.created_at.isoformat() if employee.created_at else "",
-                    employee.updated_at.isoformat() if employee.updated_at else "",
-                ]
-            )
+            row = employee_export_row(employee)
+            row[14] = employee.created_at.isoformat() if employee.created_at else ""
+            row[15] = employee.updated_at.isoformat() if employee.updated_at else ""
+            write_safe_csv_row(writer, row)
 
         csv_bytes = csv_buffer.getvalue().encode("utf-8-sig")
 
@@ -287,6 +428,77 @@ class EmployeeExportAPIView(APIView):
             csv_bytes,
             content_type="text/csv; charset=utf-8",
         )
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
-        return response
+        return apply_export_response_headers(response, filename)
+
+
+class EmployeeExcelExportAPIView(APIView):
+    permission_classes = [IsTechnicianOrAdminRole]
+
+    def get(self, request):
+        queryset, errors = get_filtered_employee_queryset_for_export(request)
+
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        row_count = queryset.count()
+        filename = "personnel-export.xlsx"
+
+        create_employee_export_audit_log(
+            request,
+            export_format="xlsx",
+            row_count=row_count,
+        )
+
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "Personel"
+        worksheet.append(EMPLOYEE_EXPORT_HEADERS)
+
+        header_fill = PatternFill(fill_type="solid", fgColor="D9E5F2")
+        header_font = Font(bold=True, color="111827")
+
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        for employee in queryset:
+            worksheet.append(
+                [safe_excel_cell(value) for value in employee_export_row(employee)]
+            )
+
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+
+        for column_index, header in enumerate(EMPLOYEE_EXPORT_HEADERS, start=1):
+            letter = get_column_letter(column_index)
+            max_length = len(header)
+
+            for cell in worksheet[letter]:
+                value = cell.value
+
+                if value is None:
+                    continue
+
+                max_length = max(max_length, len(str(value)))
+
+                if column_index in (15, 16) and cell.row > 1:
+                    cell.number_format = "yyyy-mm-dd hh:mm"
+
+            worksheet.column_dimensions[letter].width = min(
+                max(max_length + 2, 10),
+                45,
+            )
+
+        output = BytesIO()
+        workbook.save(output)
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+        )
+
+        return apply_export_response_headers(response, filename)

@@ -11,6 +11,7 @@ import { api } from "./http";
 const EMPLOYEES_ENDPOINT = "/api/employees/";
 const EMPLOYEES_TABLE_ENDPOINT = "/api/employees/table/";
 const EMPLOYEES_EXPORT_ENDPOINT = "/api/employees/export/";
+const EMPLOYEES_EXCEL_EXPORT_ENDPOINT = "/api/employees/export.xlsx/";
 
 function extractResults<T>(responseData: T[] | PaginatedEmployeeResponse<T>) {
   if (Array.isArray(responseData)) {
@@ -20,9 +21,12 @@ function extractResults<T>(responseData: T[] | PaginatedEmployeeResponse<T>) {
   return responseData.results;
 }
 
-function getExportFileName(contentDisposition?: string) {
+function getExportFileName(
+  contentDisposition?: string,
+  fallback = "personnel-export.csv"
+) {
   if (!contentDisposition) {
-    return "personnel-export.csv";
+    return fallback;
   }
 
   const utf8FileNameMatch = contentDisposition.match(
@@ -39,7 +43,7 @@ function getExportFileName(contentDisposition?: string) {
     return fileNameMatch[1];
   }
 
-  return "personnel-export.csv";
+  return fallback;
 }
 
 function triggerFileDownload(blob: Blob, fileName: string) {
@@ -93,9 +97,24 @@ export async function downloadEmployeesExport(state: TableQueryState) {
     | undefined;
 
   const fileName = getExportFileName(contentDisposition);
-  const blob = new Blob([response.data], {
-    type: "text/csv;charset=utf-8",
+
+  triggerFileDownload(response.data, fileName);
+}
+
+export async function downloadEmployeesExcelExport(state: TableQueryState) {
+  const response = await api.get<Blob>(EMPLOYEES_EXCEL_EXPORT_ENDPOINT, {
+    params: buildTableApiParams(state),
+    responseType: "blob",
   });
 
-  triggerFileDownload(blob, fileName);
+  const contentDisposition = response.headers["content-disposition"] as
+    | string
+    | undefined;
+
+  const fileName = getExportFileName(
+    contentDisposition,
+    "personnel-export.xlsx"
+  );
+
+  triggerFileDownload(response.data, fileName);
 }

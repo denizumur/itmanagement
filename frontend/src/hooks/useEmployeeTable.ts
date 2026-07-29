@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import {
+  downloadEmployeesExcelExport,
   downloadEmployeesExport,
   getEmployeeDetail,
   getEmployeesTable,
@@ -23,6 +24,12 @@ export function useEmployeeDetail(employeeId: number | null) {
 }
 
 export function useEmployeeExport() {
+  return useMutation({
+    mutationFn: (state: TableQueryState) => downloadEmployeesExcelExport(state),
+  });
+}
+
+export function useEmployeeCsvExport() {
   return useMutation({
     mutationFn: (state: TableQueryState) => downloadEmployeesExport(state),
   });

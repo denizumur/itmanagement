@@ -1,5 +1,10 @@
+import codecs
+import csv
+from io import BytesIO, StringIO
+
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from openpyxl import load_workbook
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -7,10 +12,36 @@ from apps.accounts.models import UserProfile
 from apps.assignments.models import Assignment
 from apps.audit.models import AuditLog
 from apps.employees.models import Department, Employee, JobTitle
+from apps.employees.views import repair_mojibake_for_export
 from apps.inventory.models import Asset, AssetCategory
 from apps.tickets.models import Ticket
 
 User = get_user_model()
+
+REAL_WORLD_MOJIBAKE_DEPARTMENT = (
+    "\u00c3\u201e\u00c2\u00b0DAR\u00c3\u201e\u00c2\u00b0 VE "
+    "MAL\u00c3\u201e\u00c2\u00b0 \u00c3\u201e\u00c2\u00b0"
+    "\u00c3\u2026\u00c2\u017eLER M\u00c3\u0192\u00c5\u201cD"
+    "\u00c3\u0192\u00c5\u201cRL\u00c3\u0192\u00c5\u201c"
+    "\u00c3\u201e\u00c2\u017e\u00c3\u0192\u00c5\u201c"
+)
+REPAIRED_REAL_WORLD_DEPARTMENT = (
+    "\u0130DAR\u0130 VE MAL\u0130 \u0130\u015eLER "
+    "M\u00dcD\u00dcRL\u00dc\u011e\u00dc"
+)
+MOJIBAKE_DEPARTMENT = (
+    "\u00c3\u201e\u00c2\u00b0\u00c3\u2026\u00c2\u017eLETMELER "
+    "M\u00c3\u0192\u00c5\u201cD\u00c3\u0192\u00c5\u201cRL"
+    "\u00c3\u0192\u00c5\u201c\u00c3\u201e\u00c2\u017e\u00c3\u0192\u00c5\u201c"
+)
+REPAIRED_DEPARTMENT = "\u0130\u015eLETMELER M\u00dcD\u00dcRL\u00dc\u011e\u00dc"
+MOJIBAKE_JOB_TITLE = (
+    "\u00c3\u201e\u00c2\u00b0dari ve Mali "
+    "\u00c3\u201e\u00c2\u00b0\u00c3\u2026\u00c5\u00b8ler "
+    "M\u00c3\u0192\u00c2\u00bcd\u00c3\u0192\u00c2\u00bcr"
+    "\u00c3\u0192\u00c2\u00bc"
+)
+REPAIRED_JOB_TITLE = "\u0130dari ve Mali \u0130\u015fler M\u00fcd\u00fcr\u00fc"
 
 
 class EmployeeApiTests(APITestCase):
@@ -247,6 +278,392 @@ class EmployeeApiTests(APITestCase):
         self.assertIn("Requester Personel", content)
         self.assertIn("EMP-001", content)
 
+    def export_csv_rows(self, response):
+        content = response.content.decode("utf-8-sig")
+        sep_line, csv_content = content.split("\n", 1)
+
+        return sep_line.rstrip("\r"), list(
+            csv.reader(StringIO(csv_content), delimiter=";"),
+        )
+
+    def exported_employee_row(self, response, employee):
+        _, rows = self.export_csv_rows(response)
+
+        return next(row for row in rows if row[0] == str(employee.id))
+
+    def export_xlsx_workbook(self, response):
+        return load_workbook(BytesIO(response.content))
+
+    def exported_employee_xlsx_row(self, response, employee):
+        worksheet = self.export_xlsx_workbook(response)["Personel"]
+
+        for row in worksheet.iter_rows(min_row=2, values_only=True):
+            if row[0] == employee.id:
+                return row
+
+        self.fail(f"Employee {employee.id} row not found in XLSX export")
+
+    def test_repair_mojibake_for_export_handles_mixed_latin1_cp1252_turkish_text(self):
+        self.assertEqual(
+            repair_mojibake_for_export(REAL_WORLD_MOJIBAKE_DEPARTMENT),
+            REPAIRED_REAL_WORLD_DEPARTMENT,
+        )
+
+    def test_repair_mojibake_for_export_keeps_valid_turkish_text_unchanged(self):
+        values = [
+            REPAIRED_REAL_WORLD_DEPARTMENT,
+            "\u00c7a\u011fr\u0131 \u015eahin",
+            REPAIRED_JOB_TITLE,
+            "Normal English string",
+        ]
+
+        for value in values:
+            with self.subTest(value=value):
+                self.assertEqual(repair_mojibake_for_export(value), value)
+
+    def test_employee_export_preserves_turkish_characters(self):
+        self.department.name = REPAIRED_DEPARTMENT
+        self.department.save(update_fields=["name"])
+        self.job_title.name = REPAIRED_JOB_TITLE
+        self.job_title.save(update_fields=["name"])
+        self.employee.full_name = "\u00c7a\u011fr\u0131 \u015eahin"
+        self.employee.save(update_fields=["full_name"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.content.startswith(codecs.BOM_UTF8))
+
+        content = response.content.decode("utf-8-sig")
+
+        self.assertIn(REPAIRED_DEPARTMENT, content)
+        self.assertIn(REPAIRED_JOB_TITLE, content)
+        self.assertIn("\u00c7a\u011fr\u0131 \u015eahin", content)
+        self.assertNotIn("\u00c3\u201e\u00c2\u00b0", content)
+        self.assertNotIn("\u00c3\u2026", content)
+        self.assertNotIn("\u00c3\u0192", content)
+
+        employee_row = self.exported_employee_row(response, self.employee)
+
+        self.assertEqual(employee_row[1], "\u00c7a\u011fr\u0131 \u015eahin")
+        self.assertEqual(
+            employee_row[6],
+            REPAIRED_DEPARTMENT,
+        )
+        self.assertEqual(
+            employee_row[7],
+            REPAIRED_JOB_TITLE,
+        )
+
+    def test_export_uses_excel_compatible_semicolon_csv_with_utf8_bom(self):
+        self.employee.full_name = "\u00c7a\u011fr\u0131; \u0130\u015fler"
+        self.employee.phone = "\u0130lk sat\u0131r\n\u0130kinci sat\u0131r"
+        self.employee.save(update_fields=["full_name", "phone"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.content.startswith(codecs.BOM_UTF8))
+
+        content = response.content.decode("utf-8-sig")
+        self.assertTrue(content.startswith("sep=;"))
+
+        sep_line, rows = self.export_csv_rows(response)
+        employee_row = self.exported_employee_row(response, self.employee)
+
+        self.assertEqual(sep_line.rstrip("\r"), "sep=;")
+        self.assertEqual(rows[0][1], "Ad Soyad")
+        self.assertEqual(employee_row[1], "\u00c7a\u011fr\u0131; \u0130\u015fler")
+        self.assertEqual(employee_row[4], "\u0130lk sat\u0131r\n\u0130kinci sat\u0131r")
+
+    def test_employee_export_repairs_common_mojibake_if_source_value_is_corrupted(self):
+        self.department.name = MOJIBAKE_DEPARTMENT
+        self.department.save(update_fields=["name"])
+        self.job_title.name = MOJIBAKE_JOB_TITLE
+        self.job_title.save(update_fields=["name"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        employee_row = self.exported_employee_row(response, self.employee)
+
+        self.assertEqual(
+            employee_row[6],
+            REPAIRED_DEPARTMENT,
+        )
+        self.assertEqual(
+            employee_row[7],
+            REPAIRED_JOB_TITLE,
+        )
+
+        self.department.refresh_from_db()
+        self.job_title.refresh_from_db()
+        self.assertEqual(self.department.name, MOJIBAKE_DEPARTMENT)
+        self.assertEqual(self.job_title.name, MOJIBAKE_JOB_TITLE)
+
+    def test_employee_export_repairs_exact_real_world_mojibake_department(self):
+        self.department.name = REAL_WORLD_MOJIBAKE_DEPARTMENT
+        self.department.save(update_fields=["name"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.content.startswith(codecs.BOM_UTF8))
+
+        content = response.content.decode("utf-8-sig")
+
+        self.assertIn(REPAIRED_REAL_WORLD_DEPARTMENT, content)
+        self.assertNotIn("\u00c3\u201e\u00c2\u00b0", content)
+        self.assertNotIn("\u00c3\u0192\u00c5\u201c", content)
+        self.assertNotIn("\u00c3\u2026", content)
+        self.assertNotIn("\u00c5\u201c", content)
+
+    def test_employee_export_endpoint_repairs_exact_real_world_mojibake_from_response_bytes(self):
+        self.department.name = REAL_WORLD_MOJIBAKE_DEPARTMENT
+        self.department.save(update_fields=["name"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.content.startswith(codecs.BOM_UTF8))
+
+        decoded = response.content.decode("utf-8-sig")
+
+        self.assertIn("sep=;", decoded)
+        self.assertIn(REPAIRED_REAL_WORLD_DEPARTMENT, decoded)
+        self.assertNotIn(REAL_WORLD_MOJIBAKE_DEPARTMENT, decoded)
+        self.assertNotIn("\u00c3\u201e\u00c2\u00b0DAR\u00c3\u201e\u00c2\u00b0", decoded)
+
+    def test_employee_export_response_content_can_be_written_to_disk_and_read_as_utf8_sig(self):
+        self.department.name = REAL_WORLD_MOJIBAKE_DEPARTMENT
+        self.department.save(update_fields=["name"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        exported_bytes = bytes(response.content)
+
+        self.assertTrue(exported_bytes.startswith(codecs.BOM_UTF8))
+
+        decoded = exported_bytes.decode("utf-8-sig")
+
+        self.assertIn(REPAIRED_REAL_WORLD_DEPARTMENT, decoded)
+        self.assertNotIn(REAL_WORLD_MOJIBAKE_DEPARTMENT, decoded)
+
+    def test_employee_export_applies_safe_csv_cell_to_nested_department_and_job_title(self):
+        self.department.name = MOJIBAKE_DEPARTMENT
+        self.department.save(update_fields=["name"])
+        self.job_title.name = MOJIBAKE_JOB_TITLE
+        self.job_title.save(update_fields=["name"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        employee_row = self.exported_employee_row(response, self.employee)
+
+        self.assertEqual(employee_row[6], REPAIRED_DEPARTMENT)
+        self.assertEqual(employee_row[7], REPAIRED_JOB_TITLE)
+
+    def test_csv_injection_protection_still_runs_after_mojibake_repair(self):
+        self.employee.full_name = '=HYPERLINK("https://example.com")'
+        self.employee.employee_code = "+EMP-001"
+        self.employee.email = "@requester.example"
+        self.employee.phone = "-5551112233"
+        self.employee.save(
+            update_fields=["full_name", "employee_code", "email", "phone"],
+        )
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        employee_row = self.exported_employee_row(response, self.employee)
+
+        self.assertEqual(employee_row[1], '\'=HYPERLINK("https://example.com")')
+        self.assertEqual(employee_row[2], "'+EMP-001")
+        self.assertEqual(employee_row[3], "'@requester.example")
+        self.assertEqual(employee_row[4], "'-5551112233")
+
+    def test_employee_excel_export_returns_valid_workbook_with_expected_structure(self):
+        self.department.name = REPAIRED_REAL_WORLD_DEPARTMENT
+        self.department.save(update_fields=["name"])
+        self.job_title.name = REPAIRED_JOB_TITLE
+        self.job_title.save(update_fields=["name"])
+        self.employee.full_name = "\u00c7a\u011fr\u0131 \u015eahin"
+        self.employee.save(update_fields=["full_name"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export.xlsx/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertIn("personnel-export.xlsx", response["Content-Disposition"])
+        self.assertEqual(response["Cache-Control"], "no-store")
+        self.assertTrue(response.content.startswith(b"PK"))
+
+        workbook = self.export_xlsx_workbook(response)
+        worksheet = workbook["Personel"]
+
+        self.assertEqual(worksheet.freeze_panes, "A2")
+        self.assertTrue(worksheet.auto_filter.ref)
+        self.assertEqual(
+            [cell.value for cell in worksheet[1]],
+            [
+                "ID",
+                "Ad Soyad",
+                "Personel Kodu",
+                "E-posta",
+                "Telefon",
+                "Aktif Mi",
+                "Departman",
+                "Unvan",
+                "Manager",
+                "User Username",
+                "User Email",
+                "User Role",
+                "Sync Source",
+                "External HR ID",
+                "Olu\u015fturulma",
+                "G\u00fcncellenme",
+            ],
+        )
+        self.assertTrue(worksheet["A1"].font.bold)
+
+        employee_row = self.exported_employee_xlsx_row(response, self.employee)
+
+        self.assertEqual(employee_row[1], "\u00c7a\u011fr\u0131 \u015eahin")
+        self.assertEqual(employee_row[6], REPAIRED_REAL_WORLD_DEPARTMENT)
+        self.assertEqual(employee_row[7], REPAIRED_JOB_TITLE)
+
+    def test_employee_excel_export_repairs_real_world_mojibake_without_changing_valid_turkish(self):
+        self.department.name = REAL_WORLD_MOJIBAKE_DEPARTMENT
+        self.department.save(update_fields=["name"])
+        self.job_title.name = REPAIRED_JOB_TITLE
+        self.job_title.save(update_fields=["name"])
+        self.employee.full_name = "\u00c7ALI\u015eANLAR"
+        self.employee.email = "bilgi-islem@example.com"
+        self.employee.save(update_fields=["full_name", "email"])
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export.xlsx/")
+        employee_row = self.exported_employee_xlsx_row(response, self.employee)
+
+        self.assertEqual(employee_row[1], "\u00c7ALI\u015eANLAR")
+        self.assertEqual(employee_row[3], "bilgi-islem@example.com")
+        self.assertEqual(employee_row[6], REPAIRED_REAL_WORLD_DEPARTMENT)
+        self.assertEqual(employee_row[7], "\u0130dari ve Mali \u0130\u015fler M\u00fcd\u00fcr\u00fc")
+
+    def test_employee_excel_export_prevents_formula_injection(self):
+        self.employee.full_name = '=HYPERLINK("https://example.com")'
+        self.employee.employee_code = "+EMP-001"
+        self.employee.email = "@requester.example"
+        self.employee.phone = "-5551112233"
+        self.employee.save(
+            update_fields=["full_name", "employee_code", "email", "phone"],
+        )
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get("/api/employees/export.xlsx/")
+        employee_row = self.exported_employee_xlsx_row(response, self.employee)
+
+        self.assertEqual(employee_row[1], '\'=HYPERLINK("https://example.com")')
+        self.assertEqual(employee_row[2], "'+EMP-001")
+        self.assertEqual(employee_row[3], "'@requester.example")
+        self.assertEqual(employee_row[4], "'-5551112233")
+
+    def test_employee_excel_export_applies_filters_and_ignores_pagination(self):
+        for index in range(30):
+            Employee.objects.create(
+                full_name=f"Bulk Personel {index:02d}",
+                email=f"bulk{index:02d}@example.com",
+                department=self.department,
+                job_title=self.job_title,
+                is_active=True,
+            )
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            "/api/employees/export.xlsx/",
+            {
+                "search": "Bulk Personel",
+                "page_size": "5",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        worksheet = self.export_xlsx_workbook(response)["Personel"]
+        names = [row[1] for row in worksheet.iter_rows(min_row=2, values_only=True)]
+
+        self.assertEqual(len(names), 30)
+        self.assertIn("Bulk Personel 00", names)
+        self.assertIn("Bulk Personel 29", names)
+        self.assertNotIn("Requester Personel", names)
+
+    def test_technician_can_export_employees_as_xlsx(self):
+        self.client.force_authenticate(user=self.technician_user)
+
+        response = self.client.get("/api/employees/export.xlsx/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_viewer_cannot_export_employees_as_xlsx(self):
+        self.client.force_authenticate(user=self.viewer_user)
+
+        response = self.client.get("/api/employees/export.xlsx/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_employee_excel_export_creates_audit_log(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.get(
+                "/api/employees/export.xlsx/",
+                {
+                    "search": "Requester",
+                },
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        audit_log = AuditLog.objects.filter(
+            action=AuditLog.Action.EXPORT,
+            entity_type="employees.Employee",
+            metadata__operation="employee_export",
+            metadata__format="xlsx",
+        ).first()
+
+        self.assertIsNotNone(audit_log)
+        self.assertEqual(audit_log.actor, self.admin_user)
+        self.assertEqual(audit_log.metadata["exported_count"], 1)
+        self.assertEqual(audit_log.metadata["applied_filters"]["search"], "Requester")
+
     def test_technician_can_export_employees_as_csv(self):
         self.client.force_authenticate(user=self.technician_user)
 
@@ -320,7 +737,7 @@ class EmployeeApiTests(APITestCase):
         content = response.content.decode("utf-8-sig")
         lines = [line for line in content.splitlines() if line.strip()]
 
-        self.assertEqual(len(lines), 31)
+        self.assertEqual(len(lines), 32)
         self.assertIn("Bulk Personel 00", content)
         self.assertIn("Bulk Personel 29", content)
 
