@@ -23,6 +23,28 @@ N6b ile Admin Console yalnızca durumu göstermekle kalmaz, güvenli sonraki ad�
 
 Copy command butonları komutu tarayıcıdan çalıştırmaz; sadece güvenli, secret içermeyen komutu clipboard'a kopyalar. Clipboard API çalışmazsa komut metni seçilebilir şekilde kalır.
 
+## Kullanıcı & Personel Yönetimi
+
+`/admin-console/users` ekranı admin kullanıcıların hesapları ve personel bağlantılarını read-only olarak incelemesi için foundation sağlar.
+
+Gösterir:
+
+- Kullanıcı adı, görünen ad, rol, aktif/pasif durum ve son giriş.
+- Personel bağlantısı, departman/görev özeti ve bağlantısız kullanıcılar.
+- Aktivasyon durumu: aktif, aktivasyon bekleyen, pending invitation, expired invitation, personel bağlantısı yok.
+- Davet özeti: pending/expired count ve son davet durumu.
+- Dossier detail panelinde güvenli user/employee/invitation/audit özeti.
+
+Özellikle yapmaz:
+
+- User create/update/delete.
+- User deactivate.
+- Role change.
+- Password reset.
+- Admin Users ekranından invitation create/revoke.
+
+Davet üretimi hâlâ Personel detayındaki güvenli P7d akışından yapılır. Admin Users ekranı yalnızca durumu görünür kılar ve Personel sayfasına yönlendirir.
+
 ## Backup remediation senaryoları
 
 - Healthy: son backup sağlıklı görünür; verify komutu monitoring için kopyalanabilir.
@@ -36,6 +58,8 @@ Admin Console şunları özellikle göstermez:
 
 - Secret değerleri.
 - Raw token veya token hash.
+- Password hash.
+- Activation URL.
 - DB password veya connection string.
 - Full backup path.
 - E-posta/telefon listeleri.

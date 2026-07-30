@@ -5,7 +5,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import connection
+from django.db.models import Prefetch, Q
 from django.utils import timezone
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -15,6 +17,7 @@ from apps.audit.models import AuditLog
 from apps.employees.models import Employee, EmployeeImportJob
 from apps.reminders.models import Reminder
 from apps.tickets.models import Ticket
+from apps.common.pagination import StandardResultsPagination
 
 
 def _status_from_checks(*statuses):
@@ -163,6 +166,13 @@ def _accounts_summary(now):
     thirty_days_ago = now - timezone.timedelta(days=30)
 
     pending = UserInvitation.objects.filter(status=UserInvitation.Status.PENDING)
+    users_with_employee = User.objects.filter(employee_profile__isnull=False).count()
+    activation_needed_users = sum(
+        1
+        for user in User.objects.select_related("employee_profile")
+        if getattr(user, "employee_profile", None)
+        and (not user.is_active or not user.has_usable_password())
+    )
 
     return {
         "total_users": User.objects.count(),
@@ -174,6 +184,9 @@ def _accounts_summary(now):
         "pending_invitations": pending.filter(expires_at__gte=now).count(),
         "expired_invitations": pending.filter(expires_at__lt=now).count()
         + UserInvitation.objects.filter(status=UserInvitation.Status.EXPIRED).count(),
+        "activation_needed_users": activation_needed_users,
+        "users_with_employee": users_with_employee,
+        "users_without_employee": User.objects.count() - users_with_employee,
         "accepted_invitations_30d": UserInvitation.objects.filter(
             status=UserInvitation.Status.ACCEPTED,
             accepted_at__gte=thirty_days_ago,
@@ -255,6 +268,308 @@ def _operations_summary(now):
     }
 
 
+def _mask_email(email):
+    if not email or "@" not in email:
+        return None
+
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        masked_local = f"{local[:1]}***"
+    else:
+        masked_local = f"{local[:2]}***"
+
+    return f"{masked_local}@{domain}"
+
+
+def _latest_invitation(user):
+    invitations = list(getattr(user, "admin_console_invitations", []))
+    if invitations:
+        return invitations[0]
+
+    return (
+        UserInvitation.objects.filter(user=user)
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _invitation_counts(user, now):
+    invitations = list(getattr(user, "admin_console_invitations", []))
+    if not invitations:
+        invitations = list(UserInvitation.objects.filter(user=user))
+
+    pending = [
+        invitation
+        for invitation in invitations
+        if invitation.status == UserInvitation.Status.PENDING
+        and invitation.expires_at >= now
+    ]
+    expired = [
+        invitation
+        for invitation in invitations
+        if (
+            invitation.status == UserInvitation.Status.PENDING
+            and invitation.expires_at < now
+        )
+        or invitation.status == UserInvitation.Status.EXPIRED
+    ]
+
+    return {
+        "pending": len(pending),
+        "expired": len(expired),
+        "accepted_30d": len(
+            [
+                invitation
+                for invitation in invitations
+                if invitation.status == UserInvitation.Status.ACCEPTED
+                and invitation.accepted_at
+                and invitation.accepted_at >= now - timezone.timedelta(days=30)
+            ]
+        ),
+        "revoked_30d": len(
+            [
+                invitation
+                for invitation in invitations
+                if invitation.status == UserInvitation.Status.REVOKED
+                and invitation.revoked_at
+                and invitation.revoked_at >= now - timezone.timedelta(days=30)
+            ]
+        ),
+    }
+
+
+def _activation_state(user, latest_invitation, counts):
+    employee = getattr(user, "employee_profile", None)
+    if not employee:
+        return "no_employee"
+
+    if user.is_active and user.has_usable_password():
+        return "active"
+
+    if counts["pending"] > 0:
+        return "pending_invitation"
+
+    if counts["expired"] > 0:
+        return "expired_invitation"
+
+    if not user.is_active or not user.has_usable_password():
+        return "needs_activation"
+
+    if latest_invitation:
+        return latest_invitation.status
+
+    return "active"
+
+
+def _employee_summary(user):
+    employee = getattr(user, "employee_profile", None)
+    if not employee:
+        return None
+
+    return {
+        "id": employee.id,
+        "full_name": employee.full_name,
+        "employee_code": employee.employee_code,
+        "department_name": employee.department.name if employee.department else None,
+        "job_title_name": employee.job_title.name if employee.job_title else None,
+        "is_active": employee.is_active,
+    }
+
+
+def _serialize_admin_user(user, now, include_detail=False):
+    latest = _latest_invitation(user)
+    counts = _invitation_counts(user, now)
+    activation_state = _activation_state(user, latest, counts)
+    profile = getattr(user, "profile", None)
+    display_name = user.get_full_name() or user.username
+
+    data = {
+        "id": user.id,
+        "username": user.username,
+        "display_name": display_name,
+        "masked_email": _mask_email(user.email),
+        "role": profile.role if profile else None,
+        "is_active": user.is_active,
+        "has_usable_credential": user.has_usable_password(),
+        "last_login": user.last_login,
+        "date_joined": user.date_joined,
+        "employee": _employee_summary(user),
+        "activation": {
+            "state": activation_state,
+            "needs_invitation": activation_state
+            in ["needs_activation", "expired_invitation"],
+            "latest_invitation_status": latest.status if latest else None,
+            "latest_invitation_expires_at": latest.expires_at if latest else None,
+            "latest_invitation_created_at": latest.created_at if latest else None,
+            "pending_invitation_count": counts["pending"],
+            "expired_invitation_count": counts["expired"],
+            "accepted_invitations_30d": counts["accepted_30d"],
+            "revoked_invitations_30d": counts["revoked_30d"],
+        },
+    }
+
+    if include_detail:
+        audit_since = now - timezone.timedelta(days=30)
+        data["audit"] = {
+            "audit_logs_30d": AuditLog.objects.filter(
+                actor=user,
+                created_at__gte=audit_since,
+            ).count()
+        }
+        data["recommended_next_step"] = _recommended_user_next_step(
+            data["activation"]["state"],
+            data["employee"],
+        )
+
+    return data
+
+
+def _recommended_user_next_step(activation_state, employee):
+    if employee is None:
+        return "Bu kullanıcı personel kaydıyla bağlı değil. Personel sayfasında eşleştirme durumunu kontrol edin."
+
+    if activation_state in ["needs_activation", "expired_invitation"]:
+        return "Davet linki oluşturmak için Personel detayına gidin."
+
+    if activation_state == "pending_invitation":
+        return "Bekleyen davet durumunu Personel detayından takip edin."
+
+    return "Kullanıcı aktif görünüyor."
+
+
+def _admin_user_queryset():
+    User = get_user_model()
+    return (
+        User.objects.select_related(
+            "profile",
+            "employee_profile",
+            "employee_profile__department",
+            "employee_profile__job_title",
+        )
+        .prefetch_related(
+            Prefetch(
+                "invitations",
+                queryset=UserInvitation.objects.order_by("-created_at"),
+                to_attr="admin_console_invitations",
+            )
+        )
+        .order_by("username", "id")
+    )
+
+
+def _filter_users(queryset, params):
+    search = (params.get("search") or "").strip()
+    if search:
+        queryset = queryset.filter(
+            Q(username__icontains=search)
+            | Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+            | Q(employee_profile__full_name__icontains=search)
+            | Q(employee_profile__employee_code__icontains=search)
+        )
+
+    role = params.get("role")
+    if role:
+        queryset = queryset.filter(profile__role=role)
+
+    is_active = params.get("is_active")
+    if is_active in ["true", "false"]:
+        queryset = queryset.filter(is_active=is_active == "true")
+
+    has_employee = params.get("has_employee")
+    if has_employee == "true":
+        queryset = queryset.filter(employee_profile__isnull=False)
+    elif has_employee == "false":
+        queryset = queryset.filter(employee_profile__isnull=True)
+
+    has_usable_password = params.get("has_usable_password")
+    if has_usable_password in ["true", "false"]:
+        wanted = has_usable_password == "true"
+        ids = [
+            user.id
+            for user in queryset.only("id", "password")
+            if user.has_usable_password() == wanted
+        ]
+        queryset = queryset.filter(id__in=ids)
+
+    invitation_status = params.get("invitation_status")
+    if invitation_status == "none":
+        queryset = queryset.filter(invitations__isnull=True)
+    elif invitation_status:
+        queryset = queryset.filter(invitations__status=invitation_status)
+
+    activation_state = params.get("activation_state")
+    if activation_state:
+        now = timezone.now()
+        if activation_state == "active":
+            ids = [
+                user.id
+                for user in queryset
+                if user.is_active
+                and user.has_usable_password()
+                and getattr(user, "employee_profile", None)
+            ]
+        elif activation_state == "inactive":
+            ids = [user.id for user in queryset if not user.is_active]
+        elif activation_state == "needs_activation":
+            ids = [
+                user.id
+                for user in queryset
+                if (not user.is_active or not user.has_usable_password())
+                and getattr(user, "employee_profile", None)
+            ]
+        elif activation_state == "pending_invitation":
+            ids = [
+                user.id
+                for user in queryset
+                if UserInvitation.objects.filter(
+                    user=user,
+                    status=UserInvitation.Status.PENDING,
+                    expires_at__gte=now,
+                ).exists()
+            ]
+        elif activation_state == "expired_invitation":
+            ids = [
+                user.id
+                for user in queryset
+                if UserInvitation.objects.filter(
+                    Q(status=UserInvitation.Status.EXPIRED)
+                    | Q(
+                        status=UserInvitation.Status.PENDING,
+                        expires_at__lt=now,
+                    ),
+                    user=user,
+                ).exists()
+            ]
+        elif activation_state == "no_employee":
+            ids = [
+                user.id
+                for user in queryset
+                if not getattr(user, "employee_profile", None)
+            ]
+        else:
+            ids = None
+
+        if ids is not None:
+            queryset = queryset.filter(id__in=ids)
+
+    ordering_map = {
+        "username": "username",
+        "role": "profile__role",
+        "is_active": "is_active",
+        "last_login": "last_login",
+        "date_joined": "date_joined",
+        "employee_name": "employee_profile__full_name",
+    }
+    ordering = params.get("ordering") or "username"
+    is_desc = ordering.startswith("-")
+    ordering_key = ordering[1:] if is_desc else ordering
+    field = ordering_map.get(ordering_key, "username")
+    queryset = queryset.order_by(f"-{field}" if is_desc else field, "id").distinct()
+
+    return queryset
+
+
 class AdminConsoleOverviewAPIView(APIView):
     permission_classes = [IsAdminRole]
 
@@ -304,3 +619,33 @@ class AdminConsoleOverviewAPIView(APIView):
                 },
             }
         )
+
+
+class AdminConsoleUserListAPIView(APIView):
+    permission_classes = [IsAdminRole]
+    pagination_class = StandardResultsPagination
+
+    def get(self, request):
+        now = timezone.now()
+        queryset = _filter_users(_admin_user_queryset(), request.query_params)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        results = [_serialize_admin_user(user, now) for user in page]
+
+        return paginator.get_paginated_response(results)
+
+
+class AdminConsoleUserDetailAPIView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def get(self, request, pk):
+        now = timezone.now()
+        try:
+            user = _admin_user_queryset().get(pk=pk)
+        except get_user_model().DoesNotExist:
+            return Response(
+                {"detail": "Kullanıcı bulunamadı."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(_serialize_admin_user(user, now, include_detail=True))

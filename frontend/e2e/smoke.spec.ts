@@ -68,6 +68,18 @@ test("admin can login, navigate core pages, export personnel xlsx, and logout", 
   await expect(page.getByTestId("admin-console-invitations")).toBeVisible();
   await expect(page.getByTestId("admin-console-operations")).toBeVisible();
 
+  await page.getByRole("link", { name: /yönetim ekranına git/i }).click();
+  await expect(page.getByTestId("admin-users-page")).toBeVisible();
+  await expect(page.getByTestId("admin-users-table")).toBeVisible();
+  await page.getByTestId("admin-users-search").fill("deniz");
+  await expect(page.getByTestId("admin-users-table")).toBeVisible();
+  await page
+    .getByRole("button", { name: /kullanıcı detayını gör/i })
+    .first()
+    .click();
+  await expect(page.getByTestId("admin-users-detail-drawer")).toBeVisible();
+  await expect(page.getByText(/token_hash|activation_url|password/i)).toHaveCount(0);
+
   await page.goto("/personnel");
   const downloadPromise = page.waitForEvent("download");
   await page.getByTestId("personnel-export-excel").click();

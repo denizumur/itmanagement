@@ -16,6 +16,7 @@ import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { TicketsQueuePage } from "./pages/TicketsQueuePage";
 import { PersonnelPage } from "./pages/PersonnelPage";
 import { AdminConsolePage } from "./pages/AdminConsolePage";
+import { AdminUsersPage } from "./pages/AdminUsersPage";
 
 const operationalRoles = ["admin", "technician", "viewer"] as const;
 const adminRoles = ["admin"] as const;
@@ -69,6 +70,18 @@ export default function App() {
         }
       >
         <Route index element={<AdminConsolePage />} />
+      </Route>
+
+      <Route
+        path="/admin-console/users"
+        element={
+          <ProtectedRoute
+            allowedRoles={[...adminRoles]}
+            fallbackPath="/"
+          />
+        }
+      >
+        <Route index element={<AdminUsersPage />} />
       </Route>
 
       <Route

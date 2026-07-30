@@ -11,6 +11,7 @@ from rest_framework.test import APITestCase
 from apps.accounts.models import UserInvitation, UserProfile
 from apps.audit.models import AuditLog
 from apps.employees.models import Employee, EmployeeImportJob
+from apps.employees.models import Department
 
 
 class AdminConsoleOverviewTests(APITestCase):
@@ -260,3 +261,190 @@ class AdminConsoleOverviewTests(APITestCase):
             response.data["operations"]["critical_audit_logs_24h"],
             1,
         )
+
+
+class AdminConsoleUserManagementTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username="users.admin",
+            email="users.admin@example.com",
+            password="StrongPass123!",
+        )
+        self.admin.profile.role = UserProfile.Role.ADMIN
+        self.admin.profile.save(update_fields=["role"])
+
+        self.requester = User.objects.create_user(
+            username="portal.requester",
+            email="portal.requester@example.com",
+            password="StrongPass123!",
+        )
+        self.requester.profile.role = UserProfile.Role.REQUESTER
+        self.requester.profile.save(update_fields=["role"])
+
+        self.technician = User.objects.create_user(
+            username="ops.technician",
+            email="ops.technician@example.com",
+            password="StrongPass123!",
+        )
+        self.technician.profile.role = UserProfile.Role.TECHNICIAN
+        self.technician.profile.save(update_fields=["role"])
+
+        self.invite_user = User.objects.create_user(
+            username="activation.user",
+            email="activation.user@example.com",
+        )
+        self.invite_user.is_active = False
+        self.invite_user.set_unusable_password()
+        self.invite_user.save()
+        self.invite_user.profile.role = UserProfile.Role.REQUESTER
+        self.invite_user.profile.save(update_fields=["role"])
+
+        department = Department.objects.create(name="Bilgi İşlem")
+        Employee.objects.create(
+            user=self.invite_user,
+            full_name="Activation Person",
+            employee_code="EMP-ACT",
+            department=department,
+            email="activation.person@example.com",
+        )
+        Employee.objects.create(
+            user=self.technician,
+            full_name="Technician Person",
+            employee_code="EMP-TECH",
+            department=department,
+        )
+
+    def authenticate(self, user=None):
+        self.client.force_authenticate(user=user)
+
+    def test_admin_can_list_users(self):
+        self.authenticate(self.admin)
+        response = self.client.get("/api/admin-console/users/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
+        self.assertGreaterEqual(response.data["count"], 4)
+
+    def test_requester_and_technician_cannot_list_users(self):
+        for user in [self.requester, self.technician]:
+            self.authenticate(user)
+            response = self.client.get("/api/admin-console/users/")
+            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_anonymous_cannot_list_users(self):
+        response = self.client.get("/api/admin-console/users/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_admin_can_get_user_detail(self):
+        self.authenticate(self.admin)
+        response = self.client.get(f"/api/admin-console/users/{self.invite_user.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["username"], self.invite_user.username)
+        self.assertIn("recommended_next_step", response.data)
+
+    def test_user_detail_404_for_missing(self):
+        self.authenticate(self.admin)
+        response = self.client.get("/api/admin-console/users/999999/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_list_search_username_and_employee_name(self):
+        self.authenticate(self.admin)
+        by_username = self.client.get(
+            "/api/admin-console/users/",
+            {"search": "activation.user"},
+        )
+        by_employee = self.client.get(
+            "/api/admin-console/users/",
+            {"search": "Activation Person"},
+        )
+
+        self.assertEqual(by_username.data["count"], 1)
+        self.assertEqual(by_employee.data["count"], 1)
+
+    def test_list_filters_role_is_active_and_has_employee(self):
+        self.authenticate(self.admin)
+        role_response = self.client.get("/api/admin-console/users/", {"role": "technician"})
+        inactive_response = self.client.get(
+            "/api/admin-console/users/",
+            {"is_active": "false"},
+        )
+        linked_response = self.client.get(
+            "/api/admin-console/users/",
+            {"has_employee": "true"},
+        )
+
+        self.assertEqual(role_response.data["results"][0]["role"], "technician")
+        self.assertEqual(inactive_response.data["results"][0]["username"], "activation.user")
+        self.assertGreaterEqual(linked_response.data["count"], 2)
+
+    def test_activation_state_filters_pending_and_expired_invitation(self):
+        now = timezone.now()
+        UserInvitation.objects.create(
+            user=self.invite_user,
+            token_hash="pending-admin-users-token",
+            status=UserInvitation.Status.PENDING,
+            expires_at=now + timezone.timedelta(days=1),
+        )
+        UserInvitation.objects.create(
+            user=self.technician,
+            token_hash="expired-admin-users-token",
+            status=UserInvitation.Status.PENDING,
+            expires_at=now - timezone.timedelta(days=1),
+        )
+
+        self.authenticate(self.admin)
+        pending = self.client.get(
+            "/api/admin-console/users/",
+            {"activation_state": "pending_invitation"},
+        )
+        expired = self.client.get(
+            "/api/admin-console/users/",
+            {"activation_state": "expired_invitation"},
+        )
+
+        self.assertEqual(pending.data["results"][0]["username"], "activation.user")
+        self.assertEqual(expired.data["results"][0]["username"], "ops.technician")
+
+    def test_response_excludes_password_token_hash_and_activation_url(self):
+        UserInvitation.objects.create(
+            user=self.invite_user,
+            token_hash="secret-token-hash",
+            status=UserInvitation.Status.PENDING,
+            expires_at=timezone.now() + timezone.timedelta(days=1),
+        )
+        self.authenticate(self.admin)
+        response = self.client.get(f"/api/admin-console/users/{self.invite_user.id}/")
+
+        response_text = json.dumps(response.data, default=str).lower()
+        self.assertNotIn("password", response_text)
+        self.assertNotIn("token_hash", response_text)
+        self.assertNotIn("secret-token-hash", response_text)
+        self.assertNotIn("activation_url", response_text)
+        self.assertNotIn("activation.person@example.com", response_text)
+
+    def test_user_without_employee_is_handled_and_pagination_works(self):
+        self.authenticate(self.admin)
+        no_employee = self.client.get(
+            "/api/admin-console/users/",
+            {"activation_state": "no_employee", "page_size": 2},
+        )
+
+        self.assertEqual(no_employee.status_code, status.HTTP_200_OK)
+        self.assertLessEqual(len(no_employee.data["results"]), 2)
+        self.assertTrue(
+            all(item["employee"] is None for item in no_employee.data["results"])
+        )
+
+    def test_overview_additive_user_counts_work(self):
+        self.authenticate(self.admin)
+        with tempfile.TemporaryDirectory() as manifest_dir, override_settings(
+            BACKUP_MANIFEST_DIR=manifest_dir
+        ):
+            response = self.client.get("/api/admin-console/overview/")
+
+        self.assertIn("activation_needed_users", response.data["accounts"])
+        self.assertIn("users_without_employee", response.data["accounts"])

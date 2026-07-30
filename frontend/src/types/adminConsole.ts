@@ -44,6 +44,9 @@ export interface AdminConsoleOverview {
     active_users: number;
     inactive_users: number;
     users_without_usable_credential: number;
+    activation_needed_users: number;
+    users_with_employee: number;
+    users_without_employee: number;
     pending_invitations: number;
     expired_invitations: number;
     accepted_invitations_30d: number;

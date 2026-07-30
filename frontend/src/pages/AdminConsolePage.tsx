@@ -677,6 +677,48 @@ export function AdminConsolePage() {
             </ConsolePanel>
           </div>
 
+          <section className="mt-lg rounded-panel border border-accent/20 bg-accent-bg/55 p-lg shadow-panel">
+            <div className="flex flex-col gap-md lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-h3 text-text-primary">
+                  Kullanıcı & Personel Yönetimi
+                </h2>
+                <p className="mt-xs max-w-3xl text-body text-text-secondary">
+                  Aktivasyon bekleyen kullanıcıları, personel bağlantısı olmayan
+                  hesapları ve davet durumlarını read-only olarak inceleyin.
+                </p>
+              </div>
+              <Link
+                to="/admin-console/users"
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl border border-accent/25 bg-surface-1 px-md text-body font-semibold text-accent transition hover:bg-accent-bg focus:outline-none focus:ring-2 focus:ring-accent/30 motion-reduce:transition-none"
+              >
+                Yönetim ekranına git
+              </Link>
+            </div>
+            <div className="mt-md grid gap-sm md:grid-cols-4">
+              <MiniMetricCard
+                label="Aktivasyon bekleyen"
+                value={data.accounts.activation_needed_users}
+                tone="warning"
+              />
+              <MiniMetricCard
+                label="Personelsiz kullanıcı"
+                value={data.accounts.users_without_employee}
+                tone="danger"
+              />
+              <MiniMetricCard
+                label="Bekleyen davet"
+                value={data.accounts.pending_invitations}
+                tone="accent"
+              />
+              <MiniMetricCard
+                label="Süresi dolan davet"
+                value={data.accounts.expired_invitations}
+                tone={data.accounts.expired_invitations ? "warning" : "success"}
+              />
+            </div>
+          </section>
+
           <div className="mt-lg grid gap-lg xl:grid-cols-3">
             <ConsolePanel
               title="Personel Import"

@@ -193,6 +193,8 @@ Admin Console:
 - Partial/failed/stale backup durumunda verify script'i ve scheduled job runbook'u kontrol edilmelidir.
 - N6b guidance panelleri güvenli komutları sadece kopyalar; browser'dan backup, restore, cleanup veya invitation revoke çalıştırmaz.
 - Production'da scheduled backup kurulduktan sonra Admin Console üzerinden son manifest, stale uyarısı ve checklist günlük izlenmelidir.
+- Admin user/personnel connection review için `/admin-console/users` ekranında aktivasyon bekleyen, expired invitation ve personel bağlantısı olmayan kullanıcılar düzenli kontrol edilmelidir.
+- Role change, deactivate, delete ve password reset gibi riskli kullanıcı aksiyonları bu foundation fazında yoktur; ileride ayrı güvenlik kapılarıyla ele alınmalıdır.
 
 ## 10. Healthcheck ve smoke checklist
 
