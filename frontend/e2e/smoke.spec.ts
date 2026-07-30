@@ -79,11 +79,15 @@ test("admin can login, navigate core pages, export personnel xlsx, and logout", 
     .click();
   await expect(page.getByTestId("admin-users-detail-drawer")).toBeVisible();
   await expect(page.getByTestId("admin-user-actions-panel")).toBeVisible();
+  await expect(page.getByTestId("admin-user-audit-trace")).toBeVisible();
+  await expect(page.getByTestId("admin-user-audit-link")).toBeVisible();
   await page.getByTestId("admin-user-deactivate").click();
+  await expect(page.getByTestId("admin-user-action-modal")).toBeVisible();
   await expect(page.getByTestId("admin-user-action-reason")).toBeVisible();
   await expect(page.getByTestId("admin-user-action-confirmation")).toBeVisible();
   await page.getByTestId("admin-user-action-cancel").click();
   await page.getByTestId("admin-user-change-role").click();
+  await expect(page.getByTestId("admin-user-action-modal")).toBeVisible();
   await expect(page.getByTestId("admin-user-action-reason")).toBeVisible();
   await expect(page.getByTestId("admin-user-action-confirmation")).toBeVisible();
   await page.getByTestId("admin-user-action-cancel").click();

@@ -41,6 +41,7 @@ Güvenli aksiyonlar:
 - Invitation create/revoke Admin Users detay panelinden yapılabilir; activation URL sadece create response sonrası geçici gösterilir.
 - Kendi hesabını pasifleştirme, kendi rolünü değiştirme ve son aktif admini değiştirme backend tarafından engellenir.
 - Her state-changing kullanıcı aksiyonu audit log üretir.
+- N6e ile detay drawer içinde Audit izleri kartı ve filtreli audit linki eklendi; aksiyon sonrası result summary aynı audit izine yönlendirir.
 
 Özellikle yapmaz:
 

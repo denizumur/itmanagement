@@ -195,6 +195,7 @@ Admin Console:
 - Production'da scheduled backup kurulduktan sonra Admin Console üzerinden son manifest, stale uyarısı ve checklist günlük izlenmelidir.
 - Admin user/personnel connection review için `/admin-console/users` ekranında aktivasyon bekleyen, expired invitation ve personel bağlantısı olmayan kullanıcılar düzenli kontrol edilmelidir.
 - Admin user safe actions production'da düzenli review ister: deactivate/reactivate ve role change audit logları incelenmeli, son aktif admin guard doğrulanmalı, invitation create/revoke işlemleri periyodik olarak kontrol edilmelidir.
+- Admin user action review sırasında reason kalitesi, role-change gerekçeleri, inactive user listesi ve `/audit?entity_type=accounts.User` filtreli kayıtları periyodik olarak kontrol edilmelidir.
 - Delete, bulk action ve raw credential set/reset bu foundation kapsamında yoktur; bu işlemler eklenirse ayrı güvenlik kapıları ve test planı gerektirir.
 
 ## 10. Healthcheck ve smoke checklist
