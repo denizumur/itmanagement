@@ -21,3 +21,5 @@ backups/**/*.dump
 backups/**/*.zip
 backups/**/*.tar
 backups/**/*.tar.gz
+backups/manifests/*.json
+!backups/**/.gitkeep

@@ -10,16 +10,24 @@ import {
 } from "./helpers/auth";
 
 const backendUrl = process.env.E2E_BACKEND_URL ?? "http://localhost:8000";
+const backendErrorsByPage = new WeakMap<object, string[]>();
 
 test.beforeEach(async ({ page }) => {
+  const backendErrors: string[] = [];
+  backendErrorsByPage.set(page, backendErrors);
+
   page.on("response", (response) => {
     const url = response.url();
     const status = response.status();
 
     if (url.startsWith(backendUrl) && status >= 500) {
-      throw new Error(`Unexpected backend ${status}: ${url}`);
+      backendErrors.push(`Unexpected backend ${status}: ${url}`);
     }
   });
+});
+
+test.afterEach(async ({ page }) => {
+  expect(backendErrorsByPage.get(page) ?? []).toEqual([]);
 });
 
 test("health endpoint and login screen boot", async ({ page, request }) => {

@@ -179,6 +179,11 @@ Production operasyonunda:
 - Restore drill periyodik olarak staging veya izole local ortamda denenmeli.
 - Backup retention önerisi: günlük 7 gün, haftalık 4 hafta, aylık 6 ay.
 - Backup dosyaları şifreli ve güvenli storage üzerinde tutulmalı.
+- Scheduled backup runner: `.\scripts\backup\run_scheduled_backup.ps1 -Environment production -RetentionDays 30 -RetentionMinCount 10`.
+- Son backup kontrolü: `.\scripts\backup\verify_latest_backup.ps1 -MaxAgeHours 24 -FailIfOlderThanMaxAge`.
+- Scheduled job örnekleri: `docs/operations/scheduled-jobs.md`.
+- Manifest JSON dosyaları `backups/manifests/` altında üretilir ve repoya commitlenmez.
+- Offsite backup zorunlu operasyonel kontrol olarak planlanmalıdır; local disk tek kopya kabul edilmemelidir.
 
 ## 10. Healthcheck ve smoke checklist
 
@@ -198,6 +203,10 @@ Deploy sonrası manuel smoke:
 - [ ] Audit sayfaları admin için açılıyor.
 - [ ] PostgreSQL backup script smoke çalışıyor.
 - [ ] Media backup script smoke çalışıyor veya media yoksa kontrollü skip yapıyor.
+- [ ] Scheduled backup runner success manifest üretiyor.
+- [ ] Verify latest backup komutu healthy dönüyor.
+- [ ] Retention cleanup dry-run kontrol edildi.
+- [ ] Restore drill periyodu ve staging/izole ortam belirlendi.
 
 Healthcheck örneği:
 

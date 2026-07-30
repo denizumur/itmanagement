@@ -100,6 +100,8 @@ P4 v1 media restore icin otomatik destructive script eklemez. Media restore yapa
 ## Production onerisi
 
 - PostgreSQL ve media backup ayni zaman penceresinde alinmali.
+- Scheduled backup runner icin `.\scripts\backup\run_scheduled_backup.ps1 -Environment production -RetentionDays 30 -RetentionMinCount 10` kullanilabilir.
+- Son backup sagligi `.\scripts\backup\verify_latest_backup.ps1 -MaxAgeHours 24 -FailIfOlderThanMaxAge` ile kontrol edilmelidir.
 - Backup dosyalari uygulama sunucusundan farkli ve guvenli bir lokasyona kopyalanmali.
 - Backup dosyalari hassas veri icerebilir; sifreli saklama tercih edilmeli.
 - Restore drill periyodik olarak staging ortaminda denenmeli.
@@ -115,10 +117,61 @@ Baslangic icin makul bir politika:
 
 Regulasyon, sozlesme veya sirket politikasina gore bu sureler artirilabilir.
 
+P8 scheduled runner varsayilan olarak 14 gun retention ve en az 5 artifact koruma politikasini uygular. Cleanup sadece su dosyalari hedefler:
+
+- `backups/postgres/*.sql`
+- `backups/media/*.zip`
+- `backups/manifests/*.json`
+
+Dry-run kontrolu:
+
+```powershell
+.\scripts\backup\cleanup_old_backups.ps1 -RetentionDays 14 -RetentionMinCount 5 -DryRun
+```
+
+## Scheduled backup runner
+
+Tek komutla PostgreSQL backup, media backup, manifest ve retention calistirmak icin:
+
+```powershell
+.\scripts\backup\run_scheduled_backup.ps1 -Environment dev
+.\scripts\backup\run_scheduled_backup.ps1 -Environment production -RetentionDays 30 -RetentionMinCount 10
+.\scripts\backup\run_scheduled_backup.ps1 -Environment production -SkipMedia
+.\scripts\backup\run_scheduled_backup.ps1 -DryRunCleanup
+```
+
+Runner restore scriptini cagirmaz, DB drop/restore yapmaz ve secret deger loglamaz. Production modunda terminalde ayrica uyari verir.
+
+## Backup manifest
+
+Her scheduled backup kosusu `backups/manifests/backup-manifest-YYYYMMDD-HHMMSS.json` dosyasi uretir. Manifest su bilgileri tasir:
+
+- run id, baslangic/bitis zamani, status.
+- environment.
+- PostgreSQL ve varsa media backup path/boyut bilgisi.
+- retention sonucu ve silinen dosya sayisi.
+- errors/warnings.
+- Docker Compose servis kontrol bilgisi ve mumkunse kisa git commit hash'i.
+
+Manifest dosyalarinda raw secret, DB password, connection string, kullanici PII veya row data tutulmaz. Manifest JSON dosyalari `.gitignore` ile ignore edilir; sadece `.gitkeep` repoda kalir.
+
+## Son backup dogrulama
+
+Monitoring veya scheduled job sonrasi health kontrolu icin:
+
+```powershell
+.\scripts\backup\verify_latest_backup.ps1
+.\scripts\backup\verify_latest_backup.ps1 -MaxAgeHours 24 -FailIfOlderThanMaxAge
+.\scripts\backup\verify_latest_backup.ps1 -RequireMedia
+```
+
+Script en son manifesti bulur, status `success` degilse non-zero doner, artifact path ve boyutlarini kontrol eder. `-FailIfOlderThanMaxAge` kullanilirsa stale backup da non-zero sonuc uretir.
+
 ## Guvenlik
 
 - Backup dosyalari kullanici, personel, ticket, audit ve ek dosya verisi icerebilir.
 - Backup artifactleri repoya commitlenmez.
+- `backups/postgres/*.sql`, `backups/media/*.zip` ve `backups/manifests/*.json` commitlenmez.
 - Backup dosyalari paylasilirken sifreleme ve erisim kontrolu kullanilmalidir.
 - `.env`, secret, key veya password degerleri dokumana ya da repoya yazilmamalidir.
 
