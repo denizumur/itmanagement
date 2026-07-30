@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.notifications.apps.NotificationsConfig",
     "apps.audit.apps.AuditConfig",
     "apps.dashboard.apps.DashboardConfig",
+    "apps.operations.apps.OperationsConfig",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -160,6 +161,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+BACKUP_MANIFEST_DIR = BASE_DIR.parent / "backups" / "manifests"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -7,6 +7,7 @@ import {
   IconDevices,
   IconHistory,
   IconLicense,
+  IconServerCog,
   IconSparkles,
   IconTool,
   IconUsers,
@@ -58,6 +59,13 @@ const items: SidebarItem[] = [
     label: "İşlem Geçmişi",
     shortLabel: "Audit",
     icon: IconHistory,
+    roles: ["admin"],
+  },
+  {
+    to: "/admin-console",
+    label: "Sistem Yönetimi",
+    shortLabel: "Sistem",
+    icon: IconServerCog,
     roles: ["admin"],
   },
 ];

@@ -91,6 +91,7 @@ WantedBy=timers.target
 - Runner `0` exit code ile success, non-zero ile failed/partial sonuc verir.
 - Verify script `0` exit code ile healthy, `1` ile missing/failed/stale sonuc verir.
 - Manifestler `backups/manifests/` altinda tutulur ve repoya commitlenmez.
+- Admin Console `/admin-console`, son manifest ve verify sinyallerini admin kullanicilar icin gorunur hale getirir.
 - Loglarda secret, DB password, connection string veya PII tutulmamalidir.
 - Backup artifactleri hassas veri icerdigi icin offsite kopyalama sifreli ve erisim kontrollu olmalidir.
 

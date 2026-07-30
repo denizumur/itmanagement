@@ -185,6 +185,13 @@ Production operasyonunda:
 - Manifest JSON dosyaları `backups/manifests/` altında üretilir ve repoya commitlenmez.
 - Offsite backup zorunlu operasyonel kontrol olarak planlanmalıdır; local disk tek kopya kabul edilmemelidir.
 
+Admin Console:
+
+- Admin kullanıcılar `/admin-console` ekranından sistem sağlığı, son backup manifesti, Redis/cache durumu ve security uyarılarını görebilir.
+- Backup paneli manifest dosya adlarını ve boyutlarını özetler; full local path, secret veya connection string göstermez.
+- Davet/aktivasyon ve personel import panelleri operasyon sayıları gösterir; e-posta/telefon listeleri veya import row data göstermez.
+- Partial/failed/stale backup durumunda verify script'i ve scheduled job runbook'u kontrol edilmelidir.
+
 ## 10. Healthcheck ve smoke checklist
 
 Deploy sonrası manuel smoke:

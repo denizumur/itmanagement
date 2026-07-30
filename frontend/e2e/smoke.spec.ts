@@ -52,11 +52,18 @@ test("admin can login, navigate core pages, export personnel xlsx, and logout", 
     "/assignments",
     "/reminders",
     "/audit",
+    "/admin-console",
     "/tickets",
   ]) {
     await page.goto(path);
     await expectOperationalShell(page);
   }
+
+  await page.goto("/admin-console");
+  await expect(page.getByTestId("admin-console-page")).toBeVisible();
+  await expect(page.getByTestId("admin-console-backup-status")).toBeVisible();
+  await expect(page.getByTestId("admin-console-invitations")).toBeVisible();
+  await expect(page.getByTestId("admin-console-operations")).toBeVisible();
 
   await page.goto("/personnel");
   const downloadPromise = page.waitForEvent("download");
