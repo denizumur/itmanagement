@@ -78,6 +78,15 @@ export interface EmployeeDetailUser {
   is_superuser?: boolean;
   last_login?: string | null;
   date_joined?: string | null;
+  latest_invitation?: {
+    id: number;
+    status: "pending" | "accepted" | "revoked" | "expired";
+    expires_at?: string | null;
+    accepted_at?: string | null;
+    revoked_at?: string | null;
+    created_at?: string | null;
+    is_expired: boolean;
+  } | null;
 }
 
 export interface EmployeeDetailSummary {

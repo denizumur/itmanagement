@@ -1,5 +1,7 @@
 from rest_framework import serializers
+from django.utils import timezone
 
+from apps.accounts.models import UserInvitation
 from apps.assignments.models import Assignment
 from apps.employees.models import Employee
 from apps.tickets.models import Ticket
@@ -146,6 +148,30 @@ class EmployeeDetailSerializer(serializers.Serializer):
             "is_superuser": user.is_superuser,
             "last_login": user.last_login,
             "date_joined": user.date_joined,
+            "latest_invitation": self.get_latest_invitation(user),
+        }
+
+    def get_latest_invitation(self, user):
+        invitation = (
+            UserInvitation.objects.filter(user=user)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if not invitation:
+            return None
+
+        return {
+            "id": invitation.id,
+            "status": invitation.status,
+            "expires_at": invitation.expires_at,
+            "accepted_at": invitation.accepted_at,
+            "revoked_at": invitation.revoked_at,
+            "created_at": invitation.created_at,
+            "is_expired": (
+                invitation.status == UserInvitation.Status.PENDING
+                and invitation.expires_at <= timezone.now()
+            ),
         }
 
     def get_summary(self, employee):

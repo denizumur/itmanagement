@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import UserProfile
+from apps.accounts.models import UserInvitation
 from apps.assignments.models import Assignment
 from apps.audit.models import AuditLog
 from apps.employees.models import Department, Employee, EmployeeImportJob, JobTitle
@@ -249,6 +250,44 @@ class EmployeeApiTests(APITestCase):
 
         self.assertEqual(active_assignment_ids, {active_assignment.id})
         self.assertEqual(len(response.data["recent_tickets"]), 4)
+
+    def test_employee_detail_exposes_safe_invitation_summary_without_token(self):
+        invitation = UserInvitation.objects.create(
+            user=self.requester_user,
+            token_hash="f" * 64,
+            created_by=self.admin_user,
+            expires_at=timezone.now() + timezone.timedelta(days=7),
+        )
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(f"/api/employees/{self.employee.id}/detail/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        latest_invitation = response.data["user"]["latest_invitation"]
+        self.assertEqual(latest_invitation["id"], invitation.id)
+        self.assertEqual(latest_invitation["status"], UserInvitation.Status.PENDING)
+        self.assertFalse(latest_invitation["is_expired"])
+        self.assertNotIn("token_hash", str(latest_invitation))
+        self.assertNotIn("f" * 64, str(response.data))
+
+    def test_employee_detail_marks_expired_invitation_without_exposing_token_hash(self):
+        invitation = UserInvitation.objects.create(
+            user=self.requester_user,
+            token_hash="e" * 64,
+            created_by=self.admin_user,
+            expires_at=timezone.now() - timezone.timedelta(minutes=1),
+        )
+
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(f"/api/employees/{self.employee.id}/detail/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        latest_invitation = response.data["user"]["latest_invitation"]
+        self.assertEqual(latest_invitation["id"], invitation.id)
+        self.assertTrue(latest_invitation["is_expired"])
+        self.assertNotIn("token_hash", str(response.data))
 
     def test_viewer_can_read_employee_detail(self):
         self.client.force_authenticate(user=self.viewer_user)

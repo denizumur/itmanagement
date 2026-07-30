@@ -69,6 +69,7 @@ export function ActivateAccountPage() {
           <IconLock size={18} className="text-text-secondary" aria-hidden="true" />
           <input
             id="activation-password"
+            data-testid="activate-account-password"
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -84,6 +85,7 @@ export function ActivateAccountPage() {
           <IconLock size={18} className="text-text-secondary" aria-hidden="true" />
           <input
             id="activation-password-confirm"
+            data-testid="activate-account-password-confirm"
             type="password"
             value={passwordConfirm}
             onChange={(event) => setPasswordConfirm(event.target.value)}
@@ -93,13 +95,19 @@ export function ActivateAccountPage() {
         </div>
 
         {errorMessage ? (
-          <p className="mt-md rounded-app border border-danger bg-danger-bg px-md py-sm text-caption text-danger">
+          <p
+            data-testid="activate-account-error"
+            className="mt-md rounded-app border border-danger bg-danger-bg px-md py-sm text-caption text-danger"
+          >
             {errorMessage}
           </p>
         ) : null}
 
         {successMessage ? (
-          <div className="mt-md rounded-app border border-success/30 bg-success-bg px-md py-sm text-caption text-success">
+          <div
+            data-testid="activate-account-success"
+            className="mt-md rounded-app border border-success/30 bg-success-bg px-md py-sm text-caption text-success"
+          >
             {successMessage}
             <Link className="ml-sm font-semibold underline" to="/login">
               Giriş sayfasına dön
@@ -109,6 +117,7 @@ export function ActivateAccountPage() {
 
         <button
           type="submit"
+          data-testid="activate-account-submit"
           disabled={isSubmitting || Boolean(successMessage)}
           className="login-primary-button mt-lg flex w-full items-center justify-center rounded-app px-md py-md text-body font-medium text-surface-1 disabled:cursor-not-allowed disabled:opacity-60"
         >

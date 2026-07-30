@@ -18,10 +18,15 @@ import {
   IconUsers,
   IconX,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import type { EmployeeImportDryRunResponse } from "../api/employees";
-import { createUserInvitation } from "../api/accounts";
+import {
+  createUserInvitation,
+  listUserInvitations,
+  revokeUserInvitation,
+} from "../api/accounts";
+import type { UserInvitationListItem } from "../api/accounts";
 import { useAuth } from "../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../components/common/DataTable";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
@@ -401,6 +406,29 @@ function EmployeeDetailPanel({
   const [invitationUrl, setInvitationUrl] = useState("");
   const [invitationError, setInvitationError] = useState("");
   const [isCreatingInvitation, setIsCreatingInvitation] = useState(false);
+  const [currentInvitation, setCurrentInvitation] =
+    useState<UserInvitationListItem | null>(null);
+
+  useEffect(() => {
+    if (!user?.latest_invitation) {
+      setCurrentInvitation(null);
+      return;
+    }
+
+    setCurrentInvitation({
+      id: user.latest_invitation.id,
+      user_id: user.id,
+      username: user.username,
+      user_display_name: user.username,
+      status: user.latest_invitation.status,
+      expires_at: user.latest_invitation.expires_at ?? "",
+      accepted_at: user.latest_invitation.accepted_at,
+      revoked_at: user.latest_invitation.revoked_at,
+      created_at: user.latest_invitation.created_at ?? "",
+      created_by: "",
+      is_expired: user.latest_invitation.is_expired,
+    });
+  }, [user]);
 
   async function handleCreateInvitation() {
     if (!user) {
@@ -414,6 +442,11 @@ function EmployeeDetailPanel({
     try {
       const response = await createUserInvitation(user.id);
       setInvitationUrl(response.activation_url);
+      const invitations = await listUserInvitations({
+        userId: user.id,
+        status: "pending",
+      });
+      setCurrentInvitation(invitations[0] ?? null);
     } catch {
       setInvitationError("Davet linki oluşturulamadı.");
     } finally {
@@ -427,6 +460,25 @@ function EmployeeDetailPanel({
     }
 
     await navigator.clipboard.writeText(invitationUrl);
+  }
+
+  async function handleRevokeInvitation() {
+    if (!currentInvitation) {
+      return;
+    }
+
+    setInvitationError("");
+    try {
+      await revokeUserInvitation(currentInvitation.id);
+      setCurrentInvitation({
+        ...currentInvitation,
+        status: "revoked",
+        revoked_at: new Date().toISOString(),
+      });
+      setInvitationUrl("");
+    } catch {
+      setInvitationError("Davet iptal edilemedi.");
+    }
   }
 
   return (
@@ -523,33 +575,59 @@ function EmployeeDetailPanel({
                     {canInviteUsers && user && !user.is_active ? (
                       <button
                         type="button"
+                        data-testid="create-invitation-button"
                         onClick={handleCreateInvitation}
                         disabled={isCreatingInvitation}
                         className="inline-flex items-center gap-xs rounded-full border border-accent/30 bg-accent-bg px-sm py-xs text-caption font-semibold text-accent transition hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
                       >
                         <IconShieldCheck size={14} aria-hidden={true} />
-                        {isCreatingInvitation ? "Oluşturuluyor" : "Davet Linki Oluştur"}
+                        {isCreatingInvitation ? "Oluşturuluyor" : "Yeni Davet Linki Oluştur"}
                       </button>
                     ) : null}
                   </div>
                 </div>
 
-                {invitationUrl || invitationError ? (
+                {currentInvitation || invitationUrl || invitationError ? (
                   <div className="border-t border-border-subtle px-md pb-md">
+                    {currentInvitation ? (
+                      <div className="mb-sm flex flex-wrap items-center gap-xs rounded-xl border border-border-subtle bg-surface-1/75 p-sm text-caption text-text-secondary">
+                        <span>
+                          Davet durumu: {currentInvitation.status}
+                          {currentInvitation.is_expired ? " · süresi dolmuş" : ""}
+                        </span>
+                        {currentInvitation.expires_at ? (
+                          <span>
+                            Bitiş: {formatDateTime(currentInvitation.expires_at)}
+                          </span>
+                        ) : null}
+                        {currentInvitation.status === "pending" ? (
+                          <button
+                            type="button"
+                            data-testid="revoke-invitation-button"
+                            onClick={handleRevokeInvitation}
+                            className="ml-auto rounded-full border border-danger/30 bg-danger/10 px-sm py-xs font-semibold text-danger transition hover:border-danger focus:outline-none focus:ring-2 focus:ring-danger/25 motion-reduce:transition-none"
+                          >
+                            Daveti İptal Et
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {invitationUrl ? (
                       <div className="rounded-xl border border-success/30 bg-success-bg p-sm text-caption text-success">
                         <p className="font-semibold">Davet linki oluşturuldu.</p>
                         <p className="mt-xs text-text-secondary">
-                          Bu link kullanıcıya güvenli kanaldan iletilmelidir.
+                          Bu link tek kullanımlıktır ve kullanıcıya güvenli kanaldan iletilmelidir.
                         </p>
                         <div className="mt-sm flex gap-xs">
                           <input
                             readOnly
+                            data-testid="activation-url-output"
                             value={invitationUrl}
                             className="min-w-0 flex-1 rounded-lg border border-border bg-surface-0 px-sm py-xs text-text-primary"
                           />
                           <button
                             type="button"
+                            data-testid="copy-invitation-link"
                             onClick={handleCopyInvitation}
                             className="inline-flex items-center justify-center rounded-lg border border-success/30 bg-surface-0 px-sm text-success transition hover:border-success focus:outline-none focus:ring-2 focus:ring-success/25 motion-reduce:transition-none"
                             aria-label="Davet linkini kopyala"
@@ -650,6 +728,13 @@ function EmployeeDetailPanel({
                   <DetailRow label="User aktif mi" value={user ? user.is_active : null} />
                   <DetailRow label="Son giriş" value={formatDateTime(user?.last_login)} />
                   <DetailRow label="Kayıt tarihi" value={formatDateTime(user?.date_joined)} />
+                </div>
+                <div className="mt-md rounded-2xl border border-border-subtle bg-surface-0/80 p-md text-body text-text-secondary">
+                  {!user
+                    ? "Kullanıcı hesabı bağlı değil."
+                    : user.is_active
+                      ? "Kullanıcı aktif."
+                      : "Pasif kullanıcı. Davet linki oluşturup güvenli kanaldan paylaşabilirsiniz."}
                 </div>
               </DetailSection>
 
@@ -870,6 +955,7 @@ export function PersonnelPage() {
   const [importPreview, setImportPreview] =
     useState<EmployeeImportDryRunResponse | null>(null);
   const [importError, setImportError] = useState("");
+  const [importNotice, setImportNotice] = useState("");
 
   const {
     state,
@@ -962,6 +1048,7 @@ export function PersonnelPage() {
     const file = event.target.files?.[0] ?? null;
 
     setImportError("");
+    setImportNotice("");
     setImportPreview(null);
     setImportFile(file);
 
@@ -1010,6 +1097,11 @@ export function PersonnelPage() {
         type: "success",
         message: `${result.created_count} personel import edildi.`,
       });
+      if (result.created_user_count > 0) {
+        setImportNotice(
+          "Yeni pasif kullanıcılar oluşturuldu. Personel detayından davet linki oluşturabilirsiniz."
+        );
+      }
       setImportFile(null);
       setImportPreview(null);
       refetchAll();
@@ -1260,6 +1352,12 @@ export function PersonnelPage() {
                 {importError ? (
                   <div className="mt-sm rounded-xl border border-danger/30 bg-danger/10 px-md py-sm text-body text-danger">
                     {importError}
+                  </div>
+                ) : null}
+
+                {importNotice ? (
+                  <div className="mt-sm rounded-xl border border-success/30 bg-success-bg px-md py-sm text-body text-success">
+                    {importNotice}
                   </div>
                 ) : null}
               </div>

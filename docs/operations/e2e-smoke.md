@@ -11,6 +11,7 @@ P6 smoke paketi her deploy veya refactor sonrasi su sorulari hizli cevaplamak ic
 - Kritik roller login olabiliyor mu?
 - Admin operasyon sayfalari render oluyor mu?
 - Personel Excel export dosya olarak iniyor mu?
+- Davet linki ile inactive kullanici aktivasyonu calisiyor mu?
 - Requester, approver ve technician portallari temel olarak aciliyor mu?
 - Logout calisiyor mu?
 
@@ -51,7 +52,8 @@ Runner local/dev icin:
 2. `python manage.py check` calistirir.
 3. Smoke kullanicilarinin sifrelerini `E2ePass123!` yapar.
 4. Django cache'i temizler.
-5. Frontend Playwright smoke suite'ini calistirir.
+5. Inactive/unusable `e2e.invite.user` kullanicisini ve bagli personel kaydini hazirlar.
+6. Frontend Playwright smoke suite'ini calistirir.
 
 Bu sifre production secret degildir; sadece local/dev smoke icindir.
 
@@ -68,6 +70,7 @@ node node_modules/@playwright/test/cli.js test
 - Requester: `requester.demo`
 - Technician: `technician.demo`
 - Approver: `idari.mali.manager`
+- Invitation smoke: `e2e.invite.user`
 - Local/dev smoke sifresi: `E2ePass123!`
 
 ## Test edilen akislar
@@ -81,6 +84,10 @@ node node_modules/@playwright/test/cli.js test
 - Approver `/approvals` portal render.
 - Technician `/tickets` inbox render.
 - Logout ve protected page redirect.
+- Admin API ile `e2e.invite.user` icin activation link uretimi.
+- `/activate-account?token=...` sayfasinda sifre belirleme.
+- Aktive edilen kullanicinin login olabilmesi.
+- Ayni activation token'in tekrar kullanilamamasi.
 
 ## Test edilmeyen akislar
 
@@ -89,6 +96,7 @@ node node_modules/@playwright/test/cli.js test
 - Media upload.
 - Production reverse proxy.
 - Login throttle E2E; bu P3c backend regression testleriyle korunur.
+- Email invitation delivery; P7d sadece link uretme/aktivasyon smoke yapar.
 
 Ticket create flow P6'da bilerek form gorunurlugu seviyesinde tutuldu. Full create/cleanup akisi ileride daha stabil data factory veya API cleanup ile eklenmelidir.
 
@@ -121,6 +129,18 @@ Runner `cache.clear()` calistirir. Manuel calistirmada backend cache temizlenmem
 docker compose exec backend python manage.py shell -c "from django.core.cache import cache; cache.clear()"
 ```
 
+### Activation smoke token expired/reused
+
+Runner her calismada `e2e.invite.user` icin eski davetleri temizler ve kullaniciyi tekrar inactive/unusable hale getirir. Manuel calistirmada eski token kullanildiysa `/activate-account` hata gosterir; runner'i tekrar calistirin.
+
+### Activation password validation
+
+Backend Django password validators calistirir. Smoke sifresi runner tarafindan guclu uretilir; manuel testte zayif sifre 400 hata dondurur.
+
+### Invite user cleanup
+
+Runner `e2e.invite.user` ve `E2E Invite User` personel kaydini local/dev DB'de ayirt edilebilir prefix ile tutar. Production guard nedeniyle production ortamda calismaz.
+
 ### Selector kirildi
 
 Oncelik accessible role/name selector'laridir. Kritik ve kirilgan yerlerde minimal `data-testid` kullanilir:
@@ -132,6 +152,11 @@ Oncelik accessible role/name selector'laridir. Kritik ve kirilgan yerlerde minim
 - `portal-shell`
 - `personnel-export-excel`
 - `ticket-inbox`
+- `activate-account-password`
+- `activate-account-password-confirm`
+- `activate-account-submit`
+- `activate-account-success`
+- `activate-account-error`
 
 ### Download path problemi
 

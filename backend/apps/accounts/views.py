@@ -52,6 +52,27 @@ def activation_url(token):
     return f"{frontend_base_url()}/activate-account?token={token}"
 
 
+def invitation_response(invitation):
+    user = invitation.user
+    created_by = invitation.created_by
+    return {
+        "id": invitation.id,
+        "user_id": user.id,
+        "username": user.username,
+        "user_display_name": user.get_full_name() or user.username,
+        "status": invitation.status,
+        "expires_at": invitation.expires_at,
+        "accepted_at": invitation.accepted_at,
+        "revoked_at": invitation.revoked_at,
+        "created_at": invitation.created_at,
+        "created_by": created_by.username if created_by else "",
+        "is_expired": (
+            invitation.status == UserInvitation.Status.PENDING
+            and invitation.expires_at <= timezone.now()
+        ),
+    }
+
+
 class LoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
     throttle_classes = [LoginRateThrottle]
@@ -191,6 +212,27 @@ class LogoutView(APIView):
 
 class InvitationCreateView(APIView):
     permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        queryset = UserInvitation.objects.select_related("user", "created_by").order_by(
+            "-created_at",
+        )
+        status_filter = request.query_params.get("status")
+        user_id = request.query_params.get("user_id")
+        search = (request.query_params.get("search") or "").strip()
+
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+
+        if search:
+            queryset = queryset.filter(user__username__icontains=search)
+
+        queryset = queryset[:100]
+
+        return Response([invitation_response(invitation) for invitation in queryset])
 
     def post(self, request):
         serializer = InvitationCreateSerializer(data=request.data)

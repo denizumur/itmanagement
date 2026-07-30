@@ -55,7 +55,8 @@ $prepareScript = Join-Path $repoRoot "backend\.e2e_prepare_smoke_users.py"
 $pythonCode = @"
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from apps.accounts.models import UserProfile
+from apps.accounts.models import UserInvitation, UserProfile
+from apps.employees.models import Employee
 
 password = "$Password"
 users = [
@@ -78,6 +79,28 @@ for username, email, role in users:
     user.save()
     user.profile.role = role
     user.profile.save(update_fields=["role"])
+
+invite_user, _ = User.objects.get_or_create(
+    username="e2e.invite.user",
+    defaults={"email": "e2e.invite.user@example.com"},
+)
+invite_user.email = "e2e.invite.user@example.com"
+invite_user.is_active = False
+invite_user.set_unusable_password()
+invite_user.save()
+invite_user.profile.role = UserProfile.Role.REQUESTER
+invite_user.profile.save(update_fields=["role"])
+
+Employee.objects.update_or_create(
+    user=invite_user,
+    defaults={
+        "full_name": "E2E Invite User",
+        "email": "e2e.invite.user@example.com",
+        "imported_from_excel": True,
+        "is_active": True,
+    },
+)
+UserInvitation.objects.filter(user=invite_user).delete()
 
 cache.clear()
 print("E2E smoke users prepared.")

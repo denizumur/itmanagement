@@ -3,6 +3,7 @@ import { expectXlsxDownload } from "./helpers/download";
 import {
   expectOperationalShell,
   expectPortalShell,
+  E2E_PASSWORD,
   login,
   logout,
   smokeUsers,
@@ -82,4 +83,68 @@ test("technician workspace opens ticket inbox", async ({ page }) => {
   await page.goto("/tickets");
   await expectOperationalShell(page);
   await expect(page.getByTestId("ticket-inbox")).toBeVisible();
+});
+
+test("invited inactive user can activate account and login once", async ({
+  page,
+  request,
+}) => {
+  const tokenResponse = await request.post(`${backendUrl}/api/auth/token/`, {
+    data: smokeUsers.admin,
+  });
+  expect(tokenResponse.status()).toBe(200);
+  const tokenBody = await tokenResponse.json();
+  const accessToken = tokenBody.access as string;
+
+  const employeeResponse = await request.get(
+    `${backendUrl}/api/employees/table/?search=E2E%20Invite%20User`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+  expect(employeeResponse.status()).toBe(200);
+  const employeeBody = await employeeResponse.json();
+  const inviteEmployee = employeeBody.results[0];
+  expect(inviteEmployee.user).toBeTruthy();
+
+  const invitationResponse = await request.post(
+    `${backendUrl}/api/auth/invitations/`,
+    {
+      data: {
+        user_id: inviteEmployee.user,
+      },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+  expect(invitationResponse.status()).toBe(201);
+  const invitationBody = await invitationResponse.json();
+  const activationUrl = invitationBody.activation_url as string;
+  const activationPath = new URL(activationUrl).pathname + new URL(activationUrl).search;
+  const activatedPassword = `${E2E_PASSWORD}Activated!`;
+
+  await page.goto(activationPath);
+  await page.getByTestId("activate-account-password").fill(activatedPassword);
+  await page.getByTestId("activate-account-password-confirm").fill(activatedPassword);
+  await page.getByTestId("activate-account-submit").click();
+  await expect(page.getByTestId("activate-account-success")).toBeVisible();
+
+  await login(page, {
+    username: "e2e.invite.user",
+    password: activatedPassword,
+  });
+  await page.goto("/my-tickets");
+  await expectPortalShell(page);
+  await logout(page);
+
+  await page.goto(activationPath);
+  await page.getByTestId("activate-account-password").fill(`${E2E_PASSWORD}Again!`);
+  await page
+    .getByTestId("activate-account-password-confirm")
+    .fill(`${E2E_PASSWORD}Again!`);
+  await page.getByTestId("activate-account-submit").click();
+  await expect(page.getByTestId("activate-account-error")).toBeVisible();
 });

@@ -472,6 +472,49 @@ class UserInvitationTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_admin_can_list_invitations(self):
+        create_response = self.create_invitation()
+
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get("/api/auth/invitations/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["id"], create_response.data["invitation_id"])
+        self.assertEqual(response.data[0]["username"], self.inactive_user.username)
+
+    def test_non_admin_cannot_list_invitations(self):
+        self.client.force_authenticate(user=self.technician_user)
+
+        response = self.client.get("/api/auth/invitations/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_invitation_list_response_excludes_token_hash(self):
+        create_response = self.create_invitation()
+        token = self.token_from_activation_url(create_response.data["activation_url"])
+
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get("/api/auth/invitations/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        serialized = str(response.data)
+        self.assertNotIn("token_hash", serialized)
+        self.assertNotIn(token, serialized)
+
+    def test_invitation_list_marks_expired_invitation(self):
+        create_response = self.create_invitation()
+        invitation = UserInvitation.objects.get(id=create_response.data["invitation_id"])
+        invitation.expires_at = timezone.now() - timezone.timedelta(minutes=1)
+        invitation.save(update_fields=["expires_at"])
+
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get("/api/auth/invitations/", {"status": "pending"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        invitation_item = next(item for item in response.data if item["id"] == invitation.id)
+        self.assertTrue(invitation_item["is_expired"])
+
     def test_cannot_create_invitation_for_active_user(self):
         response = self.create_invitation(user=self.technician_user)
 
