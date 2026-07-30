@@ -126,6 +126,26 @@ test("technician workspace opens ticket inbox", async ({ page }) => {
   await page.goto("/tickets");
   await expectOperationalShell(page);
   await expect(page.getByTestId("ticket-inbox")).toBeVisible();
+  await expect(page.getByTestId("ticket-workspace-page")).toBeVisible();
+  await expect(page.getByTestId("ticket-queue-filter-search")).toBeVisible();
+  await expect(page.getByTestId("ticket-queue-filter-status")).toBeVisible();
+  await expect(page.getByTestId("ticket-queue-filter-priority")).toBeVisible();
+  await expect(page.getByTestId("resolved-ticket-section")).toBeVisible();
+
+  const queueCards = page.getByTestId("ticket-queue-card");
+  const emptyState = page.getByTestId("ticket-queue-empty-state");
+  if ((await queueCards.count()) > 0) {
+    await queueCards.first().click();
+    await expect(page.getByTestId("ticket-chat-panel")).toBeVisible();
+    await expect(page.getByTestId("ticket-chat-mode-requester")).toBeVisible();
+    await expect(page.getByTestId("ticket-chat-mode-internal")).toBeVisible();
+    await expect(page.getByTestId("ticket-status-composer")).toBeVisible();
+    await expect(page.getByTestId("ticket-audit-link")).toBeVisible();
+    await page.getByRole("button", { name: /context/i }).click();
+    await expect(page.getByTestId("ticket-context-panel").last()).toBeVisible();
+  } else {
+    await expect(emptyState).toBeVisible();
+  }
 });
 
 test("invited inactive user can activate account and login once", async ({

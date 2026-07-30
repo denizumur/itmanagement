@@ -198,6 +198,12 @@ Admin Console:
 - Admin user action review sırasında reason kalitesi, role-change gerekçeleri, inactive user listesi ve `/audit?entity_type=accounts.User` filtreli kayıtları periyodik olarak kontrol edilmelidir.
 - Delete, bulk action ve raw credential set/reset bu foundation kapsamında yoktur; bu işlemler eklenirse ayrı güvenlik kapıları ve test planı gerektirir.
 
+Ticket Workspace:
+
+- Technician/admin kullanıcılar `/tickets` ekranında açık queue, çözülen ticketlar, chat, status composer ve context panelini günlük kontrol etmelidir.
+- İç notların requester portalında görünmediği ve public reply / internal note ayrımının net kaldığı periyodik olarak doğrulanmalıdır.
+- Resolved/closed geçişlerinde çözüm notu kalitesi ve `/audit?entity_type=tickets.Ticket` kayıtları gözden geçirilmelidir.
+
 ## 10. Healthcheck ve smoke checklist
 
 Deploy sonrası manuel smoke:

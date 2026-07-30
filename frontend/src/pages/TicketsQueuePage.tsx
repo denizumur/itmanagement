@@ -3,6 +3,7 @@ import {
   IconClipboardList,
   IconClock,
   IconDeviceLaptop,
+  IconHistory,
   IconMessageCircle,
   IconRefresh,
   IconSearch,
@@ -12,6 +13,7 @@ import {
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { MiniMetricCard } from "../components/common/MiniMetricCard";
 import { Skeleton } from "../components/common/Skeleton";
@@ -74,6 +76,12 @@ const orderingOptions = [
   { value: "-updated_at", label: "Son güncellenen" },
   { value: "priority", label: "Öncelik" },
 ];
+
+function getTicketAuditLink(ticketId: number) {
+  return `/audit?entity_type=tickets.Ticket&entity_id=${encodeURIComponent(
+    String(ticketId)
+  )}`;
+}
 
 function formatDateTime(value?: string | null) {
   if (!value) {
@@ -205,14 +213,19 @@ function TicketInboxList({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-sm">
         {tickets.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-surface-2 p-md text-body text-text-secondary">
-            Kuyrukta aktif ticket yok.
+          <div
+            className="rounded-2xl border border-border bg-surface-2 p-md text-body text-text-secondary"
+            data-testid="ticket-queue-empty-state"
+          >
+            Kuyrukta aktif ticket yok. Filtreleri temizleyebilir veya çözülenler
+            alanını kontrol edebilirsiniz.
           </div>
         ) : (
           <div className="space-y-xs">
             {tickets.map((ticket) => {
               const priorityMeta = getTicketPriorityMeta(ticket.priority);
               const statusMeta = getTicketStatusMeta(ticket.status);
+              const approvalMeta = getTicketApprovalMeta(ticket.approval_status);
               const selected = selectedTicketId === ticket.id;
 
               return (
@@ -220,8 +233,11 @@ function TicketInboxList({
                   key={ticket.id}
                   type="button"
                   onClick={() => onSelectTicket(ticket)}
+                  data-testid={
+                    selected ? "ticket-queue-selected-card" : "ticket-queue-card"
+                  }
                   className={cn(
-                    "w-full rounded-2xl border-l-4 p-sm text-left transition",
+                    "w-full rounded-2xl border-l-4 p-sm text-left transition focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none",
                     selected
                       ? "border-l-accent bg-accent-bg"
                       : "border-l-transparent bg-surface-2 hover:border-l-accent hover:bg-accent-bg"
@@ -233,7 +249,13 @@ function TicketInboxList({
                         #{ticket.id} {ticket.title}
                       </p>
                       <p className="mt-1 truncate text-caption text-text-secondary">
-                        {ticket.employee_name}
+                        {ticket.employee_name} · {formatDateTime(ticket.updated_at)}
+                      </p>
+                      <p className="mt-xs truncate text-[11px] text-text-muted">
+                        {ticket.assigned_to_name
+                          ? `Atanan: ${ticket.assigned_to_name}`
+                          : "Atanmamış"}{" "}
+                        · Mesaj {ticket.comments_count} · Ek {ticket.attachments_count}
                       </p>
                     </div>
 
@@ -245,6 +267,11 @@ function TicketInboxList({
                       <StatusBadge variant={statusMeta.variant}>
                         {statusMeta.label}
                       </StatusBadge>
+                      {ticket.approval_status !== "not_required" ? (
+                        <StatusBadge variant={approvalMeta.variant}>
+                          {approvalMeta.label}
+                        </StatusBadge>
+                      ) : null}
                     </div>
                   </div>
                 </button>
@@ -273,7 +300,10 @@ function ResolvedTicketsList({
   onSelectTicket: (ticket: Ticket) => void;
 }) {
   return (
-    <section className="mt-md rounded-panel border border-border bg-surface-1 p-md shadow-panel">
+    <section
+      className="mt-md rounded-panel border border-border bg-surface-1 p-md shadow-panel"
+      data-testid="resolved-ticket-section"
+    >
       <div className="flex items-center justify-between gap-sm">
         <div>
           <p className="text-caption font-semibold uppercase tracking-wide text-success">
@@ -310,8 +340,9 @@ function ResolvedTicketsList({
                 key={ticket.id}
                 type="button"
                 onClick={() => onSelectTicket(ticket)}
+                data-testid="resolved-ticket-card"
                 className={cn(
-                  "w-full rounded-2xl border-l-4 p-sm text-left transition",
+                  "w-full rounded-2xl border-l-4 p-sm text-left transition focus:outline-none focus:ring-2 focus:ring-success/25 motion-reduce:transition-none",
                   selected
                     ? "border-l-success bg-success-bg"
                     : "border-l-transparent bg-surface-2 hover:border-l-success hover:bg-success-bg"
@@ -415,6 +446,15 @@ function WorkspaceChatHeader({
             </button>
           ) : null}
 
+          <Link
+            to={getTicketAuditLink(resolvedTicket.id)}
+            data-testid="ticket-audit-link"
+            className="inline-flex h-10 items-center justify-center gap-xs rounded-app border border-border px-sm text-caption text-text-secondary transition hover:border-accent hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
+          >
+            <IconHistory size={15} aria-hidden={true} />
+            Audit
+          </Link>
+
           <button
             type="button"
             onClick={onOpenContext}
@@ -499,7 +539,10 @@ function TicketStatusComposerControls({
   const isResolutionFlow = pendingStatus === "resolved" || pendingStatus === "closed";
 
   return (
-    <div className="rounded-2xl border border-border bg-surface-2 p-sm">
+    <div
+      className="rounded-2xl border border-border bg-surface-2 p-sm"
+      data-testid="ticket-status-composer"
+    >
       <div className="flex flex-col gap-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <p className="text-caption font-semibold uppercase tracking-wide text-text-secondary">
@@ -516,6 +559,7 @@ function TicketStatusComposerControls({
           onChange={(event) =>
             onStatusChange(ticket, event.target.value as TicketStatus)
           }
+          data-testid="ticket-status-select"
           className="h-10 min-w-[180px] rounded-app border border-border bg-surface-0 px-sm text-caption text-text-primary outline-none transition focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Ticket durumunu değiştir"
         >
@@ -550,6 +594,7 @@ function TicketStatusComposerControls({
           <textarea
             value={solutionNote}
             onChange={(event) => onSolutionNoteChange(event.target.value)}
+            data-testid="ticket-solution-note"
             className="mt-sm min-h-[82px] w-full rounded-app border border-border bg-surface-0 px-md py-sm text-body text-text-primary outline-none transition placeholder:text-text-secondary focus:border-accent"
             placeholder="Örn: VPN profili yenilendi ve kullanıcı tekrar giriş yapabildi."
           />
@@ -567,6 +612,7 @@ function TicketStatusComposerControls({
             <button
               type="button"
               onClick={onApplySolutionNote}
+              data-testid="ticket-status-submit"
               disabled={!solutionNote.trim() || isUpdating || isReturning}
               className="rounded-app bg-accent px-md py-sm text-body font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -627,7 +673,10 @@ function ContextSidePanel({
   }
 
   return (
-    <aside className="flex min-w-0 flex-col gap-sm">
+    <aside className="flex min-w-0 flex-col gap-sm" data-testid="ticket-context-panel">
+      <span className="sr-only" data-testid="ticket-context-requester" />
+      <span className="sr-only" data-testid="ticket-context-assets" />
+      <span className="sr-only" data-testid="ticket-context-related-tickets" />
       <ContextCard title="Requester" icon={<IconUser size={15} aria-hidden={true} />}>
         <div className="space-y-1 text-caption">
           <p className="font-semibold text-text-primary">
@@ -733,6 +782,37 @@ function ContextSidePanel({
           </div>
         )}
       </ContextCard>
+
+      <ContextCard title="Aksiyon uygunluğu" icon={<IconTool size={15} aria-hidden={true} />}>
+        <div className="space-y-xs text-caption text-text-secondary" data-testid="ticket-context-actions">
+          <p>
+            Durum güncelleme:{" "}
+            <span className="font-semibold text-text-primary">
+              {context.actions.can_update_status ? "Uygun" : "Kapalı"}
+            </span>
+          </p>
+          <p>
+            İç not:{" "}
+            <span className="font-semibold text-text-primary">
+              {context.actions.can_add_internal_note ? "Uygun" : "Kapalı"}
+            </span>
+          </p>
+          {context.actions.blocked_reason ? (
+            <p className="rounded-app border border-warning/30 bg-warning-bg p-xs text-warning">
+              {context.actions.blocked_reason}
+            </p>
+          ) : null}
+        </div>
+      </ContextCard>
+
+      <Link
+        to={getTicketAuditLink(context.ticket.id)}
+        data-testid="ticket-context-audit-link"
+        className="inline-flex h-10 items-center justify-center gap-xs rounded-2xl border border-border bg-surface-1 px-sm text-caption font-semibold text-text-primary shadow-panel transition hover:border-accent hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
+      >
+        <IconHistory size={15} aria-hidden={true} />
+        Audit izini görüntüle
+      </Link>
 
       <div className="grid grid-cols-4 gap-xs rounded-2xl border border-border bg-surface-1 p-sm text-center shadow-panel">
         <div>
@@ -943,6 +1023,8 @@ export function TicketsQueuePage() {
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnComment, setReturnComment] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [statusSuccess, setStatusSuccess] = useState<string | null>(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState(new Date());
 
   const selectedTicketId = selectedTicket?.id ?? null;
   const ticketContextQuery = useTicketContext(selectedTicketId, Boolean(selectedTicketId));
@@ -971,6 +1053,7 @@ export function TicketsQueuePage() {
       summaryQuery.refetch(),
       selectedTicketId ? ticketContextQuery.refetch() : Promise.resolve(),
     ]);
+    setLastRefreshedAt(new Date());
   }
 
   function handleSelectTicket(ticket: Ticket) {
@@ -988,6 +1071,7 @@ export function TicketsQueuePage() {
     note?: string
   ) {
     setError(null);
+    setStatusSuccess(null);
 
     try {
       const updated = await updateStatusMutation.mutateAsync({
@@ -999,6 +1083,7 @@ export function TicketsQueuePage() {
       setSelectedTicket(updated);
       setPendingStatus(null);
       setSolutionNote("");
+      setStatusSuccess("Ticket durumu güncellendi. Audit izi ve kuyruk yenilendi.");
       await refetchAll();
     } catch (updateError) {
       setError(getErrorMessage(updateError));
@@ -1038,6 +1123,7 @@ export function TicketsQueuePage() {
     setSolutionNote("");
     setReturnComment("");
     setError(null);
+    setStatusSuccess(null);
     setReturnDialogOpen(true);
   }
 
@@ -1058,6 +1144,7 @@ export function TicketsQueuePage() {
     }
 
     setError(null);
+    setStatusSuccess(null);
 
     try {
       await returnTicketMutation.mutateAsync({
@@ -1187,9 +1274,39 @@ export function TicketsQueuePage() {
           />
         </section>
 
+        <p className="mt-sm text-caption text-text-secondary">
+          Son yenileme:{" "}
+          {lastRefreshedAt.toLocaleTimeString("tr-TR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+          . Öncelik görünümü acil ve yüksek öncelikli işleri öne çıkarır. Çözülen
+          ticket sayısı: {summary?.resolved ?? 0}.
+        </p>
+
         {error ? (
-          <div className="mt-lg rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger">
+          <div
+            className="mt-lg rounded-app border border-danger/30 bg-danger-bg px-md py-sm text-body text-danger"
+            data-testid="ticket-status-error"
+          >
             {error}
+          </div>
+        ) : null}
+
+        {statusSuccess ? (
+          <div
+            className="mt-lg flex flex-wrap items-center justify-between gap-sm rounded-app border border-success/30 bg-success-bg px-md py-sm text-body text-success"
+            data-testid="ticket-status-success"
+          >
+            <span>{statusSuccess}</span>
+            {resolvedTicket ? (
+              <Link
+                to={getTicketAuditLink(resolvedTicket.id)}
+                className="font-semibold text-accent transition hover:text-accent-strong focus:outline-none focus:ring-2 focus:ring-accent/25 motion-reduce:transition-none"
+              >
+                Audit izini aç
+              </Link>
+            ) : null}
           </div>
         ) : null}
 
@@ -1203,6 +1320,7 @@ export function TicketsQueuePage() {
               />
 
               <input
+                data-testid="ticket-queue-filter-search"
                 className="min-w-0 flex-1 bg-transparent text-body text-text-primary placeholder:text-text-secondary focus:outline-none"
                 placeholder="Başlık, açıklama, requester veya varlık ara..."
                 value={state.search}
@@ -1211,6 +1329,7 @@ export function TicketsQueuePage() {
             </label>
 
             <select
+              data-testid="ticket-queue-filter-status"
               className="h-11 rounded-app border border-border bg-surface-2 px-md text-body text-text-primary shadow-panel focus:outline-none"
               value={selectedStatus}
               onChange={(event) => setFilter("status", event.target.value || null)}
@@ -1224,6 +1343,7 @@ export function TicketsQueuePage() {
             </select>
 
             <select
+              data-testid="ticket-queue-filter-priority"
               className="h-11 rounded-app border border-border bg-surface-2 px-md text-body text-text-primary shadow-panel focus:outline-none"
               value={selectedPriority}
               onChange={(event) => setFilter("priority", event.target.value || null)}
@@ -1238,6 +1358,7 @@ export function TicketsQueuePage() {
 
             <button
               type="button"
+              data-testid="ticket-queue-filter-reset"
               onClick={resetFilters}
               className="h-11 rounded-app border border-border px-md text-body text-text-primary transition hover:border-accent hover:text-accent"
             >
@@ -1248,8 +1369,9 @@ export function TicketsQueuePage() {
 
         <section
           className="mt-lg grid min-h-[calc(100vh-310px)] gap-lg xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)_260px]"
-          data-testid="ticket-inbox"
+          data-testid="ticket-workspace-page"
         >
+          <div className="sr-only" data-testid="ticket-inbox" />
           <div className="min-h-0">
             <TicketInboxList
               tickets={tickets}

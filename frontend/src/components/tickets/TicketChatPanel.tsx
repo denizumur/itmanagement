@@ -306,9 +306,19 @@ function ChatBubble({
           ) : null}
 
           {item.isInternal ? (
-            <span className="inline-flex items-center gap-[3px] rounded-full border border-warning/30 bg-warning-bg px-xs py-[2px] text-[10px] font-semibold text-warning">
+            <span
+              className="inline-flex items-center gap-[3px] rounded-full border border-warning/30 bg-warning-bg px-xs py-[2px] text-[10px] font-semibold text-warning"
+              data-testid="ticket-chat-internal-badge"
+            >
               <IconLock size={10} aria-hidden={true} />
               Dahili not
+            </span>
+          ) : !item.isInitial ? (
+            <span
+              className="rounded-full border border-accent/20 bg-accent-bg px-xs py-[2px] text-[10px] font-semibold text-accent"
+              data-testid="ticket-chat-requester-reply-badge"
+            >
+              Talep yanıtı
             </span>
           ) : null}
         </div>
@@ -585,6 +595,7 @@ export function TicketChatPanel({
 
   return (
     <aside
+      data-testid="ticket-chat-panel"
       className={cn(
         "rounded-panel border border-border bg-surface-1 shadow-card",
         variant === "workspace"
@@ -725,6 +736,7 @@ export function TicketChatPanel({
               <div className="grid grid-cols-2 gap-xs rounded-xl border border-border bg-surface-2 p-[3px]">
                 <button
                   type="button"
+                  data-testid="ticket-chat-mode-requester"
                   onClick={() => setMode("public_reply")}
                   className={cn(
                     "rounded-lg px-sm py-xs text-caption font-semibold transition",
@@ -738,6 +750,7 @@ export function TicketChatPanel({
 
                 <button
                   type="button"
+                  data-testid="ticket-chat-mode-internal"
                   onClick={() => setMode("internal_note")}
                   className={cn(
                     "rounded-lg px-sm py-xs text-caption font-semibold transition",
@@ -777,6 +790,7 @@ export function TicketChatPanel({
               value={body}
               onChange={(event) => setBody(event.target.value)}
               onKeyDown={handleComposerKeyDown}
+              data-testid="ticket-chat-message-input"
               rows={1}
               className="max-h-36 min-h-[44px] flex-1 resize-none bg-transparent px-sm py-[11px] text-body text-text-primary outline-none placeholder:text-text-muted"
               placeholder={
@@ -789,6 +803,7 @@ export function TicketChatPanel({
             <button
               type="submit"
               disabled={!canSubmit}
+              data-testid="ticket-chat-submit"
               className={cn(
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-50",
                 isInternalMode ? "bg-warning" : "bg-accent"
