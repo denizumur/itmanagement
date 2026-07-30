@@ -29,6 +29,7 @@ export interface AdminUserListItem {
   activation: {
     state: AdminUserActivationState | string;
     needs_invitation: boolean;
+    latest_invitation_id: number | null;
     latest_invitation_status: string | null;
     latest_invitation_expires_at: string | null;
     latest_invitation_created_at: string | null;
@@ -51,4 +52,18 @@ export interface PaginatedAdminUsersResponse {
   next: string | null;
   previous: string | null;
   results: AdminUserListItem[];
+}
+
+export interface AdminUserActionPayload {
+  reason: string;
+  confirmation: string;
+}
+
+export interface AdminUserRoleChangePayload extends AdminUserActionPayload {
+  role: string;
+}
+
+export interface AdminUserActionResponse {
+  detail: string;
+  user: AdminUserDetail;
 }

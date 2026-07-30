@@ -1,5 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
-import { getAdminUserDetail, getAdminUsersTable } from "../api/adminUsers";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  changeAdminUserRole,
+  deactivateAdminUser,
+  getAdminUserDetail,
+  getAdminUsersTable,
+  reactivateAdminUser,
+} from "../api/adminUsers";
+import type {
+  AdminUserActionPayload,
+  AdminUserRoleChangePayload,
+} from "../types/adminUsers";
 import type { TableQueryState } from "../types/table";
 
 export function adminUsersQueryKey(state: TableQueryState) {
@@ -24,5 +34,41 @@ export function useAdminUserDetail(userId?: number | null) {
     queryFn: () => getAdminUserDetail(Number(userId)),
     enabled: Boolean(userId),
     staleTime: 30_000,
+  });
+}
+
+export function useDeactivateAdminUser() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      payload,
+    }: {
+      userId: number;
+      payload: AdminUserActionPayload;
+    }) => deactivateAdminUser(userId, payload),
+  });
+}
+
+export function useReactivateAdminUser() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      payload,
+    }: {
+      userId: number;
+      payload: AdminUserActionPayload;
+    }) => reactivateAdminUser(userId, payload),
+  });
+}
+
+export function useChangeAdminUserRole() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      payload,
+    }: {
+      userId: number;
+      payload: AdminUserRoleChangePayload;
+    }) => changeAdminUserRole(userId, payload),
   });
 }

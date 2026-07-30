@@ -71,13 +71,22 @@ test("admin can login, navigate core pages, export personnel xlsx, and logout", 
   await page.getByRole("link", { name: /yönetim ekranına git/i }).click();
   await expect(page.getByTestId("admin-users-page")).toBeVisible();
   await expect(page.getByTestId("admin-users-table")).toBeVisible();
-  await page.getByTestId("admin-users-search").fill("deniz");
+  await page.getByTestId("admin-users-search").fill("technician.demo");
   await expect(page.getByTestId("admin-users-table")).toBeVisible();
   await page
     .getByRole("button", { name: /kullanıcı detayını gör/i })
     .first()
     .click();
   await expect(page.getByTestId("admin-users-detail-drawer")).toBeVisible();
+  await expect(page.getByTestId("admin-user-actions-panel")).toBeVisible();
+  await page.getByTestId("admin-user-deactivate").click();
+  await expect(page.getByTestId("admin-user-action-reason")).toBeVisible();
+  await expect(page.getByTestId("admin-user-action-confirmation")).toBeVisible();
+  await page.getByTestId("admin-user-action-cancel").click();
+  await page.getByTestId("admin-user-change-role").click();
+  await expect(page.getByTestId("admin-user-action-reason")).toBeVisible();
+  await expect(page.getByTestId("admin-user-action-confirmation")).toBeVisible();
+  await page.getByTestId("admin-user-action-cancel").click();
   await expect(page.getByText(/token_hash|activation_url|password/i)).toHaveCount(0);
 
   await page.goto("/personnel");

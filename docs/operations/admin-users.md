@@ -1,6 +1,6 @@
 # Admin Users Runbook
 
-`/admin-console/users` ekranı kullanıcı hesapları ile personel kayıtları arasındaki bağlantıyı admin-only ve read-only olarak gösterir.
+`/admin-console/users` ekranı kullanıcı hesapları ile personel kayıtları arasındaki bağlantıyı admin-only olarak gösterir ve sınırlı güvenli kullanıcı aksiyonları sağlar.
 
 ## Filtreler
 
@@ -19,22 +19,41 @@
 - Expired invitation: davet süresi dolmuş.
 - No employee: kullanıcı personel kaydıyla bağlı değil.
 
+## Güvenli Kullanıcı Aksiyonları
+
+Admin kullanıcılar detay panelinden şu sınırlı işlemleri yapabilir:
+
+- Kullanıcı pasifleştirme.
+- Kullanıcıyı yeniden aktifleştirme.
+- Rol değiştirme.
+- Davet oluşturma.
+- Bekleyen daveti iptal etme.
+
+Pasifleştirme, yeniden aktifleştirme ve rol değiştirme işlemleri gerekçe ve tam onay metni ister. Onay metinleri hedef kullanıcı adına bağlıdır:
+
+- `DEACTIVATE <username>`
+- `REACTIVATE <username>`
+- `CHANGE ROLE <username>`
+
+Backend son kararı verir. Kendi hesabını pasifleştirme, kendi rolünü değiştirme, son aktif admin kullanıcısını pasifleştirme veya admin rolünden düşürme engellenir. Kullanılabilir kimlik bilgisi olmayan kullanıcılar davet akışı tamamlanmadan yeniden aktifleştirilemez.
+
+Her state-changing işlem audit log üretir. Metadata içinde operasyon, actor/target id, target username, eski/yeni aktiflik, eski/yeni rol, gerekçe ve `source=admin_console` bulunur.
+
 ## Güvenlik sınırları
 
 Bu ekran şunları göstermez ve çalıştırmaz:
 
-- Password hash.
-- Raw token, token hash veya activation URL.
-- User create/update/delete/deactivate.
-- Role change.
-- Password reset.
-- Invitation create/revoke.
+- Hash veya raw credential.
+- Raw token, token hash veya activation URL list/detail response içinde.
+- User create/delete veya hard delete.
+- Bulk action.
+- Raw credential set veya reset.
 
-Davet linki gerektiğinde Personel detay ekranındaki mevcut güvenli davet akışı kullanılmalıdır.
+Activation URL sadece davet oluşturma isteği başarılı olduktan sonra frontend üzerinde geçici olarak gösterilir; list/detail API response içine yazılmaz.
 
 ## Troubleshooting
 
-- Inactive + no invitation: Personel sayfasında kullanıcı bağlantısını ve davet durumunu kontrol edin.
-- Pending expired: Personel detayından yeni davet linki üretin.
+- Inactive + no invitation: Admin Users detay panelinden yeni davet oluşturun.
+- Pending expired: Yeni davet oluşturun veya bekleyen daveti iptal edip akışı tekrarlayın.
 - User without employee: Personel kaydıyla eşleştirme gerekip gerekmediğini kontrol edin.
-- Employee without user: Personel import/linking akışını Personel sayfasından yönetin.
+- Last active admin guard: Önce ikinci aktif admin hesabını doğrulayın, sonra rol veya aktiflik değişikliği yapın.

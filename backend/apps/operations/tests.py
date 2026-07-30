@@ -448,3 +448,257 @@ class AdminConsoleUserManagementTests(APITestCase):
 
         self.assertIn("activation_needed_users", response.data["accounts"])
         self.assertIn("users_without_employee", response.data["accounts"])
+
+    def action_payload(self, action, username, **overrides):
+        payload = {
+            "reason": "Operasyonel güvenlik kontrolü",
+            "confirmation": f"{action} {username}",
+        }
+        payload.update(overrides)
+        return payload
+
+    def action_url(self, user, action):
+        return f"/api/admin-console/users/{user.id}/{action}/"
+
+    def test_admin_can_deactivate_user_and_audit_is_safe(self):
+        self.authenticate(self.admin)
+        response = self.client.post(
+            self.action_url(self.technician, "deactivate"),
+            self.action_payload("DEACTIVATE", self.technician.username),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.technician.refresh_from_db()
+        self.assertFalse(self.technician.is_active)
+        self.assertEqual(response.data["user"]["is_active"], False)
+
+        audit = AuditLog.objects.get(metadata__operation="admin_user_deactivate")
+        self.assertEqual(audit.metadata["target_user_id"], self.technician.id)
+        self.assertEqual(audit.changes["is_active"], {"old": True, "new": False})
+        audit_text = json.dumps(
+            {"metadata": audit.metadata, "changes": audit.changes},
+            default=str,
+        ).lower()
+        self.assertNotIn("password", audit_text)
+        self.assertNotIn("token", audit_text)
+        self.assertNotIn("token_hash", audit_text)
+        self.assertNotIn("activation_url", audit_text)
+
+    def test_admin_can_reactivate_user_with_usable_credential(self):
+        self.technician.is_active = False
+        self.technician.save(update_fields=["is_active"])
+
+        self.authenticate(self.admin)
+        response = self.client.post(
+            self.action_url(self.technician, "reactivate"),
+            self.action_payload("REACTIVATE", self.technician.username),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.is_active)
+        self.assertTrue(
+            AuditLog.objects.filter(metadata__operation="admin_user_reactivate").exists()
+        )
+
+    def test_admin_can_change_role_and_list_detail_reflect_it(self):
+        self.authenticate(self.admin)
+        response = self.client.post(
+            self.action_url(self.technician, "change-role"),
+            {
+                **self.action_payload("CHANGE ROLE", self.technician.username),
+                "role": UserProfile.Role.VIEWER,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.technician.profile.refresh_from_db()
+        self.assertEqual(self.technician.profile.role, UserProfile.Role.VIEWER)
+        self.assertEqual(response.data["user"]["role"], UserProfile.Role.VIEWER)
+
+        list_response = self.client.get(
+            "/api/admin-console/users/",
+            {"search": self.technician.username},
+        )
+        detail_response = self.client.get(
+            f"/api/admin-console/users/{self.technician.id}/"
+        )
+        self.assertEqual(list_response.data["results"][0]["role"], UserProfile.Role.VIEWER)
+        self.assertEqual(detail_response.data["role"], UserProfile.Role.VIEWER)
+
+        audit = AuditLog.objects.get(metadata__operation="admin_user_role_change")
+        self.assertEqual(
+            audit.changes["role"],
+            {"old": UserProfile.Role.TECHNICIAN, "new": UserProfile.Role.VIEWER},
+        )
+
+    def test_non_admin_and_anonymous_cannot_run_user_actions(self):
+        for actor in [self.requester, self.technician]:
+            self.authenticate(actor)
+            response = self.client.post(
+                self.action_url(self.requester, "deactivate"),
+                self.action_payload("DEACTIVATE", self.requester.username),
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.authenticate(None)
+        response = self.client.post(
+            self.action_url(self.requester, "reactivate"),
+            self.action_payload("REACTIVATE", self.requester.username),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_reason_and_confirmation_validation(self):
+        self.authenticate(self.admin)
+        missing_reason = self.client.post(
+            self.action_url(self.technician, "deactivate"),
+            {"reason": "bad", "confirmation": f"DEACTIVATE {self.technician.username}"},
+            format="json",
+        )
+        bad_confirmation = self.client.post(
+            self.action_url(self.technician, "deactivate"),
+            {"reason": "Geçerli gerekçe", "confirmation": "DEACTIVATE wrong.user"},
+            format="json",
+        )
+        long_reason = self.client.post(
+            self.action_url(self.technician, "deactivate"),
+            {
+                "reason": "a" * 501,
+                "confirmation": f"DEACTIVATE {self.technician.username}",
+            },
+            format="json",
+        )
+
+        self.assertEqual(missing_reason.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(bad_confirmation.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(long_reason.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_deactivate_guards_self_already_inactive_and_last_admin(self):
+        self.authenticate(self.admin)
+        self_request = self.client.post(
+            self.action_url(self.admin, "deactivate"),
+            self.action_payload("DEACTIVATE", self.admin.username),
+            format="json",
+        )
+        self.assertEqual(self_request.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.technician.is_active = False
+        self.technician.save(update_fields=["is_active"])
+        inactive_response = self.client.post(
+            self.action_url(self.technician, "deactivate"),
+            self.action_payload("DEACTIVATE", self.technician.username),
+            format="json",
+        )
+        self.assertEqual(inactive_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        second_admin = get_user_model().objects.create_user(
+            username="second.admin",
+            email="second.admin@example.com",
+            password="StrongPass123!",
+        )
+        second_admin.profile.role = UserProfile.Role.ADMIN
+        second_admin.profile.save(update_fields=["role"])
+        self.admin.profile.role = UserProfile.Role.VIEWER
+        self.admin.profile.save(update_fields=["role"])
+        self.authenticate(second_admin)
+        last_admin_response = self.client.post(
+            self.action_url(second_admin, "deactivate"),
+            self.action_payload("DEACTIVATE", second_admin.username),
+            format="json",
+        )
+        self.assertEqual(last_admin_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_reactivate_guards_active_and_unusable_credential(self):
+        self.authenticate(self.admin)
+        active_response = self.client.post(
+            self.action_url(self.technician, "reactivate"),
+            self.action_payload("REACTIVATE", self.technician.username),
+            format="json",
+        )
+        unusable_response = self.client.post(
+            self.action_url(self.invite_user, "reactivate"),
+            self.action_payload("REACTIVATE", self.invite_user.username),
+            format="json",
+        )
+
+        self.assertEqual(active_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(unusable_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_role_change_guards_self_invalid_same_and_last_admin_demotion(self):
+        self.authenticate(self.admin)
+        own_role = self.client.post(
+            self.action_url(self.admin, "change-role"),
+            {
+                **self.action_payload("CHANGE ROLE", self.admin.username),
+                "role": UserProfile.Role.VIEWER,
+            },
+            format="json",
+        )
+        invalid_role = self.client.post(
+            self.action_url(self.technician, "change-role"),
+            {
+                **self.action_payload("CHANGE ROLE", self.technician.username),
+                "role": "owner",
+            },
+            format="json",
+        )
+        same_role = self.client.post(
+            self.action_url(self.technician, "change-role"),
+            {
+                **self.action_payload("CHANGE ROLE", self.technician.username),
+                "role": UserProfile.Role.TECHNICIAN,
+            },
+            format="json",
+        )
+
+        self.assertEqual(own_role.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(invalid_role.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(same_role.status_code, status.HTTP_400_BAD_REQUEST)
+
+        only_admin = get_user_model().objects.create_user(
+            username="only.admin",
+            email="only.admin@example.com",
+            password="StrongPass123!",
+        )
+        only_admin.profile.role = UserProfile.Role.ADMIN
+        only_admin.profile.save(update_fields=["role"])
+        self.admin.profile.role = UserProfile.Role.VIEWER
+        self.admin.profile.save(update_fields=["role"])
+        self.authenticate(only_admin)
+        demotion_response = self.client.post(
+            self.action_url(only_admin, "change-role"),
+            {
+                **self.action_payload("CHANGE ROLE", only_admin.username),
+                "role": UserProfile.Role.VIEWER,
+            },
+            format="json",
+        )
+        self.assertEqual(demotion_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_action_response_excludes_sensitive_values(self):
+        UserInvitation.objects.create(
+            user=self.technician,
+            token_hash="unsafe-token-hash",
+            status=UserInvitation.Status.PENDING,
+            expires_at=timezone.now() + timezone.timedelta(days=1),
+        )
+        self.authenticate(self.admin)
+        response = self.client.post(
+            self.action_url(self.technician, "change-role"),
+            {
+                **self.action_payload("CHANGE ROLE", self.technician.username),
+                "role": UserProfile.Role.VIEWER,
+            },
+            format="json",
+        )
+
+        response_text = json.dumps(response.data, default=str).lower()
+        self.assertNotIn("password", response_text)
+        self.assertNotIn("token_hash", response_text)
+        self.assertNotIn("unsafe-token-hash", response_text)
+        self.assertNotIn("activation_url", response_text)

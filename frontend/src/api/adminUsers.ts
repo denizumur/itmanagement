@@ -1,6 +1,9 @@
 import { buildTableApiParams } from "../lib/tableQuery";
 import type {
+  AdminUserActionPayload,
+  AdminUserActionResponse,
   AdminUserDetail,
+  AdminUserRoleChangePayload,
   PaginatedAdminUsersResponse,
 } from "../types/adminUsers";
 import type { TableQueryState } from "../types/table";
@@ -22,6 +25,42 @@ export async function getAdminUsersTable(state: TableQueryState) {
 export async function getAdminUserDetail(userId: number) {
   const response = await api.get<AdminUserDetail>(
     `${ADMIN_USERS_ENDPOINT}${userId}/`
+  );
+
+  return response.data;
+}
+
+export async function deactivateAdminUser(
+  userId: number,
+  payload: AdminUserActionPayload
+) {
+  const response = await api.post<AdminUserActionResponse>(
+    `${ADMIN_USERS_ENDPOINT}${userId}/deactivate/`,
+    payload
+  );
+
+  return response.data;
+}
+
+export async function reactivateAdminUser(
+  userId: number,
+  payload: AdminUserActionPayload
+) {
+  const response = await api.post<AdminUserActionResponse>(
+    `${ADMIN_USERS_ENDPOINT}${userId}/reactivate/`,
+    payload
+  );
+
+  return response.data;
+}
+
+export async function changeAdminUserRole(
+  userId: number,
+  payload: AdminUserRoleChangePayload
+) {
+  const response = await api.post<AdminUserActionResponse>(
+    `${ADMIN_USERS_ENDPOINT}${userId}/change-role/`,
+    payload
   );
 
   return response.data;

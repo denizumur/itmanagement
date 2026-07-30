@@ -25,7 +25,7 @@ Copy command butonları komutu tarayıcıdan çalıştırmaz; sadece güvenli, s
 
 ## Kullanıcı & Personel Yönetimi
 
-`/admin-console/users` ekranı admin kullanıcıların hesapları ve personel bağlantılarını read-only olarak incelemesi için foundation sağlar.
+`/admin-console/users` ekranı admin kullanıcıların hesapları, personel bağlantıları, aktivasyon durumu ve sınırlı güvenli aksiyonları yönetmesi için foundation sağlar.
 
 Gösterir:
 
@@ -35,15 +35,19 @@ Gösterir:
 - Davet özeti: pending/expired count ve son davet durumu.
 - Dossier detail panelinde güvenli user/employee/invitation/audit özeti.
 
+Güvenli aksiyonlar:
+
+- Deactivate/reactivate ve role change gerekçe ve tam onay metni ister.
+- Invitation create/revoke Admin Users detay panelinden yapılabilir; activation URL sadece create response sonrası geçici gösterilir.
+- Kendi hesabını pasifleştirme, kendi rolünü değiştirme ve son aktif admini değiştirme backend tarafından engellenir.
+- Her state-changing kullanıcı aksiyonu audit log üretir.
+
 Özellikle yapmaz:
 
-- User create/update/delete.
-- User deactivate.
-- Role change.
-- Password reset.
-- Admin Users ekranından invitation create/revoke.
-
-Davet üretimi hâlâ Personel detayındaki güvenli P7d akışından yapılır. Admin Users ekranı yalnızca durumu görünür kılar ve Personel sayfasına yönlendirir.
+- User create/delete veya hard delete.
+- Bulk action.
+- Raw credential set/reset.
+- List/detail response içinde raw token, token hash veya activation URL gösterimi.
 
 ## Backup remediation senaryoları
 

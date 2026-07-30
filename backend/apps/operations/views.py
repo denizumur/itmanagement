@@ -4,14 +4,14 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.models import UserInvitation
+from apps.accounts.models import UserInvitation, UserProfile
 from apps.accounts.permissions import IsAdminRole
 from apps.audit.models import AuditLog
 from apps.employees.models import Employee, EmployeeImportJob
@@ -398,6 +398,7 @@ def _serialize_admin_user(user, now, include_detail=False):
             "state": activation_state,
             "needs_invitation": activation_state
             in ["needs_activation", "expired_invitation"],
+            "latest_invitation_id": latest.id if latest else None,
             "latest_invitation_status": latest.status if latest else None,
             "latest_invitation_expires_at": latest.expires_at if latest else None,
             "latest_invitation_created_at": latest.created_at if latest else None,
@@ -570,6 +571,112 @@ def _filter_users(queryset, params):
     return queryset
 
 
+def _expected_confirmation(action, username):
+    return f"{action} {username}"
+
+
+def _validate_user_action_payload(request, confirmation_action):
+    reason = str(request.data.get("reason") or "").strip()
+    confirmation = str(request.data.get("confirmation") or "").strip()
+    expected = _expected_confirmation(confirmation_action, request.user_action_username)
+
+    if len(reason) < 5:
+        return None, Response(
+            {"detail": "Gerekçe en az 5 karakter olmalıdır."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if len(reason) > 500:
+        return None, Response(
+            {"detail": "Gerekçe en fazla 500 karakter olabilir."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if confirmation != expected:
+        return None, Response(
+            {"detail": f"Onay metni tam olarak '{expected}' olmalıdır."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return reason, None
+
+
+def _active_admin_count_locked():
+    User = get_user_model()
+    return (
+        User.objects.select_for_update()
+        .filter(is_active=True, profile__role=UserProfile.Role.ADMIN)
+        .count()
+    )
+
+
+def _is_active_admin(user):
+    profile = getattr(user, "profile", None)
+    return bool(user.is_active and profile and profile.role == UserProfile.Role.ADMIN)
+
+
+def _admin_action_response(detail, user):
+    refreshed_user = _admin_user_queryset().get(pk=user.pk)
+    return Response(
+        {
+            "detail": detail,
+            "user": _serialize_admin_user(
+                refreshed_user,
+                timezone.now(),
+                include_detail=True,
+            ),
+        }
+    )
+
+
+def _audit_admin_user_action(
+    *,
+    request,
+    target_user,
+    operation,
+    reason,
+    previous_is_active,
+    new_is_active,
+    previous_role,
+    new_role,
+    changes,
+):
+    AuditLog.objects.create(
+        actor=request.user,
+        action=AuditLog.Action.UPDATE,
+        entity_type="accounts.User",
+        entity_id=str(target_user.id),
+        entity_repr=target_user.username,
+        changes=changes,
+        request_method=request.method,
+        request_path=request.path,
+        metadata={
+            "operation": operation,
+            "actor_user_id": request.user.id,
+            "target_user_id": target_user.id,
+            "target_username": target_user.username,
+            "previous_is_active": previous_is_active,
+            "new_is_active": new_is_active,
+            "previous_role": previous_role,
+            "new_role": new_role,
+            "reason": reason,
+            "source": "admin_console",
+        },
+    )
+
+
+class AdminConsoleUserActionMixin:
+    permission_classes = [IsAdminRole]
+    confirmation_action = ""
+
+    def get_locked_user(self, pk):
+        User = get_user_model()
+        user = User.objects.select_for_update().get(pk=pk)
+        profile = UserProfile.objects.select_for_update().get(user=user)
+        user._state.fields_cache["profile"] = profile
+        return user
+
+
 class AdminConsoleOverviewAPIView(APIView):
     permission_classes = [IsAdminRole]
 
@@ -649,3 +756,189 @@ class AdminConsoleUserDetailAPIView(APIView):
             )
 
         return Response(_serialize_admin_user(user, now, include_detail=True))
+
+
+class AdminConsoleUserDeactivateAPIView(AdminConsoleUserActionMixin, APIView):
+    confirmation_action = "DEACTIVATE"
+
+    def post(self, request, pk):
+        User = get_user_model()
+        with transaction.atomic():
+            try:
+                user = self.get_locked_user(pk)
+            except User.DoesNotExist:
+                return Response(
+                    {"detail": "Kullanıcı bulunamadı."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            request.user_action_username = user.username
+            reason, error = _validate_user_action_payload(
+                request,
+                self.confirmation_action,
+            )
+            if error:
+                return error
+
+            if user.id == request.user.id:
+                return Response(
+                    {"detail": "Kendi hesabınızı pasifleştiremezsiniz."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not user.is_active:
+                return Response(
+                    {"detail": "Kullanıcı zaten pasif."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if _is_active_admin(user) and _active_admin_count_locked() <= 1:
+                return Response(
+                    {"detail": "Son aktif admin kullanıcısı değiştirilemez."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            previous_is_active = user.is_active
+            previous_role = user.profile.role
+            user.is_active = False
+            user.save(update_fields=["is_active"])
+            _audit_admin_user_action(
+                request=request,
+                target_user=user,
+                operation="admin_user_deactivate",
+                reason=reason,
+                previous_is_active=previous_is_active,
+                new_is_active=user.is_active,
+                previous_role=previous_role,
+                new_role=previous_role,
+                changes={"is_active": {"old": previous_is_active, "new": user.is_active}},
+            )
+
+        return _admin_action_response("Kullanıcı pasifleştirildi.", user)
+
+
+class AdminConsoleUserReactivateAPIView(AdminConsoleUserActionMixin, APIView):
+    confirmation_action = "REACTIVATE"
+
+    def post(self, request, pk):
+        User = get_user_model()
+        with transaction.atomic():
+            try:
+                user = self.get_locked_user(pk)
+            except User.DoesNotExist:
+                return Response(
+                    {"detail": "Kullanıcı bulunamadı."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            request.user_action_username = user.username
+            reason, error = _validate_user_action_payload(
+                request,
+                self.confirmation_action,
+            )
+            if error:
+                return error
+
+            if user.is_active:
+                return Response(
+                    {"detail": "Kullanıcı zaten aktif."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not user.has_usable_password():
+                return Response(
+                    {
+                        "detail": "Bu kullanıcının kullanılabilir şifresi yok. Davet linki ile aktivasyon yapılmalı."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            previous_is_active = user.is_active
+            previous_role = user.profile.role
+            user.is_active = True
+            user.save(update_fields=["is_active"])
+            _audit_admin_user_action(
+                request=request,
+                target_user=user,
+                operation="admin_user_reactivate",
+                reason=reason,
+                previous_is_active=previous_is_active,
+                new_is_active=user.is_active,
+                previous_role=previous_role,
+                new_role=previous_role,
+                changes={"is_active": {"old": previous_is_active, "new": user.is_active}},
+            )
+
+        return _admin_action_response("Kullanıcı yeniden aktifleştirildi.", user)
+
+
+class AdminConsoleUserChangeRoleAPIView(AdminConsoleUserActionMixin, APIView):
+    confirmation_action = "CHANGE ROLE"
+
+    def post(self, request, pk):
+        User = get_user_model()
+        new_role = str(request.data.get("role") or "").strip()
+        valid_roles = {role for role, _label in UserProfile.Role.choices}
+        if new_role not in valid_roles:
+            return Response(
+                {"detail": "Geçersiz rol."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            try:
+                user = self.get_locked_user(pk)
+            except User.DoesNotExist:
+                return Response(
+                    {"detail": "Kullanıcı bulunamadı."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            request.user_action_username = user.username
+            reason, error = _validate_user_action_payload(
+                request,
+                self.confirmation_action,
+            )
+            if error:
+                return error
+
+            if user.id == request.user.id:
+                return Response(
+                    {"detail": "Kendi rolünüzü değiştiremezsiniz."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            previous_role = user.profile.role
+            if previous_role == new_role:
+                return Response(
+                    {"detail": "Kullanıcı zaten bu rolde."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if (
+                user.is_active
+                and previous_role == UserProfile.Role.ADMIN
+                and new_role != UserProfile.Role.ADMIN
+                and _active_admin_count_locked() <= 1
+            ):
+                return Response(
+                    {"detail": "Son aktif admin kullanıcısı değiştirilemez."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            previous_is_active = user.is_active
+            user.profile.role = new_role
+            user.profile.save(update_fields=["role"])
+            _audit_admin_user_action(
+                request=request,
+                target_user=user,
+                operation="admin_user_role_change",
+                reason=reason,
+                previous_is_active=previous_is_active,
+                new_is_active=previous_is_active,
+                previous_role=previous_role,
+                new_role=new_role,
+                changes={"role": {"old": previous_role, "new": new_role}},
+            )
+
+        return _admin_action_response("Kullanıcı rolü güncellendi.", user)
