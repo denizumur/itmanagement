@@ -167,6 +167,18 @@ Monitoring veya scheduled job sonrasi health kontrolu icin:
 
 Script en son manifesti bulur, status `success` degilse non-zero doner, artifact path ve boyutlarini kontrol eder. `-FailIfOlderThanMaxAge` kullanilirsa stale backup da non-zero sonuc uretir.
 
+Admin Console `/admin-console` backup guidance paneli bu komutlari kopyalanabilir sekilde gosterir. Komutlar tarayicidan calistirilmaz; operator terminalde kendisi calistirir.
+
+Onerilen guvenli komutlar:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\backup\verify_latest_backup.ps1 -MaxAgeHours 24 -FailIfOlderThanMaxAge
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\backup\run_scheduled_backup.ps1 -Environment production -RetentionDays 30 -RetentionMinCount 10
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\backup\cleanup_old_backups.ps1 -RetentionDays 14 -RetentionMinCount 5 -DryRun
+```
+
+Restore scripti yine manuel ve explicit `RESTORE` onaylidir. Admin Console restore calistirmaz.
+
 ## Guvenlik
 
 - Backup dosyalari kullanici, personel, ticket, audit ve ek dosya verisi icerebilir.

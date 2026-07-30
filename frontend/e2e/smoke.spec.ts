@@ -62,6 +62,9 @@ test("admin can login, navigate core pages, export personnel xlsx, and logout", 
   await page.goto("/admin-console");
   await expect(page.getByTestId("admin-console-page")).toBeVisible();
   await expect(page.getByTestId("admin-console-backup-status")).toBeVisible();
+  await expect(page.getByTestId("admin-console-backup-guidance")).toBeVisible();
+  await expect(page.getByTestId("admin-console-checklist")).toBeVisible();
+  await expect(page.getByTestId("copy-backup-verify-command")).toBeVisible();
   await expect(page.getByTestId("admin-console-invitations")).toBeVisible();
   await expect(page.getByTestId("admin-console-operations")).toBeVisible();
 

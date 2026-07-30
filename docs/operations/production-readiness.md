@@ -191,6 +191,8 @@ Admin Console:
 - Backup paneli manifest dosya adlarını ve boyutlarını özetler; full local path, secret veya connection string göstermez.
 - Davet/aktivasyon ve personel import panelleri operasyon sayıları gösterir; e-posta/telefon listeleri veya import row data göstermez.
 - Partial/failed/stale backup durumunda verify script'i ve scheduled job runbook'u kontrol edilmelidir.
+- N6b guidance panelleri güvenli komutları sadece kopyalar; browser'dan backup, restore, cleanup veya invitation revoke çalıştırmaz.
+- Production'da scheduled backup kurulduktan sonra Admin Console üzerinden son manifest, stale uyarısı ve checklist günlük izlenmelidir.
 
 ## 10. Healthcheck ve smoke checklist
 

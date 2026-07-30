@@ -92,6 +92,7 @@ WantedBy=timers.target
 - Verify script `0` exit code ile healthy, `1` ile missing/failed/stale sonuc verir.
 - Manifestler `backups/manifests/` altinda tutulur ve repoya commitlenmez.
 - Admin Console `/admin-console`, son manifest ve verify sinyallerini admin kullanicilar icin gorunur hale getirir.
+- Admin Console copy command rehberligi bu dokumandaki komutlarla uyumludur; komutlari calistirmaz, sadece operatorun terminale tasimasi icin kopyalar.
 - Loglarda secret, DB password, connection string veya PII tutulmamalidir.
 - Backup artifactleri hassas veri icerdigi icin offsite kopyalama sifreli ve erisim kontrollu olmalidir.
 
