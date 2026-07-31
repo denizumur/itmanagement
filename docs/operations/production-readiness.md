@@ -270,14 +270,17 @@ docker compose logs --tail 100 backend
 
 Mevcut sınırlamalar:
 
-- Otomatik scheduled backup henüz yok.
+- Email invitation delivery yok; activation link admin tarafından güvenli kanaldan paylaşılır.
+- Real-time/WebSocket yok; bazı ekranlarda güncel durum için refresh veya yeniden sorgu gerekir.
+- Enterprise ITSM seviyesinde SLA automation yok.
+- Scheduled backup OS scheduler ile kurulmalıdır; uygulama içinden çalıştırılmaz.
 - Production reverse proxy örnek config dosyası henüz eklenmedi.
-- E2E smoke tests P6'da ele alınacak.
-- HR/Excel import P7'de ele alınacak.
-- Admin Console N6'da ele alınacak.
+- SNMP/agent discovery yok; inventory manual-first ilerler.
+- Multi-tenant/SaaS yok; self-hosted single-tenant yaklaşımı vardır.
 - Media restore otomatik değil; manuel kontrollü süreç olarak dokümante edildi.
-- Gelişmiş alerting/monitoring henüz yok.
-- Frontend code splitting/chunk optimizasyonu P10 tarafına bırakıldı.
+- Gelişmiş alerting/monitoring henüz yok; host ve Docker logları izlenmelidir.
+- Frontend build büyük chunk uyarısı verebilir; bu ürün davranışını bozmaz, ileride code splitting ile ele alınabilir.
+- Demo ve final QA notları `docs/demo/` altında tutulur.
 
 ## 14. P5 deploy checklist özeti
 
