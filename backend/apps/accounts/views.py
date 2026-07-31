@@ -19,6 +19,7 @@ from rest_framework_simplejwt.views import (
 )
 
 from apps.accounts.security import validate_auth_origin
+from apps.accounts.emailing import send_invitation_email
 from apps.accounts.serializers import (
     CustomTokenObtainPairSerializer,
     CurrentUserSerializer,
@@ -264,6 +265,13 @@ class InvitationCreateView(APIView):
             expires_at=now + timezone.timedelta(days=INVITATION_TTL_DAYS),
             metadata={"operation": "user_invitation_create"},
         )
+        activation_link = activation_url(token)
+        email_delivery = send_invitation_email(
+            user=user,
+            invitation=invitation,
+            activation_url=activation_link,
+            actor=request.user,
+        )
 
         create_audit_log(
             request=request,
@@ -276,6 +284,13 @@ class InvitationCreateView(APIView):
                 "user_id": user.id,
                 "created_by": request.user.id,
                 "expires_at": invitation.expires_at.isoformat(),
+                "email_delivery_attempted": email_delivery["attempted"],
+                "email_delivery_status": email_delivery["status"],
+                "email_delivery_error_code": email_delivery.get("reason", ""),
+                "recipient_masked_email": email_delivery.get(
+                    "recipient_masked_email",
+                    "",
+                ),
             },
         )
 
@@ -284,7 +299,8 @@ class InvitationCreateView(APIView):
                 "invitation_id": invitation.id,
                 "user_id": user.id,
                 "expires_at": invitation.expires_at,
-                "activation_url": activation_url(token),
+                "activation_url": activation_link,
+                "email_delivery": email_delivery,
             },
             status=status.HTTP_201_CREATED,
         )

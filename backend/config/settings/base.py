@@ -178,6 +178,26 @@ AUTH_COOKIE_ALLOWED_ORIGINS = env.list(
     "AUTH_COOKIE_ALLOWED_ORIGINS",
     default=[],
 )
+
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = env("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=25)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+DEFAULT_FROM_EMAIL = env(
+    "DEFAULT_FROM_EMAIL",
+    default="IT Envanter <no-reply@localhost>",
+)
+SERVER_EMAIL = env("SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
+INVITATION_EMAIL_ENABLED = env.bool("INVITATION_EMAIL_ENABLED", default=False)
+APP_FRONTEND_URL = env("APP_FRONTEND_URL", default="http://localhost:5173")
+FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default=APP_FRONTEND_URL)
+
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": (

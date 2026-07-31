@@ -1,8 +1,10 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core import mail
 from django.test import override_settings
 from django.utils import timezone
+from unittest.mock import patch
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -466,6 +468,81 @@ class UserInvitationTests(APITestCase):
         ).first()
         self.assertIsNotNone(audit_log)
         self.assertNotIn(token, str(audit_log.metadata))
+        self.assertEqual(response.data["email_delivery"]["status"], "skipped")
+        self.assertEqual(response.data["email_delivery"]["reason"], "email_disabled")
+
+    @override_settings(
+        INVITATION_EMAIL_ENABLED=True,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="no-reply@example.test",
+    )
+    def test_invitation_create_sends_email_when_enabled(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.create_invitation()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        token = self.token_from_activation_url(response.data["activation_url"])
+        self.assertEqual(response.data["email_delivery"]["status"], "sent")
+        self.assertEqual(response.data["email_delivery"]["attempted"], True)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(response.data["activation_url"], mail.outbox[0].body)
+        self.assertNotIn("StrongPass123!", mail.outbox[0].body)
+        self.assertNotIn("NewStrongPass123!", mail.outbox[0].body)
+
+        audit_log = AuditLog.objects.filter(
+            entity_type="accounts.UserInvitation",
+            metadata__operation="user_invitation_create",
+        ).first()
+        self.assertIsNotNone(audit_log)
+        self.assertEqual(audit_log.metadata["email_delivery_status"], "sent")
+        self.assertNotIn(token, str(audit_log.metadata))
+        self.assertNotIn(response.data["activation_url"], str(audit_log.metadata))
+
+    @override_settings(
+        INVITATION_EMAIL_ENABLED=True,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    )
+    def test_invitation_email_failure_does_not_rollback_invitation(self):
+        with patch(
+            "apps.accounts.emailing.send_mail",
+            side_effect=TimeoutError("timeout"),
+        ):
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.create_invitation()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        invitation = UserInvitation.objects.get(id=response.data["invitation_id"])
+        self.assertEqual(invitation.status, UserInvitation.Status.PENDING)
+        self.assertEqual(response.data["email_delivery"]["status"], "failed")
+        self.assertEqual(response.data["email_delivery"]["reason"], "connection_timeout")
+
+        token = self.token_from_activation_url(response.data["activation_url"])
+        audit_log = AuditLog.objects.filter(
+            entity_type="accounts.UserInvitation",
+            metadata__operation="user_invitation_create",
+        ).first()
+        self.assertIsNotNone(audit_log)
+        self.assertEqual(audit_log.metadata["email_delivery_status"], "failed")
+        self.assertEqual(
+            audit_log.metadata["email_delivery_error_code"],
+            "connection_timeout",
+        )
+        self.assertNotIn(token, str(audit_log.metadata))
+        self.assertNotIn(response.data["activation_url"], str(audit_log.metadata))
+
+    @override_settings(INVITATION_EMAIL_ENABLED=True)
+    def test_invitation_email_skipped_when_recipient_email_missing(self):
+        self.inactive_user.email = ""
+        self.inactive_user.save(update_fields=["email"])
+
+        response = self.create_invitation()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["email_delivery"]["status"], "skipped")
+        self.assertEqual(
+            response.data["email_delivery"]["reason"],
+            "missing_recipient_email",
+        )
 
     def test_non_admin_cannot_create_invitation(self):
         response = self.create_invitation(actor=self.technician_user)
