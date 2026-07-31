@@ -328,6 +328,7 @@ Scheduled backup runner loglarını ve son manifest durumunu kontrol edin. Sağl
 
 - `README.md`
 - `docs/operations/production-readiness.md`
+- `docs/operations/monitoring-log-review.md`
 - `docs/operations/backup-restore.md`
 - `docs/operations/scheduled-jobs.md`
 - `docs/operations/admin-console.md`
@@ -335,4 +336,3 @@ Scheduled backup runner loglarını ve son manifest durumunu kontrol edin. Sağl
 - `docs/demo/manual-smoke-script.md`
 - `docs/demo/final-qa-checklist.md`
 - `docs/demo/release-notes-v0.1.0-demo.md`
-
