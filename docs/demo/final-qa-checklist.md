@@ -16,6 +16,8 @@ Demo öncesi bu liste rol bazlı manuel smoke için kullanılır. Bu doküman ye
 - [ ] Admin Users açılır.
 - [ ] User - Employee bağlantısı görünür.
 - [ ] Safe actions panel görünür.
+- [ ] Davet oluşturma sonrası email delivery sent/failed/skipped mesajı anlaşılır.
+- [ ] Email failed/skipped durumda manual copy fallback korunur.
 - [ ] Audit sayfası açılır.
 - [ ] Production guidance dokümanları tutarlı.
 
@@ -61,4 +63,3 @@ Demo öncesi bu liste rol bazlı manuel smoke için kullanılır. Bu doküman ye
 - [ ] Backup artifact download yoktur.
 - [ ] Restore otomasyonu yoktur.
 - [ ] Explicit confirmation gerektiren işlemler korunur.
-

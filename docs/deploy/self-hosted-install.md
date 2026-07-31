@@ -77,8 +77,15 @@ Minimum kontrol edilmesi gereken değişkenler:
 | `AUTH_COOKIE_REQUIRE_ORIGIN` | Production için `true`. |
 | `AUTH_COOKIE_ALLOWED_ORIGINS` | Cookie auth için izinli frontend originleri. |
 | `LOGIN_THROTTLE_RATE` | Login rate limit oranı. |
+| `INVITATION_EMAIL_ENABLED` | Davet e-postası delivery davranışını açar/kapatır. |
+| `EMAIL_BACKEND` | Django email backend. Production SMTP için SMTP backend kullanılmalıdır. |
+| `EMAIL_HOST_PASSWORD` | SMTP secret; gerçek değer repoya yazılmamalıdır. |
+| `DEFAULT_FROM_EMAIL` | Verified sender/domain olmalıdır. |
+| `APP_FRONTEND_URL` | Activation link üretiminde kullanılan frontend base URL. |
 
 Production'da HTTPS kullanılmalıdır. `backend/config/settings/production.py` refresh cookie, session cookie ve CSRF cookie için secure davranışı zorlar.
+
+Email invitation delivery production'da SMTP env değerleriyle etkinleştirilebilir. SMTP kapalı veya hatalıysa invitation create başarılı kalır ve Admin Users manual copy fallback ile devam eder.
 
 ## 5. Docker Compose Modeli
 
@@ -332,6 +339,7 @@ Scheduled backup runner loglarını ve son manifest durumunu kontrol edin. Sağl
 - `docs/operations/backup-restore.md`
 - `docs/operations/scheduled-jobs.md`
 - `docs/operations/admin-console.md`
+- `docs/operations/email-invitation-delivery.md`
 - `docs/operations/e2e-smoke.md`
 - `docs/demo/manual-smoke-script.md`
 - `docs/demo/final-qa-checklist.md`

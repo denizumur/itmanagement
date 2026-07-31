@@ -16,6 +16,7 @@ Bu faz Prometheus, Grafana, Sentry veya ELK alternatifi değildir. MVP/self-host
 | Redis bağlantısı | backend logs / Admin Console | cache OK | redis connection refused, cache backend error |
 | Auth/cookie | browser devtools + backend logs | login/refresh başarılı | 401, 403, CSRF, origin errors |
 | Backup | `verify_latest_backup.ps1` | healthy/recent | stale, missing, failed, partial |
+| Email delivery | Admin Users result / backend logs | sent veya bilinçli skipped | failed, SMTP auth/config/TLS error |
 | E2E smoke | `scripts/e2e/run_e2e_smoke.ps1` | all passed | failed route/action, browser setup error |
 | CI | GitHub Actions | green | red build/test/check |
 | Disk alanı | host monitoring / Docker volume kontrolü | yeterli boş alan | DB, media veya backup alanı doluyor |
@@ -173,7 +174,32 @@ Yorumlama:
 
 Admin Console browser'dan backup, restore, cleanup veya destructive action çalıştırmaz. Copy command yalnızca terminale taşınacak güvenli komut metnidir.
 
-## 9. Demo Öncesi Log Review Checklist
+## 9. Email Delivery Debug
+
+Invitation email delivery, davet state'inin ana kaynağı değildir. Email failed veya skipped olsa bile invitation geçerli kalabilir ve admin manual copy fallback kullanabilir.
+
+Kontrol edilecek safe reason kategorileri:
+
+- `email_disabled`: `INVITATION_EMAIL_ENABLED=False`; SMTP kapalıdır.
+- `missing_recipient_email`: hedef kullanıcıda e-posta yoktur.
+- `smtp_config_missing`: SMTP host/sender/secret yapılandırması eksik olabilir.
+- `smtp_auth_failed`: SMTP kimlik doğrulaması başarısızdır.
+- `connection_timeout`: SMTP sağlayıcısına bağlantı zaman aşımına uğramıştır.
+- `smtp_error`: SMTP backend genel hata dönmüştür.
+- `send_failed`: sınıflandırılamayan güvenli gönderim hatasıdır.
+
+Debug checklist:
+
+- [ ] `.env` içinde `INVITATION_EMAIL_ENABLED` beklenen değerde.
+- [ ] `EMAIL_BACKEND` production'da SMTP backend'e işaret ediyor.
+- [ ] `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER` ve secret kaynağı hedef ortamda doğru.
+- [ ] `EMAIL_USE_TLS` ve `EMAIL_USE_SSL` aynı anda true değil.
+- [ ] `DEFAULT_FROM_EMAIL` verified sender/domain.
+- [ ] `APP_FRONTEND_URL` gerçek frontend origin ile uyumlu.
+- [ ] Backend loglarında raw activation URL, raw token, email body veya SMTP secret yok.
+- [ ] Admin Users result kartında sent/failed/skipped mesajı okunabilir.
+
+## 10. Demo Öncesi Log Review Checklist
 
 - [ ] `docker compose ps` içinde `backend`, `db`, `redis` running.
 - [ ] `docker compose logs --tail=200 backend` içinde yeni 500 stack trace yok.
@@ -186,8 +212,9 @@ Admin Console browser'dan backup, restore, cleanup veya destructive action çal�
 - [ ] Admin Console backup/system/security sinyalleri okunabilir.
 - [ ] Demo kullanıcıları production ortamda kullanılmıyor.
 - [ ] Browser devtools Network tab içinde login/refresh/logout beklenen statuslarla dönüyor.
+- [ ] Invitation email delivery disabled/enabled durumu demo anlatımıyla uyumlu.
 
-## 10. Demo Sonrası Log Review Checklist
+## 11. Demo Sonrası Log Review Checklist
 
 - [ ] Backend loglarında demo sırasında oluşan 500 hata yok.
 - [ ] Ticket, activation, import veya admin user action akışlarında beklenmeyen 403/500 yok.
@@ -195,8 +222,9 @@ Admin Console browser'dan backup, restore, cleanup veya destructive action çal�
 - [ ] Admin Console son backup ve system health sinyalleri değişmedi.
 - [ ] E2E veya manuel smoke sonrası production veri reseti yapılmadı.
 - [ ] Paylaşılacak loglarda secret, token, cookie veya kişisel veri temizlendi.
+- [ ] Davet email delivery sonuçları raw activation URL paylaşmadan yorumlandı.
 
-## 11. Incident Triage Yaklaşımı
+## 12. Incident Triage Yaklaşımı
 
 1. Etkiyi sınıflandır: tüm sistem mi, tek rol mü, tek modül mü?
 2. Son değişikliği belirle: deploy, `.env`, migration, backup job veya veri import.
@@ -209,7 +237,7 @@ Admin Console browser'dan backup, restore, cleanup veya destructive action çal�
 
 Rollback veya restore kararı verilmeden önce güncel ve doğrulanmış backup varlığı kontrol edilmelidir. Restore production DB üzerinde doğrudan denenmez; explicit `RESTORE` onayı ve izole/staging yaklaşımı korunur.
 
-## 12. Hafif Monitoring Rutini
+## 13. Hafif Monitoring Rutini
 
 Günlük:
 
@@ -224,6 +252,7 @@ Haftalık:
 - Retention cleanup dry-run sonucunu kontrol et.
 - Restore drill planını ve son başarılı drill tarihini gözden geçir.
 - Admin user action audit kayıtlarını review et.
+- Invitation email failed/skipped reason kodlarını örnek olarak kontrol et.
 
 Deploy öncesi:
 
@@ -241,7 +270,7 @@ Deploy sonrası:
 - Backup verify.
 - Kritik sayfalar: `/assets`, `/personnel`, `/tickets`, `/admin-console`, `/audit`.
 
-## 13. İlgili Dokümanlar
+## 14. İlgili Dokümanlar
 
 - `README.md`
 - `docs/deploy/self-hosted-install.md`
@@ -249,8 +278,8 @@ Deploy sonrası:
 - `docs/operations/backup-restore.md`
 - `docs/operations/scheduled-jobs.md`
 - `docs/operations/admin-console.md`
+- `docs/operations/email-invitation-delivery.md`
 - `docs/operations/e2e-smoke.md`
 - `docs/demo/manual-smoke-script.md`
 - `docs/demo/final-qa-checklist.md`
 - `docs/demo/known-issues-and-limitations.md`
-

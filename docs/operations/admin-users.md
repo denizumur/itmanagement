@@ -51,6 +51,8 @@ Bu ekran şunları göstermez ve çalıştırmaz:
 
 Activation URL sadece davet oluşturma isteği başarılı olduktan sonra frontend üzerinde geçici olarak gösterilir; list/detail API response içine yazılmaz.
 
+P15 ile davet oluşturma sonucunda email delivery durumu da gösterilebilir. `sent`, `failed` veya `skipped` sonucu davetin geçerliliğini tek başına belirlemez; davet state'i backend invitation kaydıdır. Email gönderimi başarısız veya kapalıysa admin geçici activation linkini kopyalayıp güvenli kanaldan paylaşabilir.
+
 ## Güvenli Aksiyonlar Paneli
 
 Detay drawer içindeki panel aksiyonları tek yerde toplar. Pasifleştirme, yeniden aktifleştirme ve rol değişikliği aynı confirmation modalını kullanır; davet oluşturma/iptal etme ise mevcut güvenli invitation endpointlerini çağırır. Panel optimistic update yapmaz; başarılı işlemden sonra kullanıcı listesi ve detay yeniden okunur.
@@ -85,3 +87,4 @@ Rol değişikliği modalında mevcut rol “mevcut” etiketiyle disabled görü
 - Pending expired: Yeni davet oluşturun veya bekleyen daveti iptal edip akışı tekrarlayın.
 - User without employee: Personel kaydıyla eşleştirme gerekip gerekmediğini kontrol edin.
 - Last active admin guard: Önce ikinci aktif admin hesabını doğrulayın, sonra rol veya aktiflik değişikliği yapın.
+- Email failed/skipped: `docs/operations/email-invitation-delivery.md` içindeki failure triage adımlarını izleyin ve manual copy fallback kullanın.

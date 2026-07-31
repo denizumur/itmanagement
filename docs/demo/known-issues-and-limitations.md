@@ -4,7 +4,7 @@ Bu doküman demo öncesi bilinen sınırları dürüstçe görünür kılar. Lis
 
 ## Bilinen sınırlamalar
 
-- Email invitation delivery yoktur; activation link admin tarafından güvenli kanaldan paylaşılır.
+- Email invitation delivery SMTP ile etkinleştirilebilir; default kapalıysa activation link admin tarafından güvenli kanaldan paylaşılır.
 - Real-time/WebSocket yoktur; bazı ekranlarda güncel durum için refresh veya yeniden sorgu gerekir.
 - Enterprise ITSM seviyesinde SLA automation yoktur.
 - Scheduled backup OS scheduler ile kurulmalıdır; uygulama içinden çalıştırılmaz.
@@ -29,6 +29,5 @@ Bu doküman demo öncesi bilinen sınırları dürüstçe görünür kılar. Lis
 
 - MVP'de kontrollü ve güvenli operasyonu tercih ettik.
 - Riskli aksiyonları explicit confirmation ve audit ile sınırlandırdık.
-- Email delivery, advanced SLA, discovery ve gelişmiş monitoring sonraki fazlara bırakıldı.
+- Advanced SLA, discovery ve gelişmiş monitoring sonraki fazlara bırakıldı.
 - Bu ürün self-hosted şirket içi operasyon odağında tasarlandı; SaaS/multi-tenant platform gibi konumlandırılmamalıdır.
-

@@ -272,6 +272,7 @@ Daha fazla bilgi:
 - `docs/operations/scheduled-jobs.md`
 - `docs/operations/admin-console.md`
 - `docs/operations/monitoring-log-review.md`
+- `docs/operations/email-invitation-delivery.md`
 - `docs/operations/admin-users.md`
 - `docs/operations/ticket-workspace.md`
 - `docs/operations/e2e-smoke.md`

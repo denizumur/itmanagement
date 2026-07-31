@@ -67,13 +67,23 @@ Production `.env` dosyası gerçek secret içermelidir; repoya commitlenmemelidi
 | `POSTGRES_PASSWORD` | PostgreSQL şifresi. | Güçlü secret, repoya yazılmaz. | `CHANGE_ME_DB_PASSWORD` |
 | `POSTGRES_HOST` | DB host/service adı. | Compose içinde genelde `db`. | `db` |
 | `POSTGRES_PORT` | DB portu. | Varsayılan genelde `5432`. | `5432` |
-| `CORS_ALLOWED_ORIGINS` | Frontend origin izinleri. | Sadece HTTPS production originleri. | `https://it.example.com` |
-| `CSRF_TRUSTED_ORIGINS` | CSRF trusted originleri. | Sadece HTTPS production originleri. | `https://it.example.com` |
-| `AUTH_COOKIE_ALLOWED_ORIGINS` | Cookie auth Origin allow-list. | Frontend HTTPS origini ile sınırlı. | `https://it.example.com` |
+| `CORS_ALLOWED_ORIGINS` | Frontend origin izinleri. | Sadece HTTPS production originleri. | `https://it.example.invalid` |
+| `CSRF_TRUSTED_ORIGINS` | CSRF trusted originleri. | Sadece HTTPS production originleri. | `https://it.example.invalid` |
+| `AUTH_COOKIE_ALLOWED_ORIGINS` | Cookie auth Origin allow-list. | Frontend HTTPS origini ile sınırlı. | `https://it.example.invalid` |
 | `AUTH_COOKIE_REQUIRE_ORIGIN` | Cookie auth için Origin zorunluluğu. | `true` olmalı. | `true` |
 | `REDIS_URL` | Redis cache/rate limit storage. | Shared Redis service kullanılmalı. | `redis://redis:6379/0` |
 | `LOGIN_THROTTLE_RATE` | Login rate limit oranı. | Kuruma göre ayarlanabilir. | `5/5m` |
 | `BACKEND_PORT` | Lokal/host backend port mapping. | Reverse proxy arkasında sınırlı tutulmalı. | `8000` |
+| `INVITATION_EMAIL_ENABLED` | Davet e-postası gönderimini açar/kapatır. | SMTP hazırsa bilinçli açılmalı. | `false` |
+| `EMAIL_BACKEND` | Django email backend. | Production SMTP backend kullanılmalı. | `django.core.mail.backends.smtp.EmailBackend` |
+| `EMAIL_HOST` | SMTP host. | Secret olmayan host değeri; gerçek sağlayıcıya göre. | `CHANGE_ME_SMTP_HOST` |
+| `EMAIL_PORT` | SMTP port. | TLS/SSL politikasına göre. | `587` |
+| `EMAIL_HOST_USER` | SMTP kullanıcı adı. | Secret yönetimiyle saklanmalı. | `CHANGE_ME_SMTP_USER` |
+| `EMAIL_HOST_PASSWORD` | SMTP secret. | Gerçek değer repoya yazılmaz. | `CHANGE_ME_SMTP_PASSWORD` |
+| `EMAIL_USE_TLS` | SMTP TLS kullanımı. | SSL ile aynı anda true olmamalı. | `true` |
+| `EMAIL_USE_SSL` | SMTP SSL kullanımı. | TLS ile aynı anda true olmamalı. | `false` |
+| `DEFAULT_FROM_EMAIL` | Davet e-postası sender adresi. | Verified sender/domain olmalı. | `CHANGE_ME_FROM@example.invalid` |
+| `APP_FRONTEND_URL` | Activation link üretiminde frontend base URL. | Gerçek HTTPS frontend origin olmalı. | `https://it.example.invalid` |
 
 Not: `REFRESH_TOKEN_COOKIE_SECURE` production settings içinde explicit `True` olarak ayarlanmıştır. Ayrı env değişkeni şu an yoktur; HTTPS olmadan production kullanılmamalıdır.
 
@@ -100,6 +110,8 @@ Frontend API URL değişkeni repo içinde ayrı env olarak görünmüyor; fronte
 - [ ] Backup dosyaları repo dışında ve güvenli yerde saklanıyor.
 - [ ] Backup dosyalarının kişisel/kurumsal veri içerebileceği kabul edildi.
 - [ ] Audit log production'da açık ve erişimi yetki kontrollü.
+- [ ] Invitation email delivery açık olacaksa SMTP env değerleri ve verified sender hazır.
+- [ ] `APP_FRONTEND_URL` activation linkleri için doğru HTTPS frontend origin.
 
 ## 6. Docker Compose production notları
 
@@ -195,6 +207,7 @@ Admin Console:
 - Production'da scheduled backup kurulduktan sonra Admin Console üzerinden son manifest, stale uyarısı ve checklist günlük izlenmelidir.
 - Admin user/personnel connection review için `/admin-console/users` ekranında aktivasyon bekleyen, expired invitation ve personel bağlantısı olmayan kullanıcılar düzenli kontrol edilmelidir.
 - Admin user safe actions production'da düzenli review ister: deactivate/reactivate ve role change audit logları incelenmeli, son aktif admin guard doğrulanmalı, invitation create/revoke işlemleri periyodik olarak kontrol edilmelidir.
+- Invitation email delivery sonucu sent/failed/skipped olarak Admin Users sonuç kartında görünür; failed/skipped durumunda manual copy fallback korunur.
 - Admin user action review sırasında reason kalitesi, role-change gerekçeleri, inactive user listesi ve `/audit?entity_type=accounts.User` filtreli kayıtları periyodik olarak kontrol edilmelidir.
 - Delete, bulk action ve raw credential set/reset bu foundation kapsamında yoktur; bu işlemler eklenirse ayrı güvenlik kapıları ve test planı gerektirir.
 
@@ -220,6 +233,8 @@ Deploy sonrası manuel smoke:
 - [ ] Teknisyen ticket inbox açılıyor.
 - [ ] Reminder sayfaları yetkili kullanıcı için açılıyor.
 - [ ] Audit sayfaları admin için açılıyor.
+- [ ] Admin Users davet oluşturma sonrası email delivery mesajı okunuyor.
+- [ ] Email disabled/failed durumda activation link manual copy fallback ile geçici görünür.
 - [ ] PostgreSQL backup script smoke çalışıyor.
 - [ ] Media backup script smoke çalışıyor veya media yoksa kontrollü skip yapıyor.
 - [ ] Scheduled backup runner success manifest üretiyor.
@@ -270,7 +285,7 @@ docker compose logs --tail 100 backend
 
 Mevcut sınırlamalar:
 
-- Email invitation delivery yok; activation link admin tarafından güvenli kanaldan paylaşılır.
+- Email invitation delivery SMTP ile etkinleştirilebilir; default kapalıyken manual copy fallback korunur.
 - Real-time/WebSocket yok; bazı ekranlarda güncel durum için refresh veya yeniden sorgu gerekir.
 - Enterprise ITSM seviyesinde SLA automation yok.
 - Scheduled backup OS scheduler ile kurulmalıdır; uygulama içinden çalıştırılmaz.

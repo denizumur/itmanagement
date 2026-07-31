@@ -45,6 +45,7 @@ Node PATH'te değilse `-NodePath` ile `node.exe` yolu verilir.
 5. Talep sahibi portalında iç notların görünmediğini doğrulayın.
 6. Admin Console backup health ve security guidance panellerini kontrol edin.
 7. Audit trace linklerinin token, secret veya raw path içermediğini kontrol edin.
+8. Admin Users davet oluşturma sonucunda email delivery mesajını kontrol edin; SMTP kapalıysa skipped mesajı ve manual copy fallback beklenir.
 
 ## Kapanış kriteri
 
@@ -54,4 +55,3 @@ Node PATH'te değilse `-NodePath` ile `node.exe` yolu verilir.
 - Backup verify healthy döndü.
 - Role-based QA checklist tamamlandı.
 - Known issues dokümanı demo anlatımıyla uyumlu.
-
