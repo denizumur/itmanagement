@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { createUserInvitation, revokeUserInvitation } from "../../api/accounts";
+import type { UserInvitationCreateResponse } from "../../api/accounts";
 import {
   useChangeAdminUserRole,
   useDeactivateAdminUser,
@@ -68,7 +69,8 @@ function actionHelpText(action: AdminUserActionKind, user: AdminUserDetail) {
 
 function resultForAction(
   action: AdminUserActionKind,
-  activationUrl?: string
+  activationUrl?: string,
+  emailDelivery?: UserInvitationCreateResponse["email_delivery"]
 ): UserActionResult {
   const timestamp = new Date().toISOString();
 
@@ -103,6 +105,14 @@ function resultForAction(
       description: "Aktivasyon linki bu panelde geçici olarak gösterilir.",
       timestamp,
       activationUrl,
+      emailDelivery: emailDelivery
+        ? {
+            attempted: emailDelivery.attempted,
+            status: emailDelivery.status,
+            reason: emailDelivery.reason,
+            recipientMaskedEmail: emailDelivery.recipient_masked_email,
+          }
+        : undefined,
     };
   }
 
@@ -203,6 +213,7 @@ export function SafeUserActionsPanel({
     setError("");
     try {
       let activationUrl: string | undefined;
+      let emailDelivery: UserInvitationCreateResponse["email_delivery"];
       if (actionKind === "deactivate") {
         await deactivateMutation.mutateAsync({
           userId: user.id,
@@ -222,6 +233,7 @@ export function SafeUserActionsPanel({
         setIsInvitationSubmitting(true);
         const response = await createUserInvitation(user.id);
         activationUrl = response.activation_url;
+        emailDelivery = response.email_delivery;
       } else if (
         actionKind === "revoke-invitation" &&
         user.activation.latest_invitation_id
@@ -231,7 +243,7 @@ export function SafeUserActionsPanel({
       }
 
       await onRefresh();
-      onActionResult(resultForAction(actionKind, activationUrl));
+      onActionResult(resultForAction(actionKind, activationUrl, emailDelivery));
       closeAction();
     } catch (submitError) {
       setError(getActionError(submitError));

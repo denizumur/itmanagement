@@ -15,6 +15,12 @@ export interface UserActionResult {
   description: string;
   timestamp: string;
   activationUrl?: string;
+  emailDelivery?: {
+    attempted: boolean;
+    status: "sent" | "failed" | "skipped";
+    reason?: string | null;
+    recipientMaskedEmail?: string | null;
+  };
 }
 
 export function getUserAuditLink(user: Pick<AdminUserDetail, "id">) {
@@ -33,6 +39,29 @@ export function UserAuditTraceCard({
   onRefresh?: () => void;
 }) {
   const auditLink = getUserAuditLink(user);
+  const emailDelivery = result?.emailDelivery;
+  const emailDeliveryTone =
+    emailDelivery?.status === "sent"
+      ? "success"
+      : emailDelivery?.status === "failed"
+        ? "warning"
+        : "accent";
+  const emailDeliveryTitle =
+    emailDelivery?.status === "sent"
+      ? "Davet e-postası gönderildi"
+      : emailDelivery?.status === "failed"
+        ? "Davet oluşturuldu ancak e-posta gönderilemedi"
+        : "E-posta gönderimi atlandı";
+  const emailDeliveryDescription =
+    emailDelivery?.status === "sent"
+      ? emailDelivery.recipientMaskedEmail
+        ? `Alıcı: ${emailDelivery.recipientMaskedEmail}`
+        : "E-posta teslim kanalı başarıyla tetiklendi."
+      : emailDelivery?.status === "failed"
+        ? "Linki kopyalayıp güvenli kanaldan paylaşabilirsiniz."
+        : emailDelivery?.reason === "email_disabled"
+          ? "SMTP yapılandırması kapalı olduğu için e-posta gönderilmedi."
+          : "Linki kopyalayıp güvenli kanaldan paylaşabilirsiniz.";
 
   return (
     <section
@@ -99,6 +128,36 @@ export function UserAuditTraceCard({
               </p>
               <p className="mt-xs break-all text-caption text-text-secondary">
                 {result.activationUrl}
+              </p>
+            </div>
+          ) : null}
+          {emailDelivery ? (
+            <div
+              className={`mt-sm rounded-xl border p-sm ${
+                emailDeliveryTone === "success"
+                  ? "border-success/25 bg-success-bg/60"
+                  : emailDeliveryTone === "warning"
+                    ? "border-warning/25 bg-warning-bg/60"
+                    : "border-accent/25 bg-accent-bg/50"
+              }`}
+              data-testid="admin-user-email-delivery"
+            >
+              <p
+                className={`text-caption font-semibold ${
+                  emailDeliveryTone === "success"
+                    ? "text-success"
+                    : emailDeliveryTone === "warning"
+                      ? "text-warning"
+                      : "text-accent"
+                }`}
+              >
+                {emailDeliveryTitle}
+              </p>
+              <p className="mt-xs text-caption text-text-secondary">
+                {emailDeliveryDescription}
+              </p>
+              <p className="mt-xs text-caption text-text-secondary">
+                Davet linki yalnızca bu işlem sonrasında geçici olarak gösterilir.
               </p>
             </div>
           ) : null}

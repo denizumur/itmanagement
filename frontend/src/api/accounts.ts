@@ -5,6 +5,12 @@ export type UserInvitationCreateResponse = {
   user_id: number;
   expires_at: string;
   activation_url: string;
+  email_delivery?: {
+    attempted: boolean;
+    status: "sent" | "failed" | "skipped";
+    reason?: string | null;
+    recipient_masked_email?: string | null;
+  };
 };
 
 export type UserInvitationListItem = {
