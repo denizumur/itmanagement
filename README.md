@@ -266,6 +266,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\backup\verify_latest_back
 
 Daha fazla bilgi:
 
+- `docs/deploy/self-hosted-install.md`
 - `docs/operations/production-readiness.md`
 - `docs/operations/backup-restore.md`
 - `docs/operations/scheduled-jobs.md`
@@ -299,4 +300,3 @@ Daha fazla bilgi:
 - Backup artifactleri repoya alınmamalıdır.
 - Production deployment bu README ile yapılmaz; production için operasyon runbookları izlenmelidir.
 - Demo öncesi `docs/demo/final-qa-checklist.md` ve `docs/demo/manual-smoke-script.md` birlikte kullanılmalıdır.
-
