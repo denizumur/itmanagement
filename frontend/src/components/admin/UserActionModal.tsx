@@ -10,10 +10,10 @@ const USER_ROLES: UserRole[] = [
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin",
-  technician: "Technician",
-  viewer: "Viewer",
-  approver: "Approver",
-  requester: "Requester",
+  technician: "Teknisyen",
+  viewer: "İzleyici",
+  approver: "Onaycı",
+  requester: "Talep sahibi",
 };
 
 export function UserActionModal({

@@ -23,10 +23,10 @@ function formatDateTime(value?: string | null) {
 function roleLabel(role?: string | null) {
   const labels: Record<string, string> = {
     admin: "Admin",
-    technician: "Technician",
-    viewer: "Viewer",
-    requester: "Requester",
-    approver: "Approver",
+    technician: "Teknisyen",
+    viewer: "İzleyici",
+    requester: "Talep sahibi",
+    approver: "Onaycı",
   };
 
   return role ? labels[role] ?? role : "Rol yok";

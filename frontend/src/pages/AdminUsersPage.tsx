@@ -55,10 +55,10 @@ function formatDateTime(value?: string | null) {
 function roleLabel(role?: string | null) {
   const labels: Record<string, string> = {
     admin: "Admin",
-    technician: "Technician",
-    viewer: "Viewer",
-    requester: "Requester",
-    approver: "Approver",
+    technician: "Teknisyen",
+    viewer: "İzleyici",
+    requester: "Talep sahibi",
+    approver: "Onaycı",
   };
 
   return role ? labels[role] ?? role : "Rol yok";
@@ -321,10 +321,10 @@ export function AdminUsersPage() {
               >
                 <option value="">Tüm roller</option>
                 <option value="admin">Admin</option>
-                <option value="technician">Technician</option>
-                <option value="viewer">Viewer</option>
-                <option value="requester">Requester</option>
-                <option value="approver">Approver</option>
+                <option value="technician">Teknisyen</option>
+                <option value="viewer">İzleyici</option>
+                <option value="requester">Talep sahibi</option>
+                <option value="approver">Onaycı</option>
               </select>
               <select
                 value={(state.filters.is_active as string) ?? ""}

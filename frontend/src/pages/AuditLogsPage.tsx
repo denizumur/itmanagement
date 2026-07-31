@@ -1157,7 +1157,7 @@ export function AuditLogsPage() {
             <div>
               <h2 className="text-h3 text-text-primary">Erişim notu</h2>
               <p className="mt-xs text-body text-text-secondary">
-                Bu sayfa yalnızca Admin rolüne açıktır. Technician, Viewer, Approver ve Requester rolleri backend tarafında da 403 alır.
+                Bu sayfa yalnızca Admin rolüne açıktır. Teknisyen, İzleyici, Onaycı ve Talep sahibi rolleri backend tarafında da 403 alır.
               </p>
             </div>
           </div>

@@ -1,6 +1,6 @@
 # Scheduled Jobs Runbook
 
-Bu dokuman P8 backup otomasyonu icin Windows Task Scheduler, Linux cron ve systemd timer orneklerini toplar. P8 kapsaminda Celery/RQ/APScheduler gibi uygulama ici job framework yoktur; backup otomasyonu host scheduler ile calistirilir.
+Bu doküman P8 backup otomasyonu için Windows Task Scheduler, Linux cron ve systemd timer örneklerini toplar. P8 kapsamında Celery/RQ/APScheduler gibi uygulama içi job framework yoktur; backup otomasyonu host scheduler ile çalıştırılır.
 
 ## Kapsam
 
@@ -10,7 +10,7 @@ Bu dokuman P8 backup otomasyonu icin Windows Task Scheduler, Linux cron ve syste
 - Son backup health kontrolu.
 - Restore drill hatirlatmasi.
 
-Otomatik restore yoktur. Restore islemleri hala `scripts/backup/restore_postgres.ps1` icindeki explicit `RESTORE` onayina baglidir.
+Otomatik restore yoktur. Restore işlemleri hâlâ `scripts/backup/restore_postgres.ps1` içindeki explicit `RESTORE` onayına bağlıdır.
 
 ## Onerilen periyot
 
@@ -39,24 +39,24 @@ Start in:
 C:\Users\deniz\it-inventory-platform
 ```
 
-Verify icin ikinci bir task veya ayni task sonunda ek komut kullanilabilir:
+Verify için ikinci bir task veya aynı task sonunda ek komut kullanılabilir:
 
 ```powershell
 .\scripts\backup\verify_latest_backup.ps1 -MaxAgeHours 24 -FailIfOlderThanMaxAge
 ```
 
-Task Scheduler exit code'u job sonucunu izlemek icin kullanilmalidir. Non-zero sonuc backup'in basarisiz, partial veya stale oldugunu gosterebilir.
+Task Scheduler exit code'u job sonucunu izlemek için kullanılmalıdır. Non-zero sonuç backup'ın başarısız, partial veya stale olduğunu gösterebilir.
 
 ## Linux cron
 
-PowerShell Core kurulu Linux hostlarda `pwsh` ile calistirilabilir:
+PowerShell Core kurulu Linux hostlarda `pwsh` ile çalıştırılabilir:
 
 ```cron
 15 2 * * * cd /opt/it-inventory-platform && pwsh -File ./scripts/backup/run_scheduled_backup.ps1 -Environment production -RetentionDays 30 -RetentionMinCount 10 >> /var/log/it-inventory-backup.log 2>&1
 45 2 * * * cd /opt/it-inventory-platform && pwsh -File ./scripts/backup/verify_latest_backup.ps1 -MaxAgeHours 24 -FailIfOlderThanMaxAge >> /var/log/it-inventory-backup-verify.log 2>&1
 ```
 
-Linux production icin ileride native bash backup scripti eklenebilir. P8 kapsaminda mevcut PowerShell scriptleri korunur.
+Linux production için ileride native bash backup scripti eklenebilir. P8 kapsamında mevcut PowerShell scriptleri korunur.
 
 ## systemd timer ornegi
 
@@ -91,10 +91,10 @@ WantedBy=timers.target
 - Runner `0` exit code ile success, non-zero ile failed/partial sonuc verir.
 - Verify script `0` exit code ile healthy, `1` ile missing/failed/stale sonuc verir.
 - Manifestler `backups/manifests/` altinda tutulur ve repoya commitlenmez.
-- Admin Console `/admin-console`, son manifest ve verify sinyallerini admin kullanicilar icin gorunur hale getirir.
-- Admin Console copy command rehberligi bu dokumandaki komutlarla uyumludur; komutlari calistirmaz, sadece operatorun terminale tasimasi icin kopyalar.
+- Admin Console `/admin-console`, son manifest ve verify sinyallerini admin kullanıcılar için görünür hale getirir.
+- Admin Console copy command rehberliği bu dokümandaki komutlarla uyumludur; komutları çalıştırmaz, sadece operatörün terminale taşıması için kopyalar.
 - Loglarda secret, DB password, connection string veya PII tutulmamalidir.
-- Backup artifactleri hassas veri icerdigi icin offsite kopyalama sifreli ve erisim kontrollu olmalidir.
+- Backup artifactleri hassas veri içerdiği için offsite kopyalama şifreli ve erişim kontrollü olmalıdır.
 
 ## Restore drill
 
@@ -105,4 +105,4 @@ Haftalik veya en azindan duzenli araliklarla staging/izole local ortamda restore
 docker compose exec backend python manage.py check
 ```
 
-Production DB uzerinde dogrudan drill yapilmaz. Restore scripti kullanici tam olarak `RESTORE` yazmadan devam etmez.
+Production DB üzerinde doğrudan drill yapılmaz. Restore scripti kullanıcı tam olarak `RESTORE` yazmadan devam etmez.

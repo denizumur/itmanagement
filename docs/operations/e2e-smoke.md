@@ -1,21 +1,21 @@
 # E2E Smoke Testleri
 
-Bu dokuman local/dev ortamda calisan minimum Playwright smoke test altyapisini anlatir. Bu testler production credential istemez ve production DB uzerinde destructive test olarak calistirilmamalidir.
+Bu doküman local/dev ortamda çalışan minimum Playwright smoke test altyapısını anlatır. Bu testler production credential istemez ve production DB üzerinde destructive test olarak çalıştırılmamalıdır.
 
-## Amac
+## Amaç
 
-P6 smoke paketi her deploy veya refactor sonrasi su sorulari hizli cevaplamak icindir:
+P6 smoke paketi her deploy veya refactor sonrası şu soruları hızlı cevaplamak içindir:
 
-- Backend health endpoint ayakta mi?
-- Frontend login ekrani aciliyor mu?
+- Backend health endpoint ayakta mı?
+- Frontend login ekranı açılıyor mu?
 - Kritik roller login olabiliyor mu?
-- Admin operasyon sayfalari render oluyor mu?
+- Admin operasyon sayfaları render oluyor mu?
 - Personel Excel export dosya olarak iniyor mu?
-- Davet linki ile inactive kullanici aktivasyonu calisiyor mu?
-- Requester, approver ve technician portallari temel olarak aciliyor mu?
-- Logout calisiyor mu?
+- Davet linki ile inactive kullanıcı aktivasyonu çalışıyor mu?
+- Talep sahibi, Onaycı ve Teknisyen portalları temel olarak açılıyor mu?
+- Logout çalışıyor mu?
 
-Bu paket exhaustive E2E suite degildir.
+Bu paket exhaustive E2E suite değildir.
 
 ## Gereksinimler
 
@@ -31,7 +31,7 @@ cd C:\Users\deniz\it-inventory-platform\frontend
 node node_modules/@playwright/test/cli.js install chromium
 ```
 
-## Local calistirma
+## Local çalıştırma
 
 Tercih edilen runner:
 
@@ -40,69 +40,69 @@ cd C:\Users\deniz\it-inventory-platform
 .\scripts\e2e\run_e2e_smoke.ps1
 ```
 
-Node PATH'te degilse:
+Node PATH'te değilse:
 
 ```powershell
 .\scripts\e2e\run_e2e_smoke.ps1 -NodePath C:\path\to\node.exe
 ```
 
-Runner local/dev icin:
+Runner local/dev için:
 
-1. `docker compose up -d` calistirir.
-2. `python manage.py check` calistirir.
-3. Smoke kullanicilarinin sifrelerini `E2ePass123!` yapar.
+1. `docker compose up -d` çalıştırır.
+2. `python manage.py check` çalıştırır.
+3. Smoke kullanıcılarının şifrelerini `E2ePass123!` yapar.
 4. Django cache'i temizler.
-5. Inactive/unusable `e2e.invite.user` kullanicisini ve bagli personel kaydini hazirlar.
-6. Frontend Playwright smoke suite'ini calistirir.
+5. Inactive/unusable `e2e.invite.user` kullanıcısını ve bağlı personel kaydını hazırlar.
+6. Frontend Playwright smoke suite'ini çalıştırır.
 
-Bu sifre production secret degildir; sadece local/dev smoke icindir.
+Bu şifre production secret değildir; sadece local/dev smoke içindir.
 
-Manuel calistirma:
+Manuel çalıştırma:
 
 ```powershell
 cd C:\Users\deniz\it-inventory-platform\frontend
 node node_modules/@playwright/test/cli.js test
 ```
 
-## Smoke kullanicilari
+## Smoke kullanıcıları
 
 - Admin: `deniz`
-- Requester: `requester.demo`
-- Technician: `technician.demo`
-- Approver: `idari.mali.manager`
+- Talep sahibi: `requester.demo`
+- Teknisyen: `technician.demo`
+- Onaycı: `idari.mali.manager`
 - Invitation smoke: `e2e.invite.user`
-- Local/dev smoke sifresi: `E2ePass123!`
+- Local/dev smoke şifresi: `E2ePass123!`
 
-## Test edilen akislar
+## Test edilen akışlar
 
 - Backend `/api/health/` 200.
 - Login screen boot.
 - Admin login.
 - Admin navigation: `/assets`, `/personnel`, `/licenses`, `/maintenance`, `/assignments`, `/reminders`, `/audit`, `/tickets`.
-- Personnel Excel export download: dosya adi `.xlsx`, dosya bos degil, ilk bytes `PK`.
-- Requester `/my-tickets` portal ve talep formuna erisim.
-- Approver `/approvals` portal render.
-- Technician `/tickets` inbox render.
+- Personnel Excel export download: dosya adı `.xlsx`, dosya boş değil, ilk bytes `PK`.
+- Talep sahibi `/my-tickets` portal ve talep formuna erişim.
+- Onaycı `/approvals` portal render.
+- Teknisyen `/tickets` inbox render.
 - Logout ve protected page redirect.
-- Admin API ile `e2e.invite.user` icin activation link uretimi.
-- `/activate-account?token=...` sayfasinda sifre belirleme.
-- Aktive edilen kullanicinin login olabilmesi.
-- Ayni activation token'in tekrar kullanilamamasi.
+- Admin API ile `e2e.invite.user` için activation link üretimi.
+- `/activate-account?token=...` sayfasında şifre belirleme.
+- Aktive edilen kullanıcının login olabilmesi.
+- Aynı activation token'ın tekrar kullanılamaması.
 
-## Test edilmeyen akislar
+## Test edilmeyen akışlar
 
 - Derin ticket create/approve/reject workflow.
-- Internal note gonderimi.
+- İç not gönderimi.
 - Media upload.
 - Production reverse proxy.
 - Login throttle E2E; bu P3c backend regression testleriyle korunur.
-- Email invitation delivery; P7d sadece link uretme/aktivasyon smoke yapar.
+- Email invitation delivery; P7d sadece link üretme/aktivasyon smoke yapar.
 
-Ticket create flow P6'da bilerek form gorunurlugu seviyesinde tutuldu. Full create/cleanup akisi ileride daha stabil data factory veya API cleanup ile eklenmelidir.
+Ticket create flow P6'da bilerek form görünürlüğü seviyesinde tutuldu. Full create/cleanup akışı ileride daha stabil data factory veya API cleanup ile eklenmelidir.
 
 ## Troubleshooting
 
-### Backend kapali
+### Backend kapalı
 
 ```powershell
 docker compose ps
@@ -110,9 +110,9 @@ docker compose up -d
 docker compose exec backend python manage.py check
 ```
 
-### Frontend port 5173 kullaniliyor
+### Frontend port 5173 kullanılıyor
 
-Playwright config mevcut Vite server'i reuse eder. Port doluysa kapatin veya `E2E_FRONTEND_URL` ile farkli URL verin.
+Playwright config mevcut Vite server'ı reuse eder. Port doluysa kapatın veya `E2E_FRONTEND_URL` ile farklı URL verin.
 
 ### Playwright browser eksik
 
@@ -121,9 +121,9 @@ cd frontend
 node node_modules/@playwright/test/cli.js install chromium
 ```
 
-### Login 429 cache yuzunden
+### Login 429 cache yüzünden
 
-Runner `cache.clear()` calistirir. Manuel calistirmada backend cache temizlenmemisse:
+Runner `cache.clear()` çalıştırır. Manuel çalıştırmada backend cache temizlenmemişse:
 
 ```powershell
 docker compose exec backend python manage.py shell -c "from django.core.cache import cache; cache.clear()"
@@ -131,19 +131,19 @@ docker compose exec backend python manage.py shell -c "from django.core.cache im
 
 ### Activation smoke token expired/reused
 
-Runner her calismada `e2e.invite.user` icin eski davetleri temizler ve kullaniciyi tekrar inactive/unusable hale getirir. Manuel calistirmada eski token kullanildiysa `/activate-account` hata gosterir; runner'i tekrar calistirin.
+Runner her çalışmada `e2e.invite.user` için eski davetleri temizler ve kullanıcıyı tekrar inactive/unusable hale getirir. Manuel çalıştırmada eski token kullanıldıysa `/activate-account` hata gösterir; runner'ı tekrar çalıştırın.
 
 ### Activation password validation
 
-Backend Django password validators calistirir. Smoke sifresi runner tarafindan guclu uretilir; manuel testte zayif sifre 400 hata dondurur.
+Backend Django password validators çalıştırır. Smoke şifresi runner tarafından güçlü üretilir; manuel testte zayıf şifre 400 hata döndürür.
 
 ### Invite user cleanup
 
-Runner `e2e.invite.user` ve `E2E Invite User` personel kaydini local/dev DB'de ayirt edilebilir prefix ile tutar. Production guard nedeniyle production ortamda calismaz.
+Runner `e2e.invite.user` ve `E2E Invite User` personel kaydını local/dev DB'de ayırt edilebilir prefix ile tutar. Production guard nedeniyle production ortamda çalışmaz.
 
-### Selector kirildi
+### Selector kırıldı
 
-Oncelik accessible role/name selector'laridir. Kritik ve kirilgan yerlerde minimal `data-testid` kullanilir:
+Öncelik accessible role/name selector'larıdır. Kritik ve kırılgan yerlerde minimal `data-testid` kullanılır:
 
 - `login-username`
 - `login-password`
@@ -160,19 +160,19 @@ Oncelik accessible role/name selector'laridir. Kritik ve kirilgan yerlerde minim
 
 ### Download path problemi
 
-Excel export testi dosyayi Excel ile acmaz. Playwright download stream'ini okuyup ZIP signature olan `PK` ile basladigini kontrol eder.
+Excel export testi dosyayı Excel ile açmaz. Playwright download stream'ini okuyup ZIP signature olan `PK` ile başladığını kontrol eder.
 
 ## CI entegrasyonu durumu
 
-P6 ve P6b'de CI job eklenmedi. Once local smoke stabilitesi, audit temizligi ve artifact ignore guvencesi hedeflendi. CI entegrasyonu P6c veya ayri bir fazda Docker Compose servisleri, browser install cache ve artifact upload politikasi netlestirilerek eklenmelidir.
+P6 ve P6b'de CI job eklenmedi. Önce local smoke stabilitesi, audit temizliği ve artifact ignore güvencesi hedeflendi. CI entegrasyonu P6c veya ayrı bir fazda Docker Compose servisleri, browser install cache ve artifact upload politikası netleştirilerek eklenmelidir.
 
 ## npm audit notu
 
-P6b'de `npm audit` incelendi. High severity uyarilar `brace-expansion`, `postcss` ve `react-router` paketlerinden geliyordu. `npm audit fix` force kullanmadan calistirildi ve package-lock seviyesinde semver uyumlu guncellemelerle audit sonucu 0 vulnerability oldu.
+P6b'de `npm audit` incelendi. High severity uyarılar `brace-expansion`, `postcss` ve `react-router` paketlerinden geliyordu. `npm audit fix` force kullanmadan çalıştırıldı ve package-lock seviyesinde semver uyumlu güncellemelerle audit sonucu 0 vulnerability oldu.
 
 ## Artifact ignore notu
 
-Playwright runtime artifactleri git'e girmemelidir. `frontend/.gitignore` su dizinleri ignore eder:
+Playwright runtime artifactleri git'e girmemelidir. `frontend/.gitignore` şu dizinleri ignore eder:
 
 - `test-results`
 - `playwright-report`
@@ -184,4 +184,4 @@ Playwright runtime artifactleri git'e girmemelidir. `frontend/.gitignore` su diz
 
 ## Production uyarisi
 
-Bu suite production ortamda calistirilmak icin tasarlanmamistir. Runner local/dev kullanici sifrelerini resetler. Production'da kullanmayin.
+Bu suite production ortamda çalıştırılmak için tasarlanmamıştır. Runner local/dev kullanıcı şifrelerini resetler. Production'da kullanmayın.

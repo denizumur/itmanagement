@@ -677,7 +677,7 @@ function ContextSidePanel({
       <span className="sr-only" data-testid="ticket-context-requester" />
       <span className="sr-only" data-testid="ticket-context-assets" />
       <span className="sr-only" data-testid="ticket-context-related-tickets" />
-      <ContextCard title="Requester" icon={<IconUser size={15} aria-hidden={true} />}>
+      <ContextCard title="Talep sahibi" icon={<IconUser size={15} aria-hidden={true} />}>
         <div className="space-y-1 text-caption">
           <p className="font-semibold text-text-primary">
             {context.requester.full_name}
@@ -923,7 +923,7 @@ function ReturnToRequesterDialog({
 
           <div className="min-w-0">
             <p className="text-caption font-semibold uppercase tracking-wide text-warning">
-              Requester’a geri çevir
+              Talep sahibine geri çevir
             </p>
             <h2 className="mt-xs text-h3 text-text-primary">
               #{ticket.id} {ticket.title}

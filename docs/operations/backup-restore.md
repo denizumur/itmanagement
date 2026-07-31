@@ -1,15 +1,15 @@
 # Backup ve Restore Operasyonu
 
-Bu dokuman IT Envanter ve Yonetim Platformu icin PostgreSQL veritabani ve `backend/media` dosyalarinin guvenli sekilde yedeklenmesi ve restore drill yapilmasi icin hazirlandi.
+Bu doküman IT Envanter ve Yönetim Platformu için PostgreSQL veritabanı ve `backend/media` dosyalarının güvenli şekilde yedeklenmesi ve restore drill yapılması için hazırlandı.
 
 ## Backup stratejisi
 
 P4 v1 yaklasimi iki ana veri kaynagini hedefler:
 
-- PostgreSQL: uygulamanin asil is verisi, kullanicilar, envanter, zimmet, ticket, audit ve token blacklist kayitlari.
+- PostgreSQL: uygulamanın asıl iş verisi, kullanıcılar, envanter, zimmet, ticket, audit ve token blacklist kayıtları.
 - `backend/media`: ticket ekleri ve runtime dosya yuklemeleri.
 
-Redis cache yedeklenmez. Redis login rate limit ve cache verisi icindir; kalici is verisi kaynagi olarak kabul edilmez.
+Redis cache yedeklenmez. Redis login rate limit ve cache verisi içindir; kalıcı iş verisi kaynağı olarak kabul edilmez.
 
 ## Neler yedeklenir?
 
@@ -20,13 +20,13 @@ Redis cache yedeklenmez. Redis login rate limit ve cache verisi icindir; kalici 
 
 - Redis cache.
 - `frontend/node_modules`.
-- Python virtualenv, `__pycache__`, `.pyc` dosyalari.
+- Python virtualenv, `__pycache__`, `.pyc` dosyaları.
 - Docker image ve build cache.
 - Lokal `.env` dosyasi. Secret degerler repoya yazilmaz.
 
 ## Klasor standardi
 
-Backup scriptleri varsayilan olarak su dizinleri kullanir:
+Backup scriptleri varsayılan olarak şu dizinleri kullanır:
 
 ```text
 backups/
@@ -34,17 +34,17 @@ backups/
   media/
 ```
 
-Gercek backup dosyalari `.gitignore` ile ignore edilir. Sadece klasor standardini tutmak icin `.gitkeep` dosyalari repoda kalir.
+Gerçek backup dosyaları `.gitignore` ile ignore edilir. Sadece klasör standardını tutmak için `.gitkeep` dosyaları repoda kalır.
 
 ## Local PostgreSQL backup
 
-Repo kok dizininden calistirin:
+Repo kök dizininden çalıştırın:
 
 ```powershell
 .\scripts\backup\backup_postgres.ps1
 ```
 
-Script `docker compose exec -T db` ile compose service adi olan `db` uzerinden `pg_dump` calistirir. Container adi yerine service adi kullanilir. DB adi ve kullanicisi container icindeki `POSTGRES_DB` ve `POSTGRES_USER` ortam degiskenlerinden okunur.
+Script `docker compose exec -T db` ile compose service adı olan `db` üzerinden `pg_dump` çalıştırır. Container adı yerine service adı kullanılır. DB adı ve kullanıcısı container içindeki `POSTGRES_DB` ve `POSTGRES_USER` ortam değişkenlerinden okunur.
 
 Ornek cikti:
 
@@ -54,7 +54,7 @@ backups/postgres/it_inventory_20260729_213000.sql
 
 ## Local media backup
 
-Repo kok dizininden calistirin:
+Repo kök dizininden çalıştırın:
 
 ```powershell
 .\scripts\backup\backup_media.ps1
@@ -74,42 +74,42 @@ Restore destructive olabilir. Bu nedenle script confirmation olmadan calismaz.
 .\scripts\backup\restore_postgres.ps1 -BackupFile .\backups\postgres\it_inventory_YYYYMMDD_HHMMSS.sql
 ```
 
-Script devam etmeden once kullanicidan tam olarak `RESTORE` yazmasini ister. Confirmation verilmezse islem iptal edilir.
+Script devam etmeden önce kullanıcıdan tam olarak `RESTORE` yazmasını ister. Confirmation verilmezse işlem iptal edilir.
 
 Guvenli drill onerisi:
 
 1. Production dump dosyasini lokal ve izole bir ortama alin.
 2. Production DB yerine lokal Docker Compose DB kullanin.
 3. Restore oncesi mevcut lokal verinin onemli olmadigindan emin olun.
-4. Restore scriptini calistirin ve `RESTORE` confirmation verin.
-5. `docker compose exec backend python manage.py check` calistirin.
+4. Restore scriptini çalıştırın ve `RESTORE` confirmation verin.
+5. `docker compose exec backend python manage.py check` çalıştırın.
 6. Kritik ekranlari ve API'leri smoke test edin: login, assets/personnel listeleri, ticket ekleri, Excel export.
 
-Production DB uzerinde dogrudan restore drill yapmayin. Once ayri bir staging veya gecici restore ortami kullanin.
+Production DB üzerinde doğrudan restore drill yapmayın. Önce ayrı bir staging veya geçici restore ortamı kullanın.
 
 ## Media restore notu
 
-P4 v1 media restore icin otomatik destructive script eklemez. Media restore yaparken:
+P4 v1 media restore için otomatik destructive script eklemez. Media restore yaparken:
 
 1. Mevcut `backend/media` dizinini once ayri bir yere yedekleyin.
 2. Zip arsivini gecici dizine acin.
 3. Dosya sahipligi ve izinlerini kontrol edin.
 4. Icerigi `backend/media` altina kontrollu olarak kopyalayin.
-5. Ticket ekleri gibi dosya referanslarini uygulama uzerinden smoke test edin.
+5. Ticket ekleri gibi dosya referanslarını uygulama üzerinden smoke test edin.
 
 ## Production onerisi
 
 - PostgreSQL ve media backup ayni zaman penceresinde alinmali.
-- Scheduled backup runner icin `.\scripts\backup\run_scheduled_backup.ps1 -Environment production -RetentionDays 30 -RetentionMinCount 10` kullanilabilir.
+- Scheduled backup runner için `.\scripts\backup\run_scheduled_backup.ps1 -Environment production -RetentionDays 30 -RetentionMinCount 10` kullanılabilir.
 - Son backup sagligi `.\scripts\backup\verify_latest_backup.ps1 -MaxAgeHours 24 -FailIfOlderThanMaxAge` ile kontrol edilmelidir.
-- Backup dosyalari uygulama sunucusundan farkli ve guvenli bir lokasyona kopyalanmali.
-- Backup dosyalari hassas veri icerebilir; sifreli saklama tercih edilmeli.
+- Backup dosyaları uygulama sunucusundan farklı ve güvenli bir lokasyona kopyalanmalı.
+- Backup dosyaları hassas veri içerebilir; şifreli saklama tercih edilmeli.
 - Restore drill periyodik olarak staging ortaminda denenmeli.
-- Backup scriptleri cron, Windows Task Scheduler veya deployment platformunun scheduled job mekanizmasi ile calistirilabilir.
+- Backup scriptleri cron, Windows Task Scheduler veya deployment platformunun scheduled job mekanizması ile çalıştırılabilir.
 
 ## Saklama politikasi onerisi
 
-Baslangic icin makul bir politika:
+Başlangıç için makul bir politika:
 
 - Gunluk backup: 7 gun.
 - Haftalik backup: 4 hafta.
@@ -117,7 +117,7 @@ Baslangic icin makul bir politika:
 
 Regulasyon, sozlesme veya sirket politikasina gore bu sureler artirilabilir.
 
-P8 scheduled runner varsayilan olarak 14 gun retention ve en az 5 artifact koruma politikasini uygular. Cleanup sadece su dosyalari hedefler:
+P8 scheduled runner varsayılan olarak 14 gün retention ve en az 5 artifact koruma politikasını uygular. Cleanup sadece şu dosyaları hedefler:
 
 - `backups/postgres/*.sql`
 - `backups/media/*.zip`
@@ -131,7 +131,7 @@ Dry-run kontrolu:
 
 ## Scheduled backup runner
 
-Tek komutla PostgreSQL backup, media backup, manifest ve retention calistirmak icin:
+Tek komutla PostgreSQL backup, media backup, manifest ve retention çalıştırmak için:
 
 ```powershell
 .\scripts\backup\run_scheduled_backup.ps1 -Environment dev
@@ -153,11 +153,11 @@ Her scheduled backup kosusu `backups/manifests/backup-manifest-YYYYMMDD-HHMMSS.j
 - errors/warnings.
 - Docker Compose servis kontrol bilgisi ve mumkunse kisa git commit hash'i.
 
-Manifest dosyalarinda raw secret, DB password, connection string, kullanici PII veya row data tutulmaz. Manifest JSON dosyalari `.gitignore` ile ignore edilir; sadece `.gitkeep` repoda kalir.
+Manifest dosyalarında raw secret, DB password, connection string, kullanıcı PII veya row data tutulmaz. Manifest JSON dosyaları `.gitignore` ile ignore edilir; sadece `.gitkeep` repoda kalır.
 
 ## Son backup dogrulama
 
-Monitoring veya scheduled job sonrasi health kontrolu icin:
+Monitoring veya scheduled job sonrası health kontrolü için:
 
 ```powershell
 .\scripts\backup\verify_latest_backup.ps1
@@ -165,9 +165,9 @@ Monitoring veya scheduled job sonrasi health kontrolu icin:
 .\scripts\backup\verify_latest_backup.ps1 -RequireMedia
 ```
 
-Script en son manifesti bulur, status `success` degilse non-zero doner, artifact path ve boyutlarini kontrol eder. `-FailIfOlderThanMaxAge` kullanilirsa stale backup da non-zero sonuc uretir.
+Script en son manifesti bulur, status `success` değilse non-zero döner, artifact path ve boyutlarını kontrol eder. `-FailIfOlderThanMaxAge` kullanılırsa stale backup da non-zero sonuç üretir.
 
-Admin Console `/admin-console` backup guidance paneli bu komutlari kopyalanabilir sekilde gosterir. Komutlar tarayicidan calistirilmaz; operator terminalde kendisi calistirir.
+Admin Console `/admin-console` backup guidance paneli bu komutları kopyalanabilir şekilde gösterir. Komutlar tarayıcıdan çalıştırılmaz; operatör terminalde kendisi çalıştırır.
 
 Onerilen guvenli komutlar:
 
@@ -177,19 +177,19 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\backup\run_scheduled_back
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\backup\cleanup_old_backups.ps1 -RetentionDays 14 -RetentionMinCount 5 -DryRun
 ```
 
-Restore scripti yine manuel ve explicit `RESTORE` onaylidir. Admin Console restore calistirmaz.
+Restore scripti yine manuel ve explicit `RESTORE` onaylıdır. Admin Console restore çalıştırmaz.
 
 ## Guvenlik
 
-- Backup dosyalari kullanici, personel, ticket, audit ve ek dosya verisi icerebilir.
+- Backup dosyaları kullanıcı, personel, ticket, audit ve ek dosya verisi içerebilir.
 - Backup artifactleri repoya commitlenmez.
 - `backups/postgres/*.sql`, `backups/media/*.zip` ve `backups/manifests/*.json` commitlenmez.
-- Backup dosyalari paylasilirken sifreleme ve erisim kontrolu kullanilmalidir.
-- `.env`, secret, key veya password degerleri dokumana ya da repoya yazilmamalidir.
+- Backup dosyaları paylaşılırken şifreleme ve erişim kontrolü kullanılmalıdır.
+- `.env`, secret, key veya password değerleri dokümana ya da repoya yazılmamalıdır.
 
 ## Restore testinin onemi
 
-Backup alinmis olmasi tek basina yeterli degildir. Restore edilmeyen backup'in ise yarayip yaramadigi bilinmez. Restore drill, veri kaybi aninda geri donus suresini ve operasyonel eksikleri onceden gosterir.
+Backup alınmış olması tek başına yeterli değildir. Restore edilmeyen backup'ın işe yarayıp yaramadığı bilinmez. Restore drill, veri kaybı anında geri dönüş süresini ve operasyonel eksikleri önceden gösterir.
 
 ## Troubleshooting
 
@@ -200,19 +200,19 @@ docker compose ps
 docker compose up -d
 ```
 
-`db` service ayakta degilse PostgreSQL backup/restore calismaz.
+`db` service ayakta değilse PostgreSQL backup/restore çalışmaz.
 
 ### Permission hatasi
 
-PowerShell script execution policy sorunlari icin scripti su sekilde calistirin:
+PowerShell script execution policy sorunları için scripti şu şekilde çalıştırın:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\backup\backup_postgres.ps1
 ```
 
-### DB kullanici adi yanlis
+### DB kullanıcı adı yanlış
 
-Script container icindeki `POSTGRES_USER` ve `POSTGRES_DB` degerlerini kullanir. `.env` ve `docker-compose.yml` degerlerinin DB container ile uyumlu oldugunu kontrol edin.
+Script container içindeki `POSTGRES_USER` ve `POSTGRES_DB` değerlerini kullanır. `.env` ve `docker-compose.yml` değerlerinin DB container ile uyumlu olduğunu kontrol edin.
 
 ### Backup dosyasi bulunamadi
 

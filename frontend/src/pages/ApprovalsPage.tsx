@@ -425,7 +425,7 @@ export function ApprovalsPage() {
   }
 
   return (
-    <SimplePortalShell badge="Approver Portalı" title="Yardım Merkezi" subtitle="">
+    <SimplePortalShell badge="Onaycı Portalı" title="Yardım Merkezi" subtitle="">
       {currentView === "home" ? (
         <section className="mx-auto max-w-5xl">
           {isLoading ? (

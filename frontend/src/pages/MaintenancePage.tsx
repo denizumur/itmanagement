@@ -754,7 +754,7 @@ export function MaintenancePage() {
         {!userCanManage && (
           <section className="mt-lg rounded-panel border border-warning bg-warning-bg p-md">
             <p className="text-body text-warning">
-              Viewer rolündesin. Bakım / onarım / imha kayıtlarını
+              İzleyici rolündesin. Bakım / onarım / imha kayıtlarını
               görüntüleyebilirsin; yeni kayıt oluşturma ve güncelleme işlemleri
               admin veya technician rolü gerektirir.
             </p>

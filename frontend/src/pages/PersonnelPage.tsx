@@ -68,10 +68,10 @@ function getRoleLabel(employee: Employee) {
 
   const roleLabels: Record<string, string> = {
     admin: "Admin",
-    technician: "Technician",
-    viewer: "Viewer",
-    approver: "Approver",
-    requester: "Requester",
+    technician: "Teknisyen",
+    viewer: "İzleyici",
+    approver: "Onaycı",
+    requester: "Talep sahibi",
   };
 
   if (employee.user_role && typeof employee.user_role === "string") {
@@ -993,13 +993,13 @@ export function PersonnelPage() {
     selectedRole === "admin"
       ? "Admin"
       : selectedRole === "technician"
-        ? "Technician"
+        ? "Teknisyen"
         : selectedRole === "viewer"
-          ? "Viewer"
+          ? "İzleyici"
           : selectedRole === "approver"
-            ? "Approver"
+            ? "Onaycı"
             : selectedRole === "requester"
-              ? "Requester"
+              ? "Talep sahibi"
               : "";
 
   const selectedStatusLabel =
@@ -1209,10 +1209,10 @@ export function PersonnelPage() {
             >
               <option value="">Tüm roller</option>
               <option value="admin">Admin</option>
-              <option value="technician">Technician</option>
-              <option value="viewer">Viewer</option>
-              <option value="approver">Approver</option>
-              <option value="requester">Requester</option>
+              <option value="technician">Teknisyen</option>
+              <option value="viewer">İzleyici</option>
+              <option value="approver">Onaycı</option>
+              <option value="requester">Talep sahibi</option>
             </select>
 
             <select

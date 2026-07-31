@@ -200,7 +200,7 @@ Admin Console:
 
 Ticket Workspace:
 
-- Technician/admin kullanıcılar `/tickets` ekranında açık queue, çözülen ticketlar, chat, status composer ve context panelini günlük kontrol etmelidir.
+- Teknisyen/admin kullanıcılar `/tickets` ekranında açık queue, çözülen ticketlar, chat, status composer ve context panelini günlük kontrol etmelidir.
 - İç notların requester portalında görünmediği ve public reply / internal note ayrımının net kaldığı periyodik olarak doğrulanmalıdır.
 - Resolved/closed geçişlerinde çözüm notu kalitesi ve `/audit?entity_type=tickets.Ticket` kayıtları gözden geçirilmelidir.
 
@@ -217,7 +217,7 @@ Deploy sonrası manuel smoke:
 - [ ] `/personnel` açılıyor.
 - [ ] Excel export çalışıyor.
 - [ ] Ticket requester flow çalışıyor.
-- [ ] Technician ticket inbox açılıyor.
+- [ ] Teknisyen ticket inbox açılıyor.
 - [ ] Reminder sayfaları yetkili kullanıcı için açılıyor.
 - [ ] Audit sayfaları admin için açılıyor.
 - [ ] PostgreSQL backup script smoke çalışıyor.

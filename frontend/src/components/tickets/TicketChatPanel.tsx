@@ -776,7 +776,7 @@ export function TicketChatPanel({
             >
               {isInternalMode
                 ? "Sadece IT ekibi görür"
-                : "Requester tarafından görünür"}
+                : "Talep sahibi tarafından görünür"}
             </span>
           </div>
 

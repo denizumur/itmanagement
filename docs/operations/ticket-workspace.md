@@ -15,7 +15,7 @@ Ana queue açık/işlem bekleyen işleri gösterir. Çözülen ticketlar ayrı k
 
 Acil ve yüksek öncelikli ticketlar badge ile görünür. Header telemetry alanı açık, işlemde, acil ve yüksek/acil sayıları hızlı tarama için gösterir. Queue kartları requester, atanan kişi, mesaj/ek sayısı ve son güncelleme bilgisini içerir.
 
-## Requester reply vs internal note
+## Talep sahibine yanıt vs iç not
 
 Chat composer iki modu destekler:
 
@@ -38,7 +38,7 @@ Sol alt bölüm son çözülen ticketları kompakt olarak gösterir. Başlık, r
 
 Sağ panel read-only operasyon dossier'ıdır:
 
-- Requester özeti.
+- Talep sahibi özeti.
 - İlgili asset ve aktif zimmetler.
 - Onay durumu.
 - Son requester ticket geçmişi.
@@ -60,4 +60,4 @@ Bu link token, secret, password, internal note içeriği veya full path içermez
 - Pending approval ticket queue'da yoksa ilgili approver kararını bekliyordur.
 - Rejected ticket IT queue'da yoksa talep reddedilmiş ve kapatılmıştır.
 - Resolved/closed için çözüm notu isteniyorsa backend kuralı devrededir.
-- Requester internal note görmüyorsa beklenen güvenlik davranışı korunuyor demektir.
+- Talep sahibi iç not görmüyorsa beklenen güvenlik davranışı korunuyor demektir.
