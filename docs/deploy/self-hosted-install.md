@@ -33,6 +33,8 @@ git clone <repo-url>
 cd it-inventory-platform
 ```
 
+Windows üzerinde Docker ile çalışılacaksa shell scriptlerinin LF satır sonuyla checkout edilmesi gerekir. `backend/entrypoint.sh` CRLF olursa Linux container içinde `exec /app/entrypoint.sh: no such file or directory` hatası görülebilir. Fresh clone öncesi kurum Git ayarları kontrol edilmeli; sorun yaşanırsa `backend/entrypoint.sh` dosyasının LF olarak checkout edildiği doğrulanmalıdır.
+
 Release tag ile kurulacaksa:
 
 ```powershell
@@ -103,6 +105,8 @@ Servisleri başlatma:
 docker compose up -d
 docker compose ps
 ```
+
+Aynı makinede mevcut bir kurulum zaten çalışıyorsa ikinci clone'u aynı anda `docker compose up -d` ile başlatmayın. Compose dosyası sabit container isimleri ve default portlar kullanır; `it_inventory_db`, `it_inventory_redis`, `it_inventory_backend`, `5432` ve `8000` çakışabilir. Fresh drill için en temiz yöntem ayrı makine/VM kullanmaktır.
 
 Backend image yeniden build:
 
@@ -277,6 +281,8 @@ cd C:\path\to\it-inventory-platform
 ```
 
 E2E smoke runner sadece local/dev içindir; production ortamda çalıştırılmamalıdır.
+
+Runner default local port/origin varsayımlarıyla çalışır. Farklı frontend portu kullanılacaksa `.env` içindeki `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` ve `AUTH_COOKIE_ALLOWED_ORIGINS` değerleri aynı origin ile hizalanmalıdır. Fresh DB smoke için requester kullanıcısının personel kaydıyla eşleştiği doğrulanmalıdır.
 
 Manuel demo smoke adımları için `docs/demo/manual-smoke-script.md` ve `docs/demo/final-qa-checklist.md` kullanılmalıdır.
 
